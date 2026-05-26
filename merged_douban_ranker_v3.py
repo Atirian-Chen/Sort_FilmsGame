@@ -10,6 +10,7 @@ import random
 import re
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import urlencode
 
@@ -23,6 +24,9 @@ from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 # =========================
 DOUBAN_TOP250_URL = "https://movie.douban.com/top250"
 DOUBAN_SUGGEST_URL = "https://movie.douban.com/j/subject_suggest"
+APP_TITLE = "偏爱对决"
+APP_SUBTITLE = "用一次次二选一，排出真正属于你的榜单。"
+COVER_IMAGE_PATH = Path(__file__).parent / "assets" / "cover_banner.png"
 
 HEADERS = {
     "User-Agent": (
@@ -324,6 +328,29 @@ def render_app_styles() -> None:
         }
         .live-controls {
             margin: 4px 0 10px;
+        }
+        .cover-title {
+            font-size: clamp(34px, 5vw, 64px);
+            font-weight: 900;
+            line-height: 1.05;
+            color: #111827;
+            margin: 12px 0 10px;
+        }
+        .cover-subtitle {
+            color: #4b5563;
+            font-size: 18px;
+            line-height: 1.55;
+            margin-bottom: 16px;
+        }
+        .cover-tag {
+            display: inline-block;
+            border: 1px solid #d0d5dd;
+            border-radius: 999px;
+            padding: 6px 12px;
+            color: #475467;
+            font-weight: 700;
+            font-size: 13px;
+            background: #fff;
         }
         .rank-card {
             border: 1px solid #e6e8ef;
@@ -906,6 +933,19 @@ def render_ranked_list(ranked: List[str]) -> None:
         )
 
 
+def render_cover_header() -> None:
+    text_col, image_col = st.columns([0.9, 1.35])
+    with text_col:
+        st.markdown('<span class="cover-tag">电影 / 歌手 / 游戏 / 任意偏好</span>', unsafe_allow_html=True)
+        st.markdown(f'<div class="cover-title">{APP_TITLE}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="cover-subtitle">{APP_SUBTITLE}</div>', unsafe_allow_html=True)
+        st.caption("选 A 还是选 B，剩下的交给排序器。")
+    with image_col:
+        if COVER_IMAGE_PATH.exists():
+            st.image(str(COVER_IMAGE_PATH), use_column_width=True)
+    safe_divider()
+
+
 def get_poster_for_option(name: str) -> Optional[bytes]:
     poster_map = st.session_state.setdefault(k("poster_map"), {})
     if poster_map.get(name):
@@ -1293,11 +1333,11 @@ def render_right_panel() -> None:
 # =========================
 def get_ui_step() -> int:
     step = int(st.session_state.get("ui_step", 1))
-    return step if step in (1, 2, 3) else 1
+    return step if step in (1, 2, 3, 4) else 1
 
 
 def go_to_step(step: int) -> None:
-    st.session_state["ui_step"] = max(1, min(3, int(step)))
+    st.session_state["ui_step"] = max(1, min(4, int(step)))
     rerun()
 
 
@@ -1317,7 +1357,7 @@ def render_step_header(step: int, title: str, subtitle: str = "") -> None:
     labels = [
         ("① 选择模式", 1),
         ("② 填写参数", 2),
-        ("③ 开始排序", 3),
+        ("③ 开始对决", 3),
     ]
     for col, (label, idx) in zip(cols, labels):
         with col:
@@ -1351,9 +1391,9 @@ def render_mode_selection_page() -> None:
 
     safe_divider()
     if mode == MODE_CUSTOM:
-        st.info("自定义模式：你自己填写主题和候选项，适合歌手、游戏、电影、角色等任意内容。")
+        st.info("自定义模式：自己填主题和候选项，歌手、游戏、电影、角色都能排。")
     else:
-        st.info("豆瓣电影模式：你只需要填写 Top 数量和候选池范围，系统会自动读取豆瓣 Top250。")
+        st.info("豆瓣电影模式：设置 Top 数量和候选范围，系统会读取豆瓣 Top250。")
 
     spacer, next_col = st.columns([1, 1])
     with spacer:
@@ -1364,7 +1404,7 @@ def render_mode_selection_page() -> None:
 
 
 def render_custom_parameter_page(mode: str) -> None:
-    st.text_input("主题名称", value=st.session_state.get("ui_custom_theme", "我的偏好排序"), key="ui_custom_theme")
+    st.text_input("榜单名称", value=st.session_state.get("ui_custom_theme", "我的榜单"), key="ui_custom_theme")
     st.text_area(
         "候选项（每行一个）",
         value=st.session_state.get("ui_custom_options_text", ""),
@@ -1387,17 +1427,17 @@ def render_custom_parameter_page(mode: str) -> None:
     with nav2:
         if render_button_compat("🧹 清空参数", key="btn_clear_custom_step2", use_container_width=True):
             clear_ranking_state()
-            st.session_state["ui_custom_theme"] = "我的偏好排序"
+            st.session_state["ui_custom_theme"] = "我的榜单"
             st.session_state["ui_custom_options_text"] = ""
             rerun()
     with nav3:
-        if render_button_compat("进入第 3 步：开始排序 →", key="btn_start_custom_step2", use_container_width=True, button_type="primary"):
+        if render_button_compat("开始对决 →", key="btn_start_custom_step2", use_container_width=True, button_type="primary"):
             if len(options) < 2:
                 st.warning("请至少输入 2 个候选项。")
             else:
                 init_ranking_state(
                     mode=mode,
-                    theme=(st.session_state.get("ui_custom_theme", "") or "").strip() or "我的偏好排序",
+                    theme=(st.session_state.get("ui_custom_theme", "") or "").strip() or "我的榜单",
                     options=options,
                     top_k=None,
                     show_poster=False,
@@ -1408,7 +1448,7 @@ def render_custom_parameter_page(mode: str) -> None:
 
 
 def render_douban_parameter_page(mode: str) -> None:
-    st.text_input("主题名称", value=st.session_state.get("ui_douban_theme", "豆瓣电影偏好排序"), key="ui_douban_theme")
+    st.text_input("榜单名称", value=st.session_state.get("ui_douban_theme", "我的豆瓣电影榜"), key="ui_douban_theme")
 
     top_k = int(
         st.number_input(
@@ -1422,7 +1462,7 @@ def render_douban_parameter_page(mode: str) -> None:
     )
     pool_n = int(
         st.number_input(
-            "使用豆瓣 Top 前多少作为候选池",
+            "从豆瓣 Top 多少部里选",
             min_value=1,
             max_value=250,
             value=int(st.session_state.get("ui_douban_pool_n", 100)),
@@ -1438,14 +1478,14 @@ def render_douban_parameter_page(mode: str) -> None:
     )
 
     if pool_n < top_k:
-        st.error("候选池数量必须不小于 Top 数量。请让“候选池” >= “Top”。")
+        st.error("候选范围不能小于 Top 数量。请让候选范围 >= Top。")
     else:
         st.caption(f"将从豆瓣 Top250 中读取前 {pool_n} 部电影，最后给出你的 Top {top_k}。")
         st.caption(f"预计比较次数大约：{estimated_comparisons(pool_n, top_k)} 次。")
 
     if render_button_compat("👀 预览候选电影", key="btn_preview_douban_step2", use_container_width=True):
         if pool_n < top_k:
-            st.warning("请先修正参数：候选池数量不能小于 Top 数量。")
+            st.warning("请先修正设置：候选范围不能小于 Top 数量。")
         else:
             try:
                 movies, _ = prepare_douban_candidates_ui(pool_n, warm_posters=False)
@@ -1468,7 +1508,7 @@ def render_douban_parameter_page(mode: str) -> None:
     with nav2:
         if render_button_compat("🧹 清空参数", key="btn_clear_douban_step2", use_container_width=True):
             clear_ranking_state()
-            st.session_state["ui_douban_theme"] = "豆瓣电影偏好排序"
+            st.session_state["ui_douban_theme"] = "我的豆瓣电影榜"
             st.session_state["ui_douban_top_k"] = 10
             st.session_state["ui_douban_pool_n"] = 100
             st.session_state["ui_douban_show_poster"] = True
@@ -1476,27 +1516,19 @@ def render_douban_parameter_page(mode: str) -> None:
             st.session_state.pop("ui_douban_preview_pool_n", None)
             rerun()
     with nav3:
-        if render_button_compat("进入第 3 步：开始排序 →", key="btn_start_douban_step2", use_container_width=True, button_type="primary"):
+        if render_button_compat("准备并开始 →", key="btn_start_douban_step2", use_container_width=True, button_type="primary"):
             if pool_n < top_k:
-                st.warning("请先修正参数：候选池数量不能小于 Top 数量。")
+                st.warning("请先修正设置：候选范围不能小于 Top 数量。")
             else:
-                try:
-                    movies, poster_map = prepare_douban_candidates_ui(pool_n, warm_posters=show_poster)
-                    if len(movies) < 2:
-                        st.error("获取到的电影数量不足 2，无法开始排序。")
-                    else:
-                        init_ranking_state(
-                            mode=mode,
-                            theme=(st.session_state.get("ui_douban_theme", "") or "").strip() or "豆瓣电影偏好排序",
-                            options=movies,
-                            top_k=top_k,
-                            show_poster=show_poster,
-                            initial_poster_map=poster_map,
-                        )
-                        st.session_state["ui_step"] = 3
-                        rerun()
-                except Exception as e:
-                    st.error(f"读取豆瓣电影列表失败：{e}")
+                st.session_state["ui_pending_douban"] = {
+                    "mode": mode,
+                    "theme": (st.session_state.get("ui_douban_theme", "") or "").strip() or "我的豆瓣电影榜",
+                    "top_k": top_k,
+                    "pool_n": pool_n,
+                    "show_poster": show_poster,
+                }
+                st.session_state["ui_step"] = 4
+                rerun()
 
 
 def render_parameter_page() -> None:
@@ -1504,13 +1536,55 @@ def render_parameter_page() -> None:
     render_step_header(
         2,
         "填写本次排序参数",
-        "根据你刚才选择的模式，补充主题、候选池和展示设置。",
+        "补充榜单名称、候选范围和展示设置。",
     )
 
     if mode == MODE_CUSTOM:
         render_custom_parameter_page(mode)
     else:
         render_douban_parameter_page(mode)
+
+
+def render_douban_prepare_page() -> None:
+    pending = st.session_state.get("ui_pending_douban")
+    st.progress(0.72)
+    st.subheader("正在准备对局")
+    st.caption("正在读取豆瓣榜单和海报。准备完成后会自动进入排序页。")
+
+    if not pending:
+        st.warning("没有待准备的豆瓣排序任务。")
+        if render_button_compat("返回设置", key="btn_prepare_back", use_container_width=True):
+            go_to_step(2)
+        return
+
+    try:
+        movies, poster_map = prepare_douban_candidates_ui(
+            int(pending["pool_n"]),
+            warm_posters=bool(pending["show_poster"]),
+        )
+        if len(movies) < 2:
+            st.error("获取到的电影数量不足 2，无法开始排序。")
+            if render_button_compat("返回设置", key="btn_prepare_failed_back", use_container_width=True):
+                st.session_state.pop("ui_pending_douban", None)
+                go_to_step(2)
+            return
+
+        init_ranking_state(
+            mode=pending["mode"],
+            theme=pending["theme"],
+            options=movies,
+            top_k=int(pending["top_k"]),
+            show_poster=bool(pending["show_poster"]),
+            initial_poster_map=poster_map,
+        )
+        st.session_state.pop("ui_pending_douban", None)
+        st.session_state["ui_step"] = 3
+        rerun()
+    except Exception as e:
+        st.error(f"准备豆瓣电影失败：{e}")
+        if render_button_compat("返回设置", key="btn_prepare_error_back", use_container_width=True):
+            st.session_state.pop("ui_pending_douban", None)
+            go_to_step(2)
 
 
 def render_sorting_page() -> None:
@@ -1523,10 +1597,10 @@ def render_sorting_page() -> None:
     with labels[1]:
         st.caption("② 填写参数")
     with labels[2]:
-        st.markdown("**③ 开始排序**")
+        st.markdown("**③ 开始对决**")
 
     if not started:
-        st.info("你还没有开始排序。请先返回第 2 步填写参数，然后进入第 3 步。")
+        st.info("还没有开始。请先回到第 2 步完成设置。")
     else:
         render_right_panel()
 
@@ -1545,7 +1619,7 @@ def render_sorting_page() -> None:
 # =========================
 def main() -> None:
     st.set_page_config(
-        page_title="统一偏好排序工具",
+        page_title=APP_TITLE,
         page_icon="🎯",
         layout="wide",
     )
@@ -1561,15 +1635,19 @@ def main() -> None:
 
     step = get_ui_step()
     if step == 3:
-        st.caption("🎯 统一偏好排序工具")
+        st.caption(f"🎯 {APP_TITLE}")
+    elif step == 1:
+        render_cover_header()
     else:
-        st.title("🎯 统一偏好排序工具")
-        st.markdown("现在改成了更清晰的三步流程：**先选模式，再填参数，最后专注排序**。")
+        st.title(f"🎯 {APP_TITLE}")
+        st.markdown(APP_SUBTITLE)
 
     if step == 1:
         render_mode_selection_page()
     elif step == 2:
         render_parameter_page()
+    elif step == 4:
+        render_douban_prepare_page()
     else:
         render_sorting_page()
 
