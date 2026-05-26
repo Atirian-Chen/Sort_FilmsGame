@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #111827;
+      background: transparent;
+    }
+    body {
+      margin: 0;
+      background: transparent;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+      padding: 2px;
+    }
+    .card {
+      border: 1px solid #e3e7ef;
+      border-radius: 8px;
+      background: #fff;
+      padding: 16px;
+      cursor: pointer;
+      min-width: 0;
+      transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+    }
+    .card:hover,
+    .card:focus-visible {
+      border-color: #2b83e6;
+      box-shadow: 0 0 0 3px rgba(43, 131, 230, 0.14);
+      transform: translateY(-1px);
+      outline: none;
+    }
+    .card:active {
+      transform: translateY(0);
+    }
+    .head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #475467;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .title {
+      font-size: clamp(18px, 2.2vw, 25px);
+      line-height: 1.24;
+      font-weight: 850;
+      overflow-wrap: anywhere;
+      min-height: 36px;
+      margin-bottom: 10px;
+    }
+    .poster-frame {
+      height: min(46vh, 440px);
+      border: 1px solid #e6e8ef;
+      border-radius: 8px;
+      background: #f8f9fb;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .poster {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 6px;
+      display: block;
+    }
+    .fallback {
+      color: #475467;
+      font-weight: 700;
+      text-align: center;
+      padding: 18px;
+    }
+    .choice {
+      color: #2b83e6;
+      text-align: center;
+      font-weight: 850;
+      font-size: 18px;
+      margin-top: 8px;
+    }
+    @media (max-width: 820px) {
+      .grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      .poster-frame {
+        height: min(36vh, 340px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+    const root = document.getElementById("root");
+
+    function send(type, payload) {
+      window.parent.postMessage({ isStreamlitMessage: true, type, ...payload }, "*");
+    }
+
+    function setFrameHeight() {
+      send("streamlit:setFrameHeight", { height: document.body.scrollHeight });
+    }
+
+    function setValue(value) {
+      send("streamlit:setComponentValue", { value, dataType: "json" });
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function cardHtml(side, data) {
+      const label = escapeHtml(data?.label || (side === "left" ? "选项 A" : "选项 B"));
+      const title = escapeHtml(data?.title || "");
+      const poster = data?.poster
+        ? `<img class="poster" src="${data.poster}" alt="${title}">`
+        : `<div class="fallback">海报暂时不可用<br>点击卡片选择</div>`;
+      const choice = side === "left" ? "A" : "B";
+      return `
+        <button class="card" type="button" data-choice="${side}" aria-label="选择 ${label}">
+          <div class="head"><span>${label}</span><span>1v1</span></div>
+          <div class="title">${title}</div>
+          <div class="poster-frame">${poster}</div>
+          <div class="choice">${choice}</div>
+        </button>
+      `;
+    }
+
+    function render(args) {
+      root.innerHTML = `
+        <div class="grid">
+          ${cardHtml("left", args.left)}
+          ${cardHtml("right", args.right)}
+        </div>
+      `;
+      for (const card of root.querySelectorAll(".card")) {
+        card.addEventListener("click", () => {
+          setValue({ choice: card.dataset.choice, nonce: Date.now() });
+        });
+      }
+      requestAnimationFrame(setFrameHeight);
+    }
+
+    window.addEventListener("message", (event) => {
+      const data = event.data || {};
+      if (data.type !== "streamlit:render") return;
+      render(data.args || {});
+    });
+
+    send("streamlit:componentReady", { apiVersion: 1 });
+    setFrameHeight();
+  </script>
+</body>
+</html>

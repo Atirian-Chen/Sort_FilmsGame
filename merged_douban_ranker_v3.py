@@ -14,6 +14,7 @@ from typing import Dict, List, Optional
 
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 
@@ -25,6 +26,10 @@ DOUBAN_SUGGEST_URL = "https://movie.douban.com/j/subject_suggest"
 APP_TITLE = "偏爱对决"
 APP_SUBTITLE = "用一次次二选一，排出真正属于你的榜单。"
 COVER_IMAGE_PATH = Path(__file__).parent / "assets" / "cover_banner.png"
+BATTLE_PICKER_COMPONENT = components.declare_component(
+    "battle_picker",
+    path=str(Path(__file__).parent / "components" / "battle_picker"),
+)
 
 HEADERS = {
     "User-Agent": (
@@ -136,6 +141,16 @@ def poster_data_uri(image_data: Optional[bytes]) -> Optional[str]:
     return f"data:image/png;base64,{encoded}"
 
 
+def image_file_data_uri(path: Path) -> Optional[str]:
+    if not path.exists():
+        return None
+    try:
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        return f"data:image/png;base64,{encoded}"
+    except OSError:
+        return None
+
+
 def bordered_container():
     try:
         return st.container(border=True)
@@ -241,17 +256,17 @@ def render_app_styles() -> None:
             margin: 4px 0 10px;
         }
         .cover-title {
-            font-size: clamp(34px, 5vw, 64px);
+            font-size: clamp(30px, 4vw, 50px);
             font-weight: 900;
             line-height: 1.05;
             color: #111827;
-            margin: 12px 0 10px;
+            margin: 8px 0 8px;
         }
         .cover-subtitle {
             color: #4b5563;
-            font-size: 18px;
+            font-size: 16px;
             line-height: 1.55;
-            margin-bottom: 16px;
+            margin-bottom: 8px;
         }
         .cover-tag {
             display: inline-block;
@@ -262,6 +277,13 @@ def render_app_styles() -> None:
             font-weight: 700;
             font-size: 13px;
             background: #fff;
+        }
+        .cover-image {
+            width: 100%;
+            max-height: 260px;
+            object-fit: cover;
+            border-radius: 10px;
+            display: block;
         }
         .rank-card {
             border: 1px solid #e6e8ef;
@@ -845,15 +867,16 @@ def render_ranked_list(ranked: List[str]) -> None:
 
 
 def render_cover_header() -> None:
-    text_col, image_col = st.columns([0.9, 1.35])
+    text_col, image_col = st.columns([1, 1.05])
     with text_col:
         st.markdown('<span class="cover-tag">电影 / 歌手 / 游戏 / 任意偏好</span>', unsafe_allow_html=True)
         st.markdown(f'<div class="cover-title">{APP_TITLE}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="cover-subtitle">{APP_SUBTITLE}</div>', unsafe_allow_html=True)
         st.caption("选 A 还是选 B，剩下的交给排序器。")
     with image_col:
-        if COVER_IMAGE_PATH.exists():
-            st.image(str(COVER_IMAGE_PATH), use_column_width=True)
+        cover_src = image_file_data_uri(COVER_IMAGE_PATH)
+        if cover_src:
+            st.markdown(f'<img class="cover-image" src="{cover_src}" alt="{APP_TITLE} 封面">', unsafe_allow_html=True)
     safe_divider()
 
 
@@ -1033,40 +1056,26 @@ def get_current_opponent_index(ranked: List[str], low: int, high: int) -> int:
     return max(0, min(len(ranked) - 1, (low + high) // 2))
 
 
-def render_option_card(
-    label: str,
-    title: str,
-    button_key: str,
-    prefer_left: bool,
+def render_battle_picker(
+    *,
+    current: str,
+    opponent: str,
     show_poster: bool,
-) -> None:
-    with bordered_container():
-        poster = get_poster_for_option(title) if show_poster else None
-        image_src = poster_data_uri(poster)
-        if show_poster and image_src:
-            poster_html = f"""
-              <div class="poster-choice-frame">
-                <img class="poster-choice-img" src="{image_src}" alt="{html.escape(title)}">
-              </div>
-            """
-        elif show_poster:
-            poster_html = '<div class="poster-choice-frame"><div class="poster-choice-fallback">海报暂时不可用</div></div>'
-        else:
-            poster_html = '<div class="poster-choice-frame"><div class="poster-choice-fallback">点击卡片选择</div></div>'
-
-        st.markdown(
-            f"""
-            <div class="battle-head">
-              <span class="battle-label">{html.escape(label)}</span>
-              <span class="battle-label">1v1</span>
-            </div>
-            <div class="battle-title">{html.escape(title)}</div>
-            {poster_html}
-            """,
-            unsafe_allow_html=True,
-        )
-        if render_button_compat(label[-1], key=button_key, use_container_width=True, button_type="primary"):
-            handle_choice(prefer_left=prefer_left)
+    key: str,
+) -> Optional[str]:
+    left_poster = poster_data_uri(get_poster_for_option(current)) if show_poster else None
+    right_poster = poster_data_uri(get_poster_for_option(opponent)) if show_poster else None
+    result = BATTLE_PICKER_COMPONENT(
+        left={"label": "选项 A", "title": current, "poster": left_poster},
+        right={"label": "选项 B", "title": opponent, "poster": right_poster},
+        key=key,
+        default=None,
+    )
+    if isinstance(result, dict):
+        choice = result.get("choice")
+        if choice in ("left", "right"):
+            return choice
+    return None
 
 
 # =========================
@@ -1210,24 +1219,16 @@ def render_right_panel() -> None:
         if render_button_compat("撤销上一步", key="btn_undo_live", use_container_width=True):
             undo_last_step()
 
-    c1, c2 = st.columns(2)
-    with c1:
-        render_option_card(
-            label="选项 A",
-            title=current,
-            button_key="btn_left",
-            prefer_left=True,
-            show_poster=show_poster and mode == MODE_DOUBAN,
-        )
-
-    with c2:
-        render_option_card(
-            label="选项 B",
-            title=opponent,
-            button_key="btn_right",
-            prefer_left=False,
-            show_poster=show_poster and mode == MODE_DOUBAN,
-        )
+    component_key = f"battle_{processed}_{comparisons}_{abs(hash(current + opponent))}"
+    choice = render_battle_picker(
+        current=current,
+        opponent=opponent,
+        show_poster=show_poster and mode == MODE_DOUBAN,
+        key=component_key,
+    )
+    if choice:
+        handle_choice(prefer_left=choice == "left")
+        return
 
     ranked = st.session_state.get(k("ranked"), [])
     expander_title = "📊 当前榜单" if top_k is None else f"📊 当前 Top {len(ranked)}"
