@@ -206,12 +206,13 @@ def render_app_styles() -> None:
 # 豆瓣数据相关
 # =========================
 @st.cache_data(show_spinner=False)
-def fetch_douban_top_movies(limit: int) -> List[str]:
+def fetch_douban_top_movie_entries(limit: int) -> List[Dict[str, Optional[str]]]:
     limit = max(1, min(250, int(limit)))
-    titles: List[str] = []
+    entries: List[Dict[str, Optional[str]]] = []
+    seen = set()
 
     for start in range(0, 250, 25):
-        if len(titles) >= limit:
+        if len(entries) >= limit:
             break
 
         resp = requests.get(
@@ -223,15 +224,31 @@ def fetch_douban_top_movies(limit: int) -> List[str]:
         resp.raise_for_status()
 
         soup = BeautifulSoup(resp.text, "html.parser")
-        items = soup.select("div.item span.title:first-child")
+        items = soup.select("div.item")
         for item in items:
-            title = item.get_text(strip=True)
-            if title and title not in titles:
-                titles.append(title)
-                if len(titles) >= limit:
+            title_el = item.select_one("span.title")
+            img_el = item.select_one("div.pic img")
+
+            title = title_el.get_text(strip=True) if title_el else ""
+            if not title and img_el:
+                title = img_el.get("alt", "").strip()
+
+            poster_url = None
+            if img_el:
+                poster_url = img_el.get("src") or img_el.get("data-src")
+
+            if title and title not in seen:
+                entries.append({"title": title, "poster_url": poster_url})
+                seen.add(title)
+                if len(entries) >= limit:
                     break
 
-    return titles[:limit]
+    return entries[:limit]
+
+
+@st.cache_data(show_spinner=False)
+def fetch_douban_top_movies(limit: int) -> List[str]:
+    return [entry["title"] for entry in fetch_douban_top_movie_entries(limit) if entry.get("title")]
 
 
 def normalize_image_bytes(image_bytes: bytes) -> Optional[bytes]:
@@ -246,6 +263,24 @@ def normalize_image_bytes(image_bytes: bytes) -> Optional[bytes]:
             img.save(output, format="PNG")
             return output.getvalue()
     except (UnidentifiedImageError, OSError, ValueError):
+        return None
+
+
+@st.cache_data(show_spinner=False)
+def fetch_poster_bytes_from_url(img_url: str) -> Optional[bytes]:
+    if not img_url or "movie_default_small" in img_url:
+        return None
+
+    try:
+        img_resp = requests.get(img_url, headers=HEADERS, timeout=10)
+        img_resp.raise_for_status()
+
+        content_type = (img_resp.headers.get("Content-Type") or "").lower()
+        if content_type and not content_type.startswith("image/"):
+            return None
+
+        return normalize_image_bytes(img_resp.content)
+    except Exception:
         return None
 
 
@@ -275,20 +310,7 @@ def fetch_douban_poster_bytes(title: str) -> Optional[bytes]:
         item = data[0]
 
     img_url = item.get("img")
-    if not img_url or "movie_default_small" in img_url:
-        return None
-
-    try:
-        img_resp = requests.get(img_url, headers=HEADERS, timeout=10)
-        img_resp.raise_for_status()
-
-        content_type = (img_resp.headers.get("Content-Type") or "").lower()
-        if content_type and not content_type.startswith("image/"):
-            return None
-
-        return normalize_image_bytes(img_resp.content)
-    except Exception:
-        return None
+    return fetch_poster_bytes_from_url(img_url)
 
 
 def prepare_douban_candidates_ui(limit: int, warm_posters: bool) -> tuple[List[str], Dict[str, Optional[bytes]]]:
@@ -297,7 +319,8 @@ def prepare_douban_candidates_ui(limit: int, warm_posters: bool) -> tuple[List[s
     text_holder.caption("准备中...")
     bar = progress_holder.progress(0)
 
-    movies = fetch_douban_top_movies(limit)
+    entries = fetch_douban_top_movie_entries(limit)
+    movies = [entry["title"] for entry in entries if entry.get("title")]
     if not movies:
         bar.progress(100)
         return [], {}
@@ -305,8 +328,14 @@ def prepare_douban_candidates_ui(limit: int, warm_posters: bool) -> tuple[List[s
     poster_map: Dict[str, Optional[bytes]] = {}
     if warm_posters:
         total_steps = max(1, len(movies))
-        for idx, title in enumerate(movies, 1):
-            poster_map[title] = fetch_douban_poster_bytes(title)
+        for idx, entry in enumerate(entries[: len(movies)], 1):
+            title = entry.get("title")
+            if not title:
+                continue
+            poster_bytes = fetch_poster_bytes_from_url(entry.get("poster_url") or "")
+            if poster_bytes is None:
+                poster_bytes = fetch_douban_poster_bytes(title)
+            poster_map[title] = poster_bytes
             bar.progress(int(idx / total_steps * 100))
     else:
         bar.progress(100)
@@ -359,6 +388,7 @@ def init_ranking_state(
     st.session_state[k("top_k")] = top_k
     st.session_state[k("show_poster")] = show_poster
     st.session_state[k("poster_map")] = poster_map
+    st.session_state[k("poster_fetch_failed")] = []
     st.session_state[k("history")] = []
     st.session_state[k("skipped_items")] = []
     st.session_state[k("share_poster_bytes")] = b""
@@ -385,6 +415,7 @@ def clear_ranking_state() -> None:
         "top_k",
         "show_poster",
         "poster_map",
+        "poster_fetch_failed",
         "history",
         "skipped_items",
         "share_poster_bytes",
@@ -738,12 +769,19 @@ def render_ranked_list(ranked: List[str]) -> None:
 
 def get_poster_for_option(name: str) -> Optional[bytes]:
     poster_map = st.session_state.setdefault(k("poster_map"), {})
-    if name in poster_map:
+    if poster_map.get(name):
         return poster_map[name]
+
+    failed = st.session_state.setdefault(k("poster_fetch_failed"), [])
+    if name in failed:
+        return None
 
     poster_bytes = fetch_douban_poster_bytes(name)
     poster_map[name] = poster_bytes
     st.session_state[k("poster_map")] = poster_map
+    if poster_bytes is None and name not in failed:
+        failed.append(name)
+        st.session_state[k("poster_fetch_failed")] = failed
     return poster_bytes
 
 
