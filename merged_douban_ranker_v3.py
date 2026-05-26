@@ -8,8 +8,10 @@ import json
 import math
 import random
 import re
+import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
+from urllib.parse import urlencode
 
 import requests
 import streamlit as st
@@ -46,6 +48,32 @@ HISTORY_KEYS = [
     "finished",
     "skipped_items",
     "top_k_boundary_check",
+]
+
+RANKING_STATE_KEYS = [
+    "mode",
+    "theme",
+    "source_options",
+    "source_poster_map",
+    "total",
+    "remaining",
+    "ranked",
+    "current_item",
+    "low",
+    "high",
+    "comparisons",
+    "processed",
+    "finished",
+    "top_k_boundary_check",
+    "started",
+    "top_k",
+    "show_poster",
+    "poster_map",
+    "poster_fetch_failed",
+    "history",
+    "skipped_items",
+    "share_poster_bytes",
+    "share_poster_signature",
 ]
 
 
@@ -106,6 +134,78 @@ def poster_data_uri(image_data: Optional[bytes]) -> Optional[str]:
     return f"data:image/png;base64,{encoded}"
 
 
+def get_query_value(name: str) -> str:
+    try:
+        value = st.query_params.get(name, "")
+    except AttributeError:
+        value = st.experimental_get_query_params().get(name, [""])
+    if isinstance(value, list):
+        return str(value[0]) if value else ""
+    return str(value)
+
+
+def clear_query_params() -> None:
+    try:
+        st.query_params.clear()
+    except AttributeError:
+        st.experimental_set_query_params()
+
+
+@st.cache_resource
+def get_choice_registry() -> dict:
+    return {}
+
+
+def clone_state_value(value):
+    if isinstance(value, list):
+        return value[:]
+    if isinstance(value, dict):
+        return value.copy()
+    return value
+
+
+def build_full_ranking_snapshot() -> dict:
+    return {
+        "ui_step": 3,
+        "ui_selected_mode": st.session_state.get("ui_selected_mode", st.session_state.get(k("mode"), MODE_CUSTOM)),
+        "rank_state": {
+            name: clone_state_value(st.session_state.get(k(name)))
+            for name in RANKING_STATE_KEYS
+        },
+    }
+
+
+def restore_full_ranking_snapshot(snapshot: dict) -> None:
+    st.session_state["ui_step"] = int(snapshot.get("ui_step", 3))
+    st.session_state["ui_selected_mode"] = snapshot.get("ui_selected_mode", MODE_CUSTOM)
+    for name, value in snapshot.get("rank_state", {}).items():
+        st.session_state[k(name)] = clone_state_value(value)
+
+
+def create_choice_href(choice: str) -> str:
+    token = uuid.uuid4().hex
+    registry = get_choice_registry()
+    registry[token] = build_full_ranking_snapshot()
+    return "?" + urlencode({"rank_pick": choice, "rank_token": token})
+
+
+def consume_choice_from_query() -> bool:
+    choice = get_query_value("rank_pick")
+    token = get_query_value("rank_token")
+    if choice not in ("left", "right") or not token:
+        return False
+
+    clear_query_params()
+    snapshot = get_choice_registry().pop(token, None)
+    if not snapshot:
+        st.warning("这次选择已经过期，请重新点击当前选项。")
+        return False
+
+    restore_full_ranking_snapshot(snapshot)
+    handle_choice(prefer_left=choice == "left")
+    return True
+
+
 def bordered_container():
     try:
         return st.container(border=True)
@@ -147,6 +247,21 @@ def render_app_styles() -> None:
             justify-content: space-between;
             gap: 12px;
             margin-bottom: 6px;
+        }
+        .option-card-link {
+            display: block;
+            color: inherit;
+            text-decoration: none;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: box-shadow 120ms ease, transform 120ms ease;
+        }
+        .option-card-link:hover {
+            box-shadow: 0 0 0 3px rgba(43, 131, 230, 0.12);
+            transform: translateY(-1px);
+        }
+        .option-card-link:hover .poster-choice-frame {
+            border-color: #2b83e6;
         }
         .battle-label {
             color: #475467;
@@ -202,8 +317,9 @@ def render_app_styles() -> None:
         }
         .choice-help {
             color: #667085;
-            font-size: 12px;
-            margin: 0 0 6px;
+            font-size: 13px;
+            font-weight: 700;
+            margin: 6px 0 0;
             text-align: center;
         }
         .live-controls {
@@ -443,31 +559,7 @@ def init_ranking_state(
 
 
 def clear_ranking_state() -> None:
-    for name in [
-        "mode",
-        "theme",
-        "source_options",
-        "source_poster_map",
-        "total",
-        "remaining",
-        "ranked",
-        "current_item",
-        "low",
-        "high",
-        "comparisons",
-        "processed",
-        "finished",
-        "top_k_boundary_check",
-        "started",
-        "top_k",
-        "show_poster",
-        "poster_map",
-        "poster_fetch_failed",
-        "history",
-        "skipped_items",
-        "share_poster_bytes",
-        "share_poster_signature",
-    ]:
+    for name in RANKING_STATE_KEYS:
         st.session_state.pop(k(name), None)
 
 
@@ -770,7 +862,7 @@ def build_export_payloads(
     ]
     txt_lines.extend(f"{idx}. {item}" for idx, item in enumerate(ranked, 1))
     if skipped_items:
-        txt_lines.extend(["", "已剔除："])
+        txt_lines.extend(["", "已跳过："])
         txt_lines.extend(f"- {item}" for item in skipped_items)
     txt_bytes = "\n".join(txt_lines).encode("utf-8-sig")
 
@@ -949,7 +1041,7 @@ def generate_share_poster_bytes(theme: str, ranked: List[str], skipped_items: Li
         y += 12
         draw.line((padding, y, width - padding, y), fill=(230, 233, 238), width=2)
         y += 24
-        skipped_text = f"已剔除未看过/不熟悉项：{len(skipped_items)} 个"
+        skipped_text = f"已跳过未看过/不熟悉项：{len(skipped_items)} 个"
         draw.text((padding, y), skipped_text, font=small_font, fill=(98, 106, 120))
         y += 36
 
@@ -993,48 +1085,37 @@ def get_current_opponent_index(ranked: List[str], low: int, high: int) -> int:
 def render_option_card(
     label: str,
     title: str,
-    button_text: str,
-    button_key: str,
-    prefer_left: bool,
+    choice_href: str,
     show_poster: bool,
 ) -> None:
     with bordered_container():
-        st.markdown(
-            f"""
-            <div class="battle-head">
-              <span class="battle-label">{html.escape(label)}</span>
-              <span class="battle-label">1v1</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.markdown(f'<div class="battle-title">{html.escape(title)}</div>', unsafe_allow_html=True)
-
         poster = get_poster_for_option(title) if show_poster else None
         image_src = poster_data_uri(poster)
         if show_poster and image_src:
-            st.markdown(
-                f"""
-                <div class="poster-choice-frame">
-                  <img class="poster-choice-img" src="{image_src}" alt="{html.escape(title)}">
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            poster_html = f"""
+              <div class="poster-choice-frame">
+                <img class="poster-choice-img" src="{image_src}" alt="{html.escape(title)}">
+              </div>
+            """
         elif show_poster:
-            st.markdown(
-                '<div class="poster-choice-frame"><div class="poster-choice-fallback">海报暂时不可用</div></div>',
-                unsafe_allow_html=True,
-            )
+            poster_html = '<div class="poster-choice-frame"><div class="poster-choice-fallback">海报暂时不可用</div></div>'
         else:
-            st.markdown(
-                '<div class="poster-choice-frame"><div class="poster-choice-fallback">点击下方按钮选择</div></div>',
-                unsafe_allow_html=True,
-            )
+            poster_html = '<div class="poster-choice-frame"><div class="poster-choice-fallback">点击卡片选择</div></div>'
 
-        st.markdown(f'<div class="choice-help">选择 {html.escape(label[-1])}</div>', unsafe_allow_html=True)
-        if render_button_compat(button_text, key=button_key, use_container_width=True, button_type="primary"):
-            handle_choice(prefer_left=prefer_left)
+        st.markdown(
+            f"""
+            <a class="option-card-link" href="{html.escape(choice_href)}" target="_self" title="选择 {html.escape(label)}">
+              <div class="battle-head">
+                <span class="battle-label">{html.escape(label)}</span>
+                <span class="battle-label">1v1</span>
+              </div>
+              <div class="battle-title">{html.escape(title)}</div>
+              {poster_html}
+              <div class="choice-help">{html.escape(label[-1])}</div>
+            </a>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 # =========================
@@ -1055,7 +1136,7 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
 
     summary = f"共处理 {total} 个候选项，完成比较 {comparisons} 次。"
     if skipped_items:
-        summary += f" 已剔除 {len(skipped_items)} 项。"
+        summary += f" 已跳过 {len(skipped_items)} 项。"
     st.caption(summary)
 
     poster_bytes = st.session_state.get(k("share_poster_bytes"), b"")
@@ -1096,10 +1177,10 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
         if render_button_compat("↩️ 撤销上一步", key="btn_undo_result", use_container_width=True):
             undo_last_step()
     with col2:
-        if render_button_compat("🔁 用同一配置重新排一次", key="btn_reset_same", use_container_width=True):
+        if render_button_compat("重新排序", key="btn_reset_same", use_container_width=True):
             reset_same_config()
     with col3:
-        if render_button_compat("🗑️ 清除本次排序结果", key="btn_clear_result", use_container_width=True):
+        if render_button_compat("清空结果", key="btn_clear_result", use_container_width=True):
             clear_ranking_state()
             rerun()
 
@@ -1152,18 +1233,18 @@ def render_right_panel() -> None:
           <div class="status-chip"><div class="status-label">进度</div><div class="status-value">{processed}/{total}</div></div>
           <div class="status-chip"><div class="status-label">已比较</div><div class="status-value">{comparisons}</div></div>
           <div class="status-chip"><div class="status-label">预计剩余</div><div class="status-value">约 {remaining_estimate}</div></div>
-          <div class="status-chip"><div class="status-label">剔除/海报</div><div class="status-value">{len(skipped_items)} / {poster_hint}</div></div>
+          <div class="status-chip"><div class="status-label">跳过 / 海报</div><div class="status-value">{len(skipped_items)} / {poster_hint}</div></div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
     if top_k is None:
-        st.markdown("### 请选择，你更偏好哪一个？")
+        st.markdown("### 你更喜欢哪一个？")
     else:
         if st.session_state.get(k("top_k_boundary_check"), False):
             st.caption("这个候选会先挑战当前榜单末位；如果没有更喜欢它，会直接跳过，减少不必要比较。")
-        st.markdown("### 请选择，你更喜欢哪一部电影？")
+        st.markdown("### 你更喜欢哪一部？")
 
     ctrl1, ctrl2, ctrl3 = st.columns(3)
     with ctrl1:
@@ -1183,9 +1264,7 @@ def render_right_panel() -> None:
         render_option_card(
             label="选项 A",
             title=current,
-            button_text="选择 A",
-            button_key="btn_left",
-            prefer_left=True,
+            choice_href=create_choice_href("left"),
             show_poster=show_poster and mode == MODE_DOUBAN,
         )
 
@@ -1193,20 +1272,18 @@ def render_right_panel() -> None:
         render_option_card(
             label="选项 B",
             title=opponent,
-            button_text="选择 B",
-            button_key="btn_right",
-            prefer_left=False,
+            choice_href=create_choice_href("right"),
             show_poster=show_poster and mode == MODE_DOUBAN,
         )
 
     ranked = st.session_state.get(k("ranked"), [])
-    expander_title = "📊 当前临时完整排序" if top_k is None else f"📊 当前临时 Top {len(ranked)} 榜单"
+    expander_title = "📊 当前榜单" if top_k is None else f"📊 当前 Top {len(ranked)}"
     with st.expander(expander_title, expanded=False):
         for i, item in enumerate(ranked, 1):
             st.write(f"{i}. {item}")
 
     if skipped_items:
-        with st.expander("⏭️ 已剔除的候选项", expanded=False):
+        with st.expander("⏭️ 已跳过的候选项", expanded=False):
             for i, item in enumerate(skipped_items, 1):
                 st.write(f"{i}. {item}")
 
@@ -1473,6 +1550,9 @@ def main() -> None:
         layout="wide",
     )
     render_app_styles()
+
+    if consume_choice_from_query():
+        return
 
     if "ui_selected_mode" not in st.session_state:
         st.session_state["ui_selected_mode"] = MODE_CUSTOM
