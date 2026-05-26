@@ -8,11 +8,9 @@ import json
 import math
 import random
 import re
-import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
-from urllib.parse import urlencode
 
 import requests
 import streamlit as st
@@ -138,78 +136,6 @@ def poster_data_uri(image_data: Optional[bytes]) -> Optional[str]:
     return f"data:image/png;base64,{encoded}"
 
 
-def get_query_value(name: str) -> str:
-    try:
-        value = st.query_params.get(name, "")
-    except AttributeError:
-        value = st.experimental_get_query_params().get(name, [""])
-    if isinstance(value, list):
-        return str(value[0]) if value else ""
-    return str(value)
-
-
-def clear_query_params() -> None:
-    try:
-        st.query_params.clear()
-    except AttributeError:
-        st.experimental_set_query_params()
-
-
-@st.cache_resource
-def get_choice_registry() -> dict:
-    return {}
-
-
-def clone_state_value(value):
-    if isinstance(value, list):
-        return value[:]
-    if isinstance(value, dict):
-        return value.copy()
-    return value
-
-
-def build_full_ranking_snapshot() -> dict:
-    return {
-        "ui_step": 3,
-        "ui_selected_mode": st.session_state.get("ui_selected_mode", st.session_state.get(k("mode"), MODE_CUSTOM)),
-        "rank_state": {
-            name: clone_state_value(st.session_state.get(k(name)))
-            for name in RANKING_STATE_KEYS
-        },
-    }
-
-
-def restore_full_ranking_snapshot(snapshot: dict) -> None:
-    st.session_state["ui_step"] = int(snapshot.get("ui_step", 3))
-    st.session_state["ui_selected_mode"] = snapshot.get("ui_selected_mode", MODE_CUSTOM)
-    for name, value in snapshot.get("rank_state", {}).items():
-        st.session_state[k(name)] = clone_state_value(value)
-
-
-def create_choice_href(choice: str) -> str:
-    token = uuid.uuid4().hex
-    registry = get_choice_registry()
-    registry[token] = build_full_ranking_snapshot()
-    return "?" + urlencode({"rank_pick": choice, "rank_token": token})
-
-
-def consume_choice_from_query() -> bool:
-    choice = get_query_value("rank_pick")
-    token = get_query_value("rank_token")
-    if choice not in ("left", "right") or not token:
-        return False
-
-    clear_query_params()
-    snapshot = get_choice_registry().pop(token, None)
-    if not snapshot:
-        st.warning("这次选择已经过期，请重新点击当前选项。")
-        return False
-
-    restore_full_ranking_snapshot(snapshot)
-    handle_choice(prefer_left=choice == "left")
-    return True
-
-
 def bordered_container():
     try:
         return st.container(border=True)
@@ -251,21 +177,6 @@ def render_app_styles() -> None:
             justify-content: space-between;
             gap: 12px;
             margin-bottom: 6px;
-        }
-        .option-card-link {
-            display: block;
-            color: inherit;
-            text-decoration: none;
-            cursor: pointer;
-            border-radius: 8px;
-            transition: box-shadow 120ms ease, transform 120ms ease;
-        }
-        .option-card-link:hover {
-            box-shadow: 0 0 0 3px rgba(43, 131, 230, 0.12);
-            transform: translateY(-1px);
-        }
-        .option-card-link:hover .poster-choice-frame {
-            border-color: #2b83e6;
         }
         .battle-label {
             color: #475467;
@@ -1125,7 +1036,8 @@ def get_current_opponent_index(ranked: List[str], low: int, high: int) -> int:
 def render_option_card(
     label: str,
     title: str,
-    choice_href: str,
+    button_key: str,
+    prefer_left: bool,
     show_poster: bool,
 ) -> None:
     with bordered_container():
@@ -1144,18 +1056,17 @@ def render_option_card(
 
         st.markdown(
             f"""
-            <a class="option-card-link" href="{html.escape(choice_href)}" target="_self" title="选择 {html.escape(label)}">
-              <div class="battle-head">
-                <span class="battle-label">{html.escape(label)}</span>
-                <span class="battle-label">1v1</span>
-              </div>
-              <div class="battle-title">{html.escape(title)}</div>
-              {poster_html}
-              <div class="choice-help">{html.escape(label[-1])}</div>
-            </a>
+            <div class="battle-head">
+              <span class="battle-label">{html.escape(label)}</span>
+              <span class="battle-label">1v1</span>
+            </div>
+            <div class="battle-title">{html.escape(title)}</div>
+            {poster_html}
             """,
             unsafe_allow_html=True,
         )
+        if render_button_compat(label[-1], key=button_key, use_container_width=True, button_type="primary"):
+            handle_choice(prefer_left=prefer_left)
 
 
 # =========================
@@ -1304,7 +1215,8 @@ def render_right_panel() -> None:
         render_option_card(
             label="选项 A",
             title=current,
-            choice_href=create_choice_href("left"),
+            button_key="btn_left",
+            prefer_left=True,
             show_poster=show_poster and mode == MODE_DOUBAN,
         )
 
@@ -1312,7 +1224,8 @@ def render_right_panel() -> None:
         render_option_card(
             label="选项 B",
             title=opponent,
-            choice_href=create_choice_href("right"),
+            button_key="btn_right",
+            prefer_left=False,
             show_poster=show_poster and mode == MODE_DOUBAN,
         )
 
@@ -1624,9 +1537,6 @@ def main() -> None:
         layout="wide",
     )
     render_app_styles()
-
-    if consume_choice_from_query():
-        return
 
     if "ui_selected_mode" not in st.session_state:
         st.session_state["ui_selected_mode"] = MODE_CUSTOM
