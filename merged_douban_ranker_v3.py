@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import base64
 import html
 import io
 import json
@@ -9,6 +10,7 @@ import random
 import re
 from datetime import datetime
 from typing import Dict, List, Optional
+from urllib.parse import unquote, urlencode
 
 import requests
 import streamlit as st
@@ -98,6 +100,38 @@ def show_image_compat(image_data: bytes) -> bool:
         return False
 
 
+def get_query_value(name: str) -> str:
+    try:
+        value = st.query_params.get(name, "")
+    except AttributeError:
+        value = st.experimental_get_query_params().get(name, [""])
+    if isinstance(value, list):
+        return str(value[0]) if value else ""
+    return str(value)
+
+
+def clear_query_params() -> None:
+    try:
+        st.query_params.clear()
+    except AttributeError:
+        st.experimental_set_query_params()
+
+
+def build_choice_token(current: str, opponent: str, low: int, high: int, processed: int, comparisons: int) -> str:
+    return "|".join([current, opponent, str(low), str(high), str(processed), str(comparisons)])
+
+
+def build_choice_href(choice: str, token: str) -> str:
+    return "?" + urlencode({"rank_choice": choice, "rank_choice_token": token})
+
+
+def poster_data_uri(image_data: Optional[bytes]) -> Optional[str]:
+    if not image_data:
+        return None
+    encoded = base64.b64encode(image_data).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
 def bordered_container():
     try:
         return st.container(border=True)
@@ -113,7 +147,7 @@ def render_app_styles() -> None:
             display: grid;
             grid-template-columns: repeat(6, minmax(0, 1fr));
             gap: 8px;
-            margin: 4px 0 14px;
+            margin: 4px 0 8px;
         }
         .status-chip {
             border: 1px solid #e6e8ef;
@@ -138,7 +172,7 @@ def render_app_styles() -> None:
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            margin-bottom: 10px;
+            margin-bottom: 6px;
         }
         .battle-label {
             color: #475467;
@@ -147,14 +181,15 @@ def render_app_styles() -> None:
         }
         .battle-title {
             color: #101828;
-            font-size: clamp(20px, 3vw, 30px);
+            font-size: clamp(18px, 2.3vw, 24px);
             font-weight: 800;
             line-height: 1.25;
             overflow-wrap: anywhere;
-            margin: 6px 0 14px;
+            margin: 0 0 8px;
+            min-height: 32px;
         }
         .poster-placeholder {
-            min-height: 220px;
+            height: min(46vh, 440px);
             border: 1px dashed #cfd4dc;
             border-radius: 8px;
             background: #f7f8fb;
@@ -164,7 +199,48 @@ def render_app_styles() -> None:
             justify-content: center;
             text-align: center;
             padding: 16px;
-            margin-bottom: 10px;
+            margin-bottom: 0;
+        }
+        .poster-choice-link {
+            display: block;
+            height: min(46vh, 440px);
+            border: 1px solid #e6e8ef;
+            border-radius: 8px;
+            background: #f8f9fb;
+            padding: 8px;
+            transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+            text-decoration: none;
+        }
+        .poster-choice-link:hover {
+            border-color: #2b83e6;
+            box-shadow: 0 0 0 3px rgba(43, 131, 230, 0.12);
+            transform: translateY(-1px);
+        }
+        .poster-choice-img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+        .poster-choice-fallback {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #475467;
+            font-weight: 700;
+            text-align: center;
+            padding: 16px;
+        }
+        .choice-help {
+            color: #667085;
+            font-size: 12px;
+            margin-top: 4px;
+            text-align: center;
+        }
+        .live-controls {
+            margin: 4px 0 10px;
         }
         .rank-card {
             border: 1px solid #e6e8ef;
@@ -194,6 +270,10 @@ def render_app_styles() -> None:
             }
             .battle-title {
                 font-size: 22px;
+            }
+            .poster-choice-link,
+            .poster-placeholder {
+                height: min(38vh, 360px);
             }
         }
         </style>
@@ -943,19 +1023,10 @@ def get_current_opponent_index(ranked: List[str], low: int, high: int) -> int:
     return max(0, min(len(ranked) - 1, (low + high) // 2))
 
 
-def render_poster_placeholder() -> None:
-    st.markdown(
-        '<div class="poster-placeholder">海报暂时不可用<br>排序仍可继续</div>',
-        unsafe_allow_html=True,
-    )
-
-
 def render_option_card(
     label: str,
     title: str,
-    button_text: str,
-    button_key: str,
-    prefer_left: bool,
+    choice_href: str,
     show_poster: bool,
 ) -> None:
     with bordered_container():
@@ -968,16 +1039,27 @@ def render_option_card(
             """,
             unsafe_allow_html=True,
         )
-        if show_poster:
-            poster = get_poster_for_option(title)
-            if poster and not show_image_compat(poster):
-                render_poster_placeholder()
-            elif not poster:
-                render_poster_placeholder()
-
         st.markdown(f'<div class="battle-title">{html.escape(title)}</div>', unsafe_allow_html=True)
-        if render_button_compat(button_text, key=button_key, use_container_width=True, button_type="primary"):
-            handle_choice(prefer_left=prefer_left)
+
+        poster = get_poster_for_option(title) if show_poster else None
+        image_src = poster_data_uri(poster)
+        if show_poster:
+            if image_src:
+                poster_html = f'<img class="poster-choice-img" src="{image_src}" alt="{html.escape(title)}">'
+            else:
+                poster_html = '<div class="poster-choice-fallback">海报暂时不可用<br>点击此区域选择</div>'
+        else:
+            poster_html = '<div class="poster-choice-fallback">点击此区域选择</div>'
+
+        st.markdown(
+            f"""
+            <a class="poster-choice-link" href="{html.escape(choice_href)}" target="_self" title="选择{html.escape(label)}">
+              {poster_html}
+            </a>
+            <div class="choice-help">点击海报选择 {html.escape(label[-1])}</div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 # =========================
@@ -1076,6 +1158,15 @@ def render_right_panel() -> None:
     high = st.session_state[k("high")]
     opponent_index = get_current_opponent_index(st.session_state[k("ranked")], low, high)
     opponent = st.session_state[k("ranked")][opponent_index]
+    choice_token = build_choice_token(current, opponent, low, high, processed, comparisons)
+
+    query_choice = get_query_value("rank_choice")
+    query_token = get_query_value("rank_choice_token")
+    if query_choice in ("left", "right"):
+        clear_query_params()
+        if unquote(query_token) == choice_token:
+            handle_choice(prefer_left=query_choice == "left")
+            return
 
     progress = processed / total if total else 0
     st.progress(progress)
@@ -1108,14 +1199,25 @@ def render_right_panel() -> None:
             st.caption("这个候选会先挑战当前榜单末位；如果没有更喜欢它，会直接跳过，减少不必要比较。")
         st.markdown("### 请选择，你更喜欢哪一部电影？")
 
+    ctrl1, ctrl2, ctrl3 = st.columns(3)
+    with ctrl1:
+        label_a = "没看过 A" if mode == MODE_DOUBAN else "不熟悉 A"
+        if render_button_compat(label_a, key="btn_skip_current", use_container_width=True):
+            handle_skip_current_item()
+    with ctrl2:
+        label_b = "没看过 B" if mode == MODE_DOUBAN else "不熟悉 B"
+        if render_button_compat(label_b, key="btn_skip_opponent", use_container_width=True):
+            handle_skip_opponent_item()
+    with ctrl3:
+        if render_button_compat("撤销上一步", key="btn_undo_live", use_container_width=True):
+            undo_last_step()
+
     c1, c2 = st.columns(2)
     with c1:
         render_option_card(
             label="选项 A",
             title=current,
-            button_text="更喜欢 A",
-            button_key="btn_left",
-            prefer_left=True,
+            choice_href=build_choice_href("left", choice_token),
             show_poster=show_poster and mode == MODE_DOUBAN,
         )
 
@@ -1123,24 +1225,9 @@ def render_right_panel() -> None:
         render_option_card(
             label="选项 B",
             title=opponent,
-            button_text="更喜欢 B",
-            button_key="btn_right",
-            prefer_left=False,
+            choice_href=build_choice_href("right", choice_token),
             show_poster=show_poster and mode == MODE_DOUBAN,
         )
-
-    ctrl1, ctrl2, ctrl3 = st.columns(3)
-    with ctrl1:
-        if render_button_compat("↩️ 撤销上一步", key="btn_undo_live", use_container_width=True):
-            undo_last_step()
-    with ctrl2:
-        label_a = "👀 没看过 A（剔除 A）" if mode == MODE_DOUBAN else "👀 不熟悉 A（剔除 A）"
-        if render_button_compat(label_a, key="btn_skip_current", use_container_width=True):
-            handle_skip_current_item()
-    with ctrl3:
-        label_b = "👀 没看过 B（剔除 B）" if mode == MODE_DOUBAN else "👀 不熟悉 B（剔除 B）"
-        if render_button_compat(label_b, key="btn_skip_opponent", use_container_width=True):
-            handle_skip_opponent_item()
 
     ranked = st.session_state.get(k("ranked"), [])
     expander_title = "📊 当前临时完整排序" if top_k is None else f"📊 当前临时 Top {len(ranked)} 榜单"
@@ -1380,24 +1467,23 @@ def render_parameter_page() -> None:
 
 
 def render_sorting_page() -> None:
-    render_step_header(
-        3,
-        "开始排序",
-        "在这一页完成 1v1 选择、撤销、剔除和结果分享。",
-    )
-
-    theme = st.session_state.get(k("theme"))
     started = st.session_state.get(k("started"), False)
-    mode = st.session_state.get(k("mode"), get_selected_mode()) if started else get_selected_mode()
 
-    summary_cols = st.columns(3)
-    with summary_cols[0]:
-        st.caption(f"当前模式：{mode}")
-    with summary_cols[1]:
-        st.caption(f"当前主题：{theme or '尚未开始'}")
-    with summary_cols[2]:
-        st.caption("步骤支持来回切换")
+    st.progress(1.0)
+    labels = st.columns(3)
+    with labels[0]:
+        st.caption("① 选择模式")
+    with labels[1]:
+        st.caption("② 填写参数")
+    with labels[2]:
+        st.markdown("**③ 开始排序**")
 
+    if not started:
+        st.info("你还没有开始排序。请先返回第 2 步填写参数，然后进入第 3 步。")
+    else:
+        render_right_panel()
+
+    safe_divider()
     nav1, nav2 = st.columns(2)
     with nav1:
         if render_button_compat("← 返回第 2 步修改参数", key="btn_back_to_step2", use_container_width=True):
@@ -1405,14 +1491,6 @@ def render_sorting_page() -> None:
     with nav2:
         if render_button_compat("重新选择模式", key="btn_back_to_step1", use_container_width=True):
             go_to_step(1)
-
-    safe_divider()
-
-    if not started:
-        st.info("你还没有开始排序。请先返回第 2 步填写参数，然后进入第 3 步。")
-        return
-
-    render_right_panel()
 
 
 # =========================
@@ -1431,10 +1509,13 @@ def main() -> None:
     if "ui_step" not in st.session_state:
         st.session_state["ui_step"] = 1
 
-    st.title("🎯 统一偏好排序工具")
-    st.markdown("现在改成了更清晰的三步流程：**先选模式，再填参数，最后专注排序**。")
-
     step = get_ui_step()
+    if step == 3:
+        st.caption("🎯 统一偏好排序工具")
+    else:
+        st.title("🎯 统一偏好排序工具")
+        st.markdown("现在改成了更清晰的三步流程：**先选模式，再填参数，最后专注排序**。")
+
     if step == 1:
         render_mode_selection_page()
     elif step == 2:
