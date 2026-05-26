@@ -10,7 +10,6 @@ import random
 import re
 from datetime import datetime
 from typing import Dict, List, Optional
-from urllib.parse import unquote, urlencode
 
 import requests
 import streamlit as st
@@ -100,31 +99,6 @@ def show_image_compat(image_data: bytes) -> bool:
         return False
 
 
-def get_query_value(name: str) -> str:
-    try:
-        value = st.query_params.get(name, "")
-    except AttributeError:
-        value = st.experimental_get_query_params().get(name, [""])
-    if isinstance(value, list):
-        return str(value[0]) if value else ""
-    return str(value)
-
-
-def clear_query_params() -> None:
-    try:
-        st.query_params.clear()
-    except AttributeError:
-        st.experimental_set_query_params()
-
-
-def build_choice_token(current: str, opponent: str, low: int, high: int, processed: int, comparisons: int) -> str:
-    return "|".join([current, opponent, str(low), str(high), str(processed), str(comparisons)])
-
-
-def build_choice_href(choice: str, token: str) -> str:
-    return "?" + urlencode({"rank_choice": choice, "rank_choice_token": token})
-
-
 def poster_data_uri(image_data: Optional[bytes]) -> Optional[str]:
     if not image_data:
         return None
@@ -201,20 +175,13 @@ def render_app_styles() -> None:
             padding: 16px;
             margin-bottom: 0;
         }
-        .poster-choice-link {
-            display: block;
+        .poster-choice-frame {
             height: min(46vh, 440px);
             border: 1px solid #e6e8ef;
             border-radius: 8px;
             background: #f8f9fb;
             padding: 8px;
-            transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
-            text-decoration: none;
-        }
-        .poster-choice-link:hover {
-            border-color: #2b83e6;
-            box-shadow: 0 0 0 3px rgba(43, 131, 230, 0.12);
-            transform: translateY(-1px);
+            margin-bottom: 8px;
         }
         .poster-choice-img {
             display: block;
@@ -236,7 +203,7 @@ def render_app_styles() -> None:
         .choice-help {
             color: #667085;
             font-size: 12px;
-            margin-top: 4px;
+            margin: 0 0 6px;
             text-align: center;
         }
         .live-controls {
@@ -271,7 +238,7 @@ def render_app_styles() -> None:
             .battle-title {
                 font-size: 22px;
             }
-            .poster-choice-link,
+            .poster-choice-frame,
             .poster-placeholder {
                 height: min(38vh, 360px);
             }
@@ -1026,7 +993,9 @@ def get_current_opponent_index(ranked: List[str], low: int, high: int) -> int:
 def render_option_card(
     label: str,
     title: str,
-    choice_href: str,
+    button_text: str,
+    button_key: str,
+    prefer_left: bool,
     show_poster: bool,
 ) -> None:
     with bordered_container():
@@ -1043,23 +1012,29 @@ def render_option_card(
 
         poster = get_poster_for_option(title) if show_poster else None
         image_src = poster_data_uri(poster)
-        if show_poster:
-            if image_src:
-                poster_html = f'<img class="poster-choice-img" src="{image_src}" alt="{html.escape(title)}">'
-            else:
-                poster_html = '<div class="poster-choice-fallback">海报暂时不可用<br>点击此区域选择</div>'
+        if show_poster and image_src:
+            st.markdown(
+                f"""
+                <div class="poster-choice-frame">
+                  <img class="poster-choice-img" src="{image_src}" alt="{html.escape(title)}">
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        elif show_poster:
+            st.markdown(
+                '<div class="poster-choice-frame"><div class="poster-choice-fallback">海报暂时不可用</div></div>',
+                unsafe_allow_html=True,
+            )
         else:
-            poster_html = '<div class="poster-choice-fallback">点击此区域选择</div>'
+            st.markdown(
+                '<div class="poster-choice-frame"><div class="poster-choice-fallback">点击下方按钮选择</div></div>',
+                unsafe_allow_html=True,
+            )
 
-        st.markdown(
-            f"""
-            <a class="poster-choice-link" href="{html.escape(choice_href)}" target="_self" title="选择{html.escape(label)}">
-              {poster_html}
-            </a>
-            <div class="choice-help">点击海报选择 {html.escape(label[-1])}</div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.markdown(f'<div class="choice-help">选择 {html.escape(label[-1])}</div>', unsafe_allow_html=True)
+        if render_button_compat(button_text, key=button_key, use_container_width=True, button_type="primary"):
+            handle_choice(prefer_left=prefer_left)
 
 
 # =========================
@@ -1158,15 +1133,6 @@ def render_right_panel() -> None:
     high = st.session_state[k("high")]
     opponent_index = get_current_opponent_index(st.session_state[k("ranked")], low, high)
     opponent = st.session_state[k("ranked")][opponent_index]
-    choice_token = build_choice_token(current, opponent, low, high, processed, comparisons)
-
-    query_choice = get_query_value("rank_choice")
-    query_token = get_query_value("rank_choice_token")
-    if query_choice in ("left", "right"):
-        clear_query_params()
-        if unquote(query_token) == choice_token:
-            handle_choice(prefer_left=query_choice == "left")
-            return
 
     progress = processed / total if total else 0
     st.progress(progress)
@@ -1217,7 +1183,9 @@ def render_right_panel() -> None:
         render_option_card(
             label="选项 A",
             title=current,
-            choice_href=build_choice_href("left", choice_token),
+            button_text="选择 A",
+            button_key="btn_left",
+            prefer_left=True,
             show_poster=show_poster and mode == MODE_DOUBAN,
         )
 
@@ -1225,7 +1193,9 @@ def render_right_panel() -> None:
         render_option_card(
             label="选项 B",
             title=opponent,
-            choice_href=build_choice_href("right", choice_token),
+            button_text="选择 B",
+            button_key="btn_right",
+            prefer_left=False,
             show_poster=show_poster and mode == MODE_DOUBAN,
         )
 
