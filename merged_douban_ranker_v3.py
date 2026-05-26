@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
+import html
 import io
+import json
 import math
 import random
 import re
@@ -41,6 +44,7 @@ HISTORY_KEYS = [
     "processed",
     "finished",
     "skipped_items",
+    "top_k_boundary_check",
 ]
 
 
@@ -61,9 +65,14 @@ def rerun() -> None:
         st.experimental_rerun()
 
 
-def render_button_compat(label: str, key: str, use_container_width: bool = True) -> bool:
+def render_button_compat(
+    label: str,
+    key: str,
+    use_container_width: bool = True,
+    button_type: str = "secondary",
+) -> bool:
     try:
-        return st.button(label, key=key, use_container_width=use_container_width)
+        return st.button(label, key=key, use_container_width=use_container_width, type=button_type)
     except TypeError:
         return st.button(label, key=key)
 
@@ -87,6 +96,110 @@ def show_image_compat(image_data: bytes) -> bool:
             return False
     except Exception:
         return False
+
+
+def bordered_container():
+    try:
+        return st.container(border=True)
+    except TypeError:
+        return st.container()
+
+
+def render_app_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        .compact-status {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 8px;
+            margin: 4px 0 14px;
+        }
+        .status-chip {
+            border: 1px solid #e6e8ef;
+            border-radius: 8px;
+            padding: 8px 10px;
+            background: #fff;
+        }
+        .status-label {
+            color: #667085;
+            font-size: 12px;
+            line-height: 1.2;
+        }
+        .status-value {
+            color: #151922;
+            font-size: 16px;
+            font-weight: 700;
+            line-height: 1.35;
+            margin-top: 2px;
+        }
+        .battle-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+        .battle-label {
+            color: #475467;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .battle-title {
+            color: #101828;
+            font-size: clamp(20px, 3vw, 30px);
+            font-weight: 800;
+            line-height: 1.25;
+            overflow-wrap: anywhere;
+            margin: 6px 0 14px;
+        }
+        .poster-placeholder {
+            min-height: 220px;
+            border: 1px dashed #cfd4dc;
+            border-radius: 8px;
+            background: #f7f8fb;
+            color: #667085;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 16px;
+            margin-bottom: 10px;
+        }
+        .rank-card {
+            border: 1px solid #e6e8ef;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin: 8px 0;
+            background: #fff;
+        }
+        .rank-card.top-rank {
+            border-color: #c8d2ff;
+            background: #f8f9ff;
+        }
+        .rank-num {
+            display: inline-block;
+            width: 44px;
+            color: #4355db;
+            font-weight: 800;
+        }
+        .rank-name {
+            color: #151922;
+            font-weight: 650;
+            overflow-wrap: anywhere;
+        }
+        @media (max-width: 820px) {
+            .compact-status {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .battle-title {
+                font-size: 22px;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # =========================
@@ -241,6 +354,7 @@ def init_ranking_state(
     st.session_state[k("comparisons")] = 0
     st.session_state[k("processed")] = 1
     st.session_state[k("finished")] = False
+    st.session_state[k("top_k_boundary_check")] = False
     st.session_state[k("started")] = True
     st.session_state[k("top_k")] = top_k
     st.session_state[k("show_poster")] = show_poster
@@ -266,6 +380,7 @@ def clear_ranking_state() -> None:
         "comparisons",
         "processed",
         "finished",
+        "top_k_boundary_check",
         "started",
         "top_k",
         "show_poster",
@@ -352,7 +467,11 @@ def prepare_next_item() -> None:
             st.session_state[k("remaining")] = remaining
             st.session_state[k("current_item")] = current
             st.session_state[k("low")] = 0
-            st.session_state[k("high")] = len(st.session_state[k("ranked")])
+            ranked_count = len(st.session_state[k("ranked")])
+            top_k = st.session_state.get(k("top_k"))
+            use_boundary_check = top_k is not None and ranked_count >= top_k
+            st.session_state[k("top_k_boundary_check")] = use_boundary_check
+            st.session_state[k("high")] = max(0, ranked_count - 1) if use_boundary_check else ranked_count
         else:
             st.session_state[k("finished")] = True
 
@@ -372,11 +491,29 @@ def handle_choice(prefer_left: bool) -> None:
 
     push_history_snapshot()
 
+    st.session_state[k("comparisons")] += 1
+    ranked = st.session_state[k("ranked")]
+
+    if st.session_state.get(k("top_k_boundary_check"), False):
+        st.session_state[k("top_k_boundary_check")] = False
+        if prefer_left:
+            if len(ranked) <= 1:
+                ranked.insert(0, st.session_state[k("current_item")])
+                st.session_state[k("ranked")] = ranked[:1]
+                st.session_state[k("current_item")] = None
+                st.session_state[k("processed")] += 1
+            else:
+                st.session_state[k("low")] = 0
+                st.session_state[k("high")] = len(ranked) - 1
+        else:
+            st.session_state[k("current_item")] = None
+            st.session_state[k("processed")] += 1
+        rerun()
+        return
+
     low = st.session_state[k("low")]
     high = st.session_state[k("high")]
     mid = (low + high) // 2
-
-    st.session_state[k("comparisons")] += 1
 
     if prefer_left:
         st.session_state[k("high")] = mid
@@ -385,7 +522,6 @@ def handle_choice(prefer_left: bool) -> None:
 
     if st.session_state[k("low")] >= st.session_state[k("high")]:
         insert_pos = st.session_state[k("low")]
-        ranked = st.session_state[k("ranked")]
         ranked.insert(insert_pos, st.session_state[k("current_item")])
         st.session_state[k("ranked")] = ranked
         st.session_state[k("current_item")] = None
@@ -409,6 +545,7 @@ def handle_skip_current_item() -> None:
 
     add_skipped_item(current_item)
     st.session_state[k("current_item")] = None
+    st.session_state[k("top_k_boundary_check")] = False
     st.session_state[k("processed")] = st.session_state.get(k("processed"), 0) + 1
     rerun()
 
@@ -423,10 +560,11 @@ def handle_skip_opponent_item() -> None:
 
     low = st.session_state.get(k("low"), 0)
     high = st.session_state.get(k("high"), 0)
-    if high <= 0:
+    boundary_check = st.session_state.get(k("top_k_boundary_check"), False)
+    if high <= 0 and not boundary_check:
         return
 
-    mid = (low + high) // 2
+    mid = get_current_opponent_index(ranked, low, high)
     if mid < 0 or mid >= len(ranked):
         return
 
@@ -442,8 +580,10 @@ def handle_skip_opponent_item() -> None:
         st.session_state[k("current_item")] = None
         st.session_state[k("low")] = 0
         st.session_state[k("high")] = 0
+        st.session_state[k("top_k_boundary_check")] = False
         st.session_state[k("processed")] = st.session_state.get(k("processed"), 0) + 1
     else:
+        st.session_state[k("top_k_boundary_check")] = False
         st.session_state[k("low")] = 0
         st.session_state[k("high")] = len(st.session_state.get(k("ranked"), []))
 
@@ -473,8 +613,127 @@ def estimated_comparisons(total: int, top_k: Optional[int]) -> int:
         return max(total - 1, int(sum(math.ceil(math.log2(i)) for i in range(2, total + 1))))
     top_k = max(1, min(top_k, total))
     base = sum(math.ceil(math.log2(i)) for i in range(2, min(top_k, total) + 1))
-    extra = max(0, total - top_k) * max(1, math.ceil(math.log2(top_k)))
+    extra = max(0, total - top_k) * (1 + max(0, math.ceil(math.log2(max(1, top_k - 1)))))
     return int(base + extra)
+
+
+def estimated_remaining_comparisons(total: int, processed: int, top_k: Optional[int]) -> int:
+    current_item = st.session_state.get(k("current_item"))
+    ranked_count = len(st.session_state.get(k("ranked"), []))
+    remaining_count = len(st.session_state.get(k("remaining"), []))
+
+    current_cost = 0
+    if current_item is not None:
+        if st.session_state.get(k("top_k_boundary_check"), False):
+            current_cost = 1
+        else:
+            interval = max(1, st.session_state.get(k("high"), 0) - st.session_state.get(k("low"), 0))
+            current_cost = max(1, math.ceil(math.log2(interval))) if interval > 1 else 1
+
+    if top_k is None:
+        future_cost = sum(
+            max(1, math.ceil(math.log2(max(2, ranked_count + i))))
+            for i in range(1, remaining_count + 1)
+        )
+    else:
+        future_cost = 0
+        kept = ranked_count
+        for _ in range(remaining_count):
+            if kept < top_k:
+                kept += 1
+                future_cost += max(1, math.ceil(math.log2(max(2, kept))))
+            else:
+                future_cost += 1 + max(0, math.ceil(math.log2(max(1, top_k - 1))))
+
+    return max(0, current_cost + future_cost)
+
+
+def filter_items(items: List[str], query: str) -> List[str]:
+    query = query.strip().lower()
+    if not query:
+        return items
+    return [item for item in items if query in item.lower()]
+
+
+def render_searchable_item_preview(items: List[str], search_key: str, empty_text: str = "还没有候选项。") -> None:
+    if not items:
+        st.write(empty_text)
+        return
+
+    query = st.text_input("搜索候选项", key=search_key, placeholder="输入关键词筛选")
+    filtered = filter_items(items, query)
+    display_items = filtered[:30]
+    st.caption(f"显示 {len(display_items)} / {len(filtered)} 项；完整候选共 {len(items)} 项。")
+    for i, item in enumerate(display_items, 1):
+        st.write(f"{i}. {item}")
+    if len(filtered) > len(display_items):
+        st.caption("还有更多结果未显示，请继续输入关键词缩小范围。")
+
+
+def build_export_payloads(
+    *,
+    theme: str,
+    mode: str,
+    ranked: List[str],
+    skipped_items: List[str],
+    top_k: Optional[int],
+    comparisons: int,
+) -> tuple[bytes, bytes, bytes]:
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    txt_lines = [
+        theme,
+        f"模式：{mode}",
+        "类型：完整排序" if top_k is None else f"类型：Top {min(top_k, len(ranked))}",
+        f"比较次数：{comparisons}",
+        f"生成时间：{generated_at}",
+        "",
+        "排名结果：",
+    ]
+    txt_lines.extend(f"{idx}. {item}" for idx, item in enumerate(ranked, 1))
+    if skipped_items:
+        txt_lines.extend(["", "已剔除："])
+        txt_lines.extend(f"- {item}" for item in skipped_items)
+    txt_bytes = "\n".join(txt_lines).encode("utf-8-sig")
+
+    csv_buffer = io.StringIO()
+    writer = csv.writer(csv_buffer)
+    writer.writerow(["rank", "item", "status"])
+    for idx, item in enumerate(ranked, 1):
+        writer.writerow([idx, item, "ranked"])
+    for item in skipped_items:
+        writer.writerow(["", item, "skipped"])
+    csv_bytes = csv_buffer.getvalue().encode("utf-8-sig")
+
+    json_bytes = json.dumps(
+        {
+            "theme": theme,
+            "mode": mode,
+            "top_k": top_k,
+            "comparisons": comparisons,
+            "generated_at": generated_at,
+            "ranked": [{"rank": idx, "item": item} for idx, item in enumerate(ranked, 1)],
+            "skipped_items": skipped_items,
+        },
+        ensure_ascii=False,
+        indent=2,
+    ).encode("utf-8")
+
+    return txt_bytes, csv_bytes, json_bytes
+
+
+def render_ranked_list(ranked: List[str]) -> None:
+    for i, item in enumerate(ranked, 1):
+        top_class = " top-rank" if i <= 3 else ""
+        st.markdown(
+            f"""
+            <div class="rank-card{top_class}">
+              <span class="rank-num">#{i:02d}</span>
+              <span class="rank-name">{html.escape(item)}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def get_poster_for_option(name: str) -> Optional[bytes]:
@@ -640,19 +899,47 @@ def ensure_share_poster_generated() -> None:
     st.session_state[k("share_poster_signature")] = signature
 
 
-def render_option_card(title: str, button_text: str, button_key: str, prefer_left: bool, show_poster: bool) -> None:
-    if show_poster:
-        poster = get_poster_for_option(title)
-        if poster:
-            shown = show_image_compat(poster)
-            if not shown:
-                st.caption("海报加载失败")
-        else:
-            st.caption("该电影海报暂时获取失败")
+def get_current_opponent_index(ranked: List[str], low: int, high: int) -> int:
+    if st.session_state.get(k("top_k_boundary_check"), False):
+        return max(0, len(ranked) - 1)
+    return max(0, min(len(ranked) - 1, (low + high) // 2))
 
-    st.markdown(f"### 🎯 {title}")
-    if render_button_compat(button_text, key=button_key, use_container_width=True):
-        handle_choice(prefer_left=prefer_left)
+
+def render_poster_placeholder() -> None:
+    st.markdown(
+        '<div class="poster-placeholder">海报暂时不可用<br>排序仍可继续</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_option_card(
+    label: str,
+    title: str,
+    button_text: str,
+    button_key: str,
+    prefer_left: bool,
+    show_poster: bool,
+) -> None:
+    with bordered_container():
+        st.markdown(
+            f"""
+            <div class="battle-head">
+              <span class="battle-label">{html.escape(label)}</span>
+              <span class="battle-label">1v1</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if show_poster:
+            poster = get_poster_for_option(title)
+            if poster and not show_image_compat(poster):
+                render_poster_placeholder()
+            elif not poster:
+                render_poster_placeholder()
+
+        st.markdown(f'<div class="battle-title">{html.escape(title)}</div>', unsafe_allow_html=True)
+        if render_button_compat(button_text, key=button_key, use_container_width=True, button_type="primary"):
+            handle_choice(prefer_left=prefer_left)
 
 
 # =========================
@@ -669,8 +956,7 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
     else:
         st.success(f"🎉 排序完成！下面是你的 Top {len(ranked)}：")
 
-    for i, item in enumerate(ranked, 1):
-        st.write(f"{i}. {item}")
+    render_ranked_list(ranked)
 
     summary = f"共处理 {total} 个候选项，完成比较 {comparisons} 次。"
     if skipped_items:
@@ -690,6 +976,26 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                 key="btn_download_share_poster",
             )
 
+    theme = st.session_state.get(k("theme"), "ranking")
+    mode = st.session_state.get(k("mode"), MODE_CUSTOM)
+    txt_bytes, csv_bytes, json_bytes = build_export_payloads(
+        theme=theme,
+        mode=mode,
+        ranked=ranked,
+        skipped_items=skipped_items,
+        top_k=top_k,
+        comparisons=comparisons,
+    )
+    base_name = slugify_filename(theme)
+    with st.expander("导出结果", expanded=False):
+        d1, d2, d3 = st.columns(3)
+        with d1:
+            render_download_button_compat("下载 TXT", txt_bytes, f"{base_name}.txt", "text/plain", "btn_export_txt")
+        with d2:
+            render_download_button_compat("下载 CSV", csv_bytes, f"{base_name}.csv", "text/csv", "btn_export_csv")
+        with d3:
+            render_download_button_compat("下载 JSON", json_bytes, f"{base_name}.json", "application/json", "btn_export_json")
+
     col1, col2, col3 = st.columns(3)
     with col1:
         if render_button_compat("↩️ 撤销上一步", key="btn_undo_result", use_container_width=True):
@@ -704,10 +1010,8 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
 
 
 def render_right_panel() -> None:
-    st.markdown("**在这里进行 1v1 选择，并查看结果。**")
-
     if not st.session_state.get(k("started"), False):
-        st.info("左侧配置完成后，点击开始按钮即可。")
+        st.info("参数填写完成后，点击开始按钮即可。")
         return
 
     theme = st.session_state.get(k("theme"), "我的排序")
@@ -719,16 +1023,8 @@ def render_right_panel() -> None:
     mode = st.session_state.get(k("mode"), MODE_CUSTOM)
     skipped_items = st.session_state.get(k("skipped_items"), [])
 
-    st.subheader(f"当前主题：{theme}")
-
-    if top_k is None:
-        st.caption("当前模式：自定义完整排序")
-    else:
-        poster_map = st.session_state.get(k("source_poster_map"), {})
-        ok_count = sum(1 for v in poster_map.values() if v)
-        st.caption(f"当前模式：豆瓣电影 Top {top_k} 排序（候选总数 {total}，已准备海报 {ok_count} 张）")
-
     if st.session_state.get(k("finished"), False):
+        st.subheader(f"当前主题：{theme}")
         render_result_section(total=total, comparisons=comparisons, top_k=top_k)
         return
 
@@ -740,26 +1036,44 @@ def render_right_panel() -> None:
     current = st.session_state[k("current_item")]
     low = st.session_state[k("low")]
     high = st.session_state[k("high")]
-    mid = (low + high) // 2
-    opponent = st.session_state[k("ranked")][mid]
+    opponent_index = get_current_opponent_index(st.session_state[k("ranked")], low, high)
+    opponent = st.session_state[k("ranked")][opponent_index]
 
     progress = processed / total if total else 0
     st.progress(progress)
+    remaining_estimate = estimated_remaining_comparisons(total, processed, top_k)
+    mode_label = "自定义完整排序" if top_k is None else f"豆瓣 Top {top_k}"
+    if top_k is not None:
+        poster_map = st.session_state.get(k("source_poster_map"), {})
+        poster_hint = f"{sum(1 for v in poster_map.values() if v)} 张海报"
+    else:
+        poster_hint = "无海报"
+
+    st.markdown(
+        f"""
+        <div class="compact-status">
+          <div class="status-chip"><div class="status-label">主题</div><div class="status-value">{html.escape(theme)}</div></div>
+          <div class="status-chip"><div class="status-label">模式</div><div class="status-value">{html.escape(mode_label)}</div></div>
+          <div class="status-chip"><div class="status-label">进度</div><div class="status-value">{processed}/{total}</div></div>
+          <div class="status-chip"><div class="status-label">已比较</div><div class="status-value">{comparisons}</div></div>
+          <div class="status-chip"><div class="status-label">预计剩余</div><div class="status-value">约 {remaining_estimate}</div></div>
+          <div class="status-chip"><div class="status-label">剔除/海报</div><div class="status-value">{len(skipped_items)} / {poster_hint}</div></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if top_k is None:
-        st.caption(f"已处理 {processed} / {total} 个候选项，已比较 {comparisons} 次。")
         st.markdown("### 请选择，你更偏好哪一个？")
     else:
-        st.caption(f"已处理 {processed} / {total} 部电影，当前最多保留 Top {top_k}，已比较 {comparisons} 次。")
+        if st.session_state.get(k("top_k_boundary_check"), False):
+            st.caption("这个候选会先挑战当前榜单末位；如果没有更喜欢它，会直接跳过，减少不必要比较。")
         st.markdown("### 请选择，你更喜欢哪一部电影？")
-
-    if skipped_items:
-        st.caption(f"已剔除 {len(skipped_items)} 项。")
 
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("#### 选项 A")
         render_option_card(
+            label="选项 A",
             title=current,
             button_text="更喜欢 A",
             button_key="btn_left",
@@ -768,8 +1082,8 @@ def render_right_panel() -> None:
         )
 
     with c2:
-        st.markdown("#### 选项 B")
         render_option_card(
+            label="选项 B",
             title=opponent,
             button_text="更喜欢 B",
             button_key="btn_right",
@@ -873,7 +1187,7 @@ def render_mode_selection_page() -> None:
     with spacer:
         st.empty()
     with next_col:
-        if render_button_compat("下一步：填写参数 →", key="btn_to_step2", use_container_width=True):
+        if render_button_compat("下一步：填写参数 →", key="btn_to_step2", use_container_width=True, button_type="primary"):
             go_to_step(2)
 
 
@@ -892,11 +1206,7 @@ def render_custom_parameter_page(mode: str) -> None:
     st.caption(f"预计比较次数大约：{estimated_comparisons(len(options), None)} 次。")
 
     with st.expander("查看当前候选项", expanded=False):
-        if options:
-            for i, item in enumerate(options, 1):
-                st.write(f"{i}. {item}")
-        else:
-            st.write("还没有输入候选项。")
+        render_searchable_item_preview(options, "ui_custom_preview_search")
 
     nav1, nav2, nav3 = st.columns(3)
     with nav1:
@@ -909,7 +1219,7 @@ def render_custom_parameter_page(mode: str) -> None:
             st.session_state["ui_custom_options_text"] = ""
             rerun()
     with nav3:
-        if render_button_compat("进入第 3 步：开始排序 →", key="btn_start_custom_step2", use_container_width=True):
+        if render_button_compat("进入第 3 步：开始排序 →", key="btn_start_custom_step2", use_container_width=True, button_type="primary"):
             if len(options) < 2:
                 st.warning("请至少输入 2 个候选项。")
             else:
@@ -967,11 +1277,17 @@ def render_douban_parameter_page(mode: str) -> None:
         else:
             try:
                 movies, _ = prepare_douban_candidates_ui(pool_n, warm_posters=False)
-                with st.expander(f"当前候选电影（前 {len(movies)} 部）", expanded=True):
-                    for i, item in enumerate(movies, 1):
-                        st.write(f"{i}. {item}")
+                st.session_state["ui_douban_preview_movies"] = movies
+                st.session_state["ui_douban_preview_pool_n"] = pool_n
             except Exception as e:
                 st.error(f"读取豆瓣电影列表失败：{e}")
+
+    preview_movies = st.session_state.get("ui_douban_preview_movies", [])
+    if st.session_state.get("ui_douban_preview_pool_n") != pool_n:
+        preview_movies = []
+    if preview_movies:
+        with st.expander(f"当前候选电影（前 {len(preview_movies)} 部）", expanded=True):
+            render_searchable_item_preview(preview_movies, "ui_douban_preview_search", empty_text="还没有预览结果。")
 
     nav1, nav2, nav3 = st.columns(3)
     with nav1:
@@ -984,9 +1300,11 @@ def render_douban_parameter_page(mode: str) -> None:
             st.session_state["ui_douban_top_k"] = 10
             st.session_state["ui_douban_pool_n"] = 100
             st.session_state["ui_douban_show_poster"] = True
+            st.session_state.pop("ui_douban_preview_movies", None)
+            st.session_state.pop("ui_douban_preview_pool_n", None)
             rerun()
     with nav3:
-        if render_button_compat("进入第 3 步：开始排序 →", key="btn_start_douban_step2", use_container_width=True):
+        if render_button_compat("进入第 3 步：开始排序 →", key="btn_start_douban_step2", use_container_width=True, button_type="primary"):
             if pool_n < top_k:
                 st.warning("请先修正参数：候选池数量不能小于 Top 数量。")
             else:
@@ -1068,6 +1386,7 @@ def main() -> None:
         page_icon="🎯",
         layout="wide",
     )
+    render_app_styles()
 
     if "ui_selected_mode" not in st.session_state:
         st.session_state["ui_selected_mode"] = MODE_CUSTOM
