@@ -3,20 +3,20 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 
 
-HERO_TITLE = "排出你的电影审美名片"
-HERO_SUBTITLE = "3 分钟二选一，生成一张能发朋友圈的私人电影榜。"
-HERO_TAGLINE = "别再问我最喜欢哪部电影了，我排出来了。"
+HERO_TITLE = "慢慢排出你的电影审美名单"
+HERO_SUBTITLE = "不用一口气想清楚全部排名，只在每一组里选更喜欢的那一部。"
+HERO_TAGLINE = "最后得到一张温柔、准确、能分享的私人片单。"
 
 FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
     {
         "id": "douban-top50",
-        "name": "豆瓣 Top 50 快排",
+        "name": "豆瓣 Top 50",
         "theme": "我的豆瓣 Top 50 电影审美榜",
         "tagline": "从国民高分片里排出你的审美底色。",
         "top_k": 10,
         "seed_text": "douban-top50-v1",
         "source": "builtin",
-        "badge": "适合首玩",
+        "badge": "适合第一次",
         "items": [
             "肖申克的救赎", "霸王别姬", "阿甘正传", "泰坦尼克号", "这个杀手不太冷",
             "美丽人生", "千与千寻", "辛德勒的名单", "盗梦空间", "忠犬八公的故事",
@@ -34,11 +34,11 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "id": "nolan",
         "name": "诺兰电影偏爱榜",
         "theme": "我的诺兰电影偏爱榜",
-        "tagline": "看看你到底是梦境派、时间派还是蝙蝠侠派。",
+        "tagline": "从时间、梦境和黑夜里，找到你最偏爱的那一部。",
         "top_k": 8,
         "seed_text": "nolan-v1",
         "source": "builtin",
-        "badge": "影迷会吵",
+        "badge": "导演专题",
         "items": [
             "追随", "记忆碎片", "失眠症", "蝙蝠侠：侠影之谜", "致命魔术", "蝙蝠侠：黑暗骑士",
             "盗梦空间", "蝙蝠侠：黑暗骑士崛起", "星际穿越", "敦刻尔克", "信条", "奥本海默",
@@ -48,11 +48,11 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "id": "miyazaki",
         "name": "宫崎骏动画榜",
         "theme": "我的宫崎骏动画偏爱榜",
-        "tagline": "童年、风、飞行和温柔，最后谁会赢？",
+        "tagline": "在风、飞行和温柔里，慢慢看见自己的答案。",
         "top_k": 8,
         "seed_text": "miyazaki-v1",
         "source": "builtin",
-        "badge": "治愈向",
+        "badge": "温柔向",
         "items": [
             "风之谷", "天空之城", "龙猫", "魔女宅急便", "红猪", "幽灵公主",
             "千与千寻", "哈尔的移动城堡", "悬崖上的金鱼姬", "起风了", "你想活出怎样的人生",
@@ -62,7 +62,7 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "id": "chinese-highscore",
         "name": "华语高分电影榜",
         "theme": "我的华语高分电影偏爱榜",
-        "tagline": "把你心里的华语电影第一名排出来。",
+        "tagline": "把心里那些重要的华语电影，排成一张名单。",
         "top_k": 10,
         "seed_text": "chinese-highscore-v1",
         "source": "builtin",
@@ -76,13 +76,13 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
     },
     {
         "id": "couple-debate",
-        "name": "适合情侣吵架的电影榜",
-        "theme": "最适合情侣吵架的电影偏爱榜",
-        "tagline": "不是测默契，是发现你们到底差在哪。",
+        "name": "双人观影分歧榜",
+        "theme": "我们的观影分歧片单",
+        "tagline": "不是测默契，只是看看两个人的喜欢如何不同。",
         "top_k": 8,
         "seed_text": "couple-debate-v1",
         "source": "builtin",
-        "badge": "社交传播",
+        "badge": "双人片单",
         "items": [
             "爱在黎明破晓前", "爱在日落黄昏时", "怦然心动", "花束般的恋爱", "消失的爱人",
             "婚姻故事", "泰坦尼克号", "时空恋旅人", "恋恋笔记本", "重庆森林", "春光乍泄",
@@ -123,32 +123,32 @@ def result_share_caption(
     if seed_text:
         lines.append(f"对局口令：{seed_text}")
     if challenge_url:
-        lines.append(f"来挑战同一份片单：{challenge_url}")
+        lines.append(f"也排同一份片单：{challenge_url}")
     else:
-        lines.append("来挑战同一份片单，看看我们到底差在哪。")
+        lines.append("也排同一份片单，看看我们的喜欢如何相同又不同。")
     return "\n".join(lines)
 
 
 def challenge_share_caption(theme: str, challenge_url: str) -> str:
     return "\n".join(
         [
-            f"我发起了一个电影偏爱挑战：{theme}",
-            "规则很简单：一直二选一，最后生成你的电影审美名片。",
+            f"我整理了一份电影审美片单：{theme}",
+            "规则很简单：每次只在两部电影里选更喜欢的那一部。",
             f"入口：{challenge_url}",
         ]
     )
 
 
 RESUME_BULLETS = [
-    "独立开发并上线影视偏好排序 Web App，设计挑战链接与匿名事件漏斗，支持用户完成 1v1 电影榜单排序与社交分享。",
-    "接入 Supabase REST API 采集匿名 page_view/start/complete/share 事件，用数据追踪完成率、分享率和热门挑战。",
-    "围绕影视爱好者场景优化首屏、移动端对决体验和分享海报，形成从挑战入口到结果传播的完整增长闭环。",
+    "独立开发并上线影视偏好排序 Web App，设计同题片单入口与匿名事件漏斗，支持用户完成 1v1 电影榜单排序与社交分享。",
+    "接入 Supabase REST API 采集匿名 page_view/start/complete/share 事件，用数据追踪完成率、分享率和热门片单。",
+    "围绕影视爱好者场景优化首屏、移动端对决体验和分享海报，形成从片单入口到结果传播的完整增长闭环。",
 ]
 
 
 LAUNCH_CHECKLIST = [
     "部署 Streamlit Community Cloud，配置 PUBLIC_APP_URL、SUPABASE_URL、SUPABASE_ANON_KEY、ADMIN_DASHBOARD_TOKEN。",
-    "先发 5 个内置挑战链接，让朋友用同一份片单生成第一批结果。",
+    "先发 5 个内置片单入口，让朋友用同一份片单生成第一批结果。",
     "第 1 周每天截图一次后台漏斗，记录访问、开局、完成、复制分享四个指标。",
     "挑选 3 条用户反馈和 2 张结果海报，放进 README 和简历项目说明。",
 ]

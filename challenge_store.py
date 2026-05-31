@@ -69,7 +69,7 @@ def save_challenge(
     challenge_id = make_challenge_id(theme, clean_items, seed_text)
     challenge = Challenge(
         id=challenge_id,
-        theme=theme.strip() or "电影偏爱挑战",
+        theme=theme.strip() or "电影审美片单",
         mode=mode,
         items=clean_items,
         top_k=top_k,
@@ -121,7 +121,7 @@ def fetch_challenge(challenge_id: str) -> Optional[Challenge]:
 
     return Challenge(
         id=str(row.get("id") or challenge_id),
-        theme=str(row.get("theme") or "电影偏爱挑战"),
+            theme=str(row.get("theme") or "电影审美片单"),
         mode=str(row.get("mode") or "自定义模式"),
         items=items,
         top_k=int(row["top_k"]) if row.get("top_k") else None,
@@ -156,7 +156,7 @@ def decode_fallback_payload(payload: str) -> Optional[Challenge]:
             return None
         return Challenge(
             id=make_challenge_id(str(data.get("theme") or ""), items, str(data.get("seed_text") or "")),
-            theme=str(data.get("theme") or "电影偏爱挑战"),
+            theme=str(data.get("theme") or "电影审美片单"),
             mode=str(data.get("mode") or "自定义模式"),
             items=items,
             top_k=int(data["top_k"]) if data.get("top_k") else None,

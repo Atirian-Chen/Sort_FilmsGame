@@ -64,6 +64,7 @@ DOUBAN_SUGGEST_URL = "https://movie.douban.com/j/subject_suggest"
 APP_TITLE = "电影审美名片"
 APP_SUBTITLE = HERO_SUBTITLE
 COVER_IMAGE_PATH = Path(__file__).parent / "assets" / "cover_banner.png"
+POSTER_CACHE_DIR = Path(__file__).parent / "cache" / "posters"
 BATTLE_PICKER_COMPONENT = components.declare_component(
     "battle_picker",
     path=str(Path(__file__).parent / "components" / "battle_picker"),
@@ -404,57 +405,57 @@ def render_app_styles() -> None:
         }
         .launch-hero {
             display: grid;
-            grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
-            gap: 26px;
+            grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
+            gap: 14px;
             align-items: center;
-            margin-bottom: 12px;
+            margin-bottom: 6px;
         }
         .hero-copy {
             min-width: 0;
         }
         .hero-kicker {
             color: #315efb;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 850;
             letter-spacing: 0;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
         .hero-title {
             color: #101828;
-            font-size: clamp(34px, 5vw, 64px);
+            font-size: clamp(30px, 4vw, 48px);
             font-weight: 950;
             letter-spacing: 0;
             line-height: 1.02;
-            margin: 0 0 12px;
+            margin: 0 0 8px;
         }
         .hero-subtitle {
             color: #3f4756;
-            font-size: 17px;
-            line-height: 1.62;
-            margin: 0 0 14px;
+            font-size: 15px;
+            line-height: 1.5;
+            margin: 0;
             max-width: 620px;
         }
         .hero-proof {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 8px;
-            margin: 14px 0 2px;
+            gap: 6px;
+            margin: 8px 0 2px;
         }
         .hero-proof-item {
             border: 1px solid #e6e8ef;
             border-radius: 8px;
-            padding: 10px;
+            padding: 8px 9px;
             background: #fff;
         }
         .hero-proof-value {
             color: #101828;
             font-weight: 900;
-            font-size: 20px;
+            font-size: 17px;
             line-height: 1.25;
         }
         .hero-proof-label {
             color: #667085;
-            font-size: 12px;
+            font-size: 11px;
             line-height: 1.3;
             margin-top: 2px;
         }
@@ -462,22 +463,23 @@ def render_app_styles() -> None:
             border: 1px solid #e0e7ff;
             border-radius: 8px;
             background: #f8f9ff;
-            padding: 16px;
+            padding: 10px;
         }
         .example-title {
             color: #101828;
-            font-size: 18px;
+            font-size: 15px;
             font-weight: 900;
-            margin-bottom: 10px;
+            margin-bottom: 6px;
         }
         .example-rank {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             border-top: 1px solid #e6e8ef;
-            padding: 9px 0;
+            padding: 6px 0;
             color: #202636;
             font-weight: 750;
+            font-size: 13px;
         }
         .example-rank span:first-child {
             width: 34px;
@@ -486,16 +488,16 @@ def render_app_styles() -> None:
         }
         .challenge-grid {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 12px;
-            margin: 8px 0 14px;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 8px;
+            margin: 6px 0 8px;
         }
         .challenge-card {
             border: 1px solid #e6e8ef;
             border-radius: 8px;
             background: #fff;
-            padding: 14px;
-            min-height: 150px;
+            padding: 10px;
+            min-height: 118px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -507,22 +509,22 @@ def render_app_styles() -> None:
             border-radius: 999px;
             color: #315efb;
             background: #f4f7ff;
-            padding: 4px 8px;
-            font-size: 12px;
+            padding: 3px 7px;
+            font-size: 11px;
             font-weight: 800;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
         .challenge-title {
             color: #101828;
-            font-size: 17px;
+            font-size: 15px;
             font-weight: 900;
             line-height: 1.3;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
         }
         .challenge-copy {
             color: #667085;
-            font-size: 13px;
-            line-height: 1.45;
+            font-size: 12px;
+            line-height: 1.38;
         }
         .dashboard-table {
             border: 1px solid #e6e8ef;
@@ -603,6 +605,9 @@ def render_app_styles() -> None:
             .challenge-grid {
                 grid-template-columns: 1fr;
             }
+            .challenge-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
             .hero-proof {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
             }
@@ -669,6 +674,21 @@ def fetch_douban_top_movies(limit: int) -> List[str]:
     return [entry["title"] for entry in fetch_douban_top_movie_entries(limit) if entry.get("title")]
 
 
+@st.cache_data(show_spinner=False)
+def fetch_douban_top250_poster_index() -> Dict[str, str]:
+    index: Dict[str, str] = {}
+    try:
+        entries = fetch_douban_top_movie_entries(250)
+    except Exception:
+        return index
+    for entry in entries:
+        title = entry.get("title")
+        poster_url = entry.get("poster_url")
+        if title and poster_url:
+            index[title] = poster_url
+    return index
+
+
 def normalize_image_bytes(image_bytes: bytes) -> Optional[bytes]:
     if not image_bytes:
         return None
@@ -684,26 +704,82 @@ def normalize_image_bytes(image_bytes: bytes) -> Optional[bytes]:
         return None
 
 
+def poster_cache_path(title: str) -> Path:
+    digest = hashlib.sha1(title.encode("utf-8")).hexdigest()[:16]
+    return POSTER_CACHE_DIR / f"{digest}.png"
+
+
+def read_cached_poster(title: str) -> Optional[bytes]:
+    path = poster_cache_path(title)
+    try:
+        if path.exists():
+            return path.read_bytes()
+    except OSError:
+        return None
+    return None
+
+
+def write_cached_poster(title: str, image_data: Optional[bytes]) -> None:
+    if not image_data:
+        return
+    try:
+        POSTER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        poster_cache_path(title).write_bytes(image_data)
+    except OSError:
+        return
+
+
+def douban_image_url_candidates(img_url: str) -> List[str]:
+    if not img_url:
+        return []
+
+    candidates = [img_url]
+    match = re.search(r"https://img\d+\.doubanio\.com/(.+)", img_url)
+    if match:
+        path = match.group(1)
+        for host in ("img1", "img2", "img3", "img9"):
+            candidates.append(f"https://{host}.doubanio.com/{path}")
+
+    normalized: List[str] = []
+    seen = set()
+    for url in candidates:
+        if url and url not in seen:
+            normalized.append(url)
+            seen.add(url)
+    return normalized
+
+
 @st.cache_data(show_spinner=False)
 def fetch_poster_bytes_from_url(img_url: str) -> Optional[bytes]:
     if not img_url or "movie_default_small" in img_url:
         return None
 
-    try:
-        img_resp = requests.get(img_url, headers=HEADERS, timeout=10)
-        img_resp.raise_for_status()
+    for url in douban_image_url_candidates(img_url):
+        for _ in range(2):
+            try:
+                img_resp = requests.get(url, headers=HEADERS, timeout=10)
+                img_resp.raise_for_status()
 
-        content_type = (img_resp.headers.get("Content-Type") or "").lower()
-        if content_type and not content_type.startswith("image/"):
-            return None
+                content_type = (img_resp.headers.get("Content-Type") or "").lower()
+                if content_type and not content_type.startswith("image/"):
+                    continue
 
-        return normalize_image_bytes(img_resp.content)
-    except Exception:
-        return None
+                poster_bytes = normalize_image_bytes(img_resp.content)
+                if poster_bytes:
+                    return poster_bytes
+            except Exception:
+                continue
+    return None
 
 
 @st.cache_data(show_spinner=False)
 def fetch_douban_poster_bytes(title: str) -> Optional[bytes]:
+    poster_url = fetch_douban_top250_poster_index().get(title)
+    if poster_url:
+        poster_bytes = fetch_poster_bytes_from_url(poster_url)
+        if poster_bytes:
+            return poster_bytes
+
     try:
         resp = requests.get(
             DOUBAN_SUGGEST_URL,
@@ -731,6 +807,58 @@ def fetch_douban_poster_bytes(title: str) -> Optional[bytes]:
     return fetch_poster_bytes_from_url(img_url)
 
 
+def generate_title_poster_bytes(title: str) -> bytes:
+    width, height = 720, 1040
+    bg_options = [
+        ((31, 38, 55), (234, 238, 247), (95, 132, 255)),
+        ((58, 36, 38), (255, 246, 234), (194, 68, 58)),
+        ((27, 49, 55), (235, 247, 244), (41, 150, 132)),
+        ((43, 40, 64), (244, 241, 255), (116, 96, 212)),
+    ]
+    bg, paper, accent = bg_options[stable_int(title) % len(bg_options)]
+    img = Image.new("RGB", (width, height), bg)
+    draw = ImageDraw.Draw(img)
+
+    draw.rounded_rectangle((48, 58, width - 48, height - 58), radius=34, fill=paper, outline=accent, width=4)
+    draw.text((88, 108), "片名海报", font=load_font(28, bold=True), fill=accent)
+    draw.line((88, 160, width - 88, 160), fill=accent, width=3)
+
+    title_font = load_font(58, bold=True)
+    lines = wrap_text(draw, title, title_font, width - 176)
+    y = 240
+    for line in lines[:6]:
+        draw.text((88, y), line, font=title_font, fill=(22, 26, 36))
+        y += 72
+
+    draw.text((88, height - 170), "真实海报暂未抓到", font=load_font(30), fill=(98, 106, 120))
+    draw.text((88, height - 126), "先用片名继续二选一", font=load_font(30), fill=(98, 106, 120))
+
+    out = io.BytesIO()
+    img.save(out, format="PNG")
+    return out.getvalue()
+
+
+def get_best_poster_bytes(title: str, primary_url: str = "", allow_fallback: bool = True) -> Optional[bytes]:
+    cached = read_cached_poster(title)
+    if cached:
+        return cached
+
+    poster_bytes = fetch_poster_bytes_from_url(primary_url) if primary_url else None
+    if poster_bytes is None:
+        poster_bytes = fetch_douban_poster_bytes(title)
+
+    if poster_bytes:
+        write_cached_poster(title, poster_bytes)
+        return poster_bytes
+
+    if allow_fallback:
+        fallback = generate_title_poster_bytes(title)
+        write_cached_poster(title, fallback)
+        return fallback
+
+    return None
+
+
 def prepare_douban_candidates_ui(limit: int, warm_posters: bool) -> tuple[List[str], Dict[str, Optional[bytes]]]:
     text_holder = st.empty()
     progress_holder = st.empty()
@@ -750,9 +878,7 @@ def prepare_douban_candidates_ui(limit: int, warm_posters: bool) -> tuple[List[s
             title = entry.get("title")
             if not title:
                 continue
-            poster_bytes = fetch_poster_bytes_from_url(entry.get("poster_url") or "")
-            if poster_bytes is None:
-                poster_bytes = fetch_douban_poster_bytes(title)
+            poster_bytes = get_best_poster_bytes(title, entry.get("poster_url") or "", allow_fallback=True)
             poster_map[title] = poster_bytes
             bar.progress(int(idx / total_steps * 100))
     else:
@@ -1405,7 +1531,7 @@ def render_friend_compare(my_ranked: List[str]) -> None:
 def current_challenge_for_share() -> Challenge:
     return Challenge(
         id=st.session_state.get(k("challenge_id"), ""),
-        theme=st.session_state.get(k("theme"), "电影偏爱挑战"),
+        theme=st.session_state.get(k("theme"), "电影审美片单"),
         mode=st.session_state.get(k("mode"), MODE_CUSTOM),
         items=st.session_state.get(k("source_options"), []),
         top_k=st.session_state.get(k("top_k")),
@@ -1422,7 +1548,7 @@ def current_challenge_url() -> str:
     return build_challenge_url(challenge, use_payload_fallback=True)
 
 
-def start_challenge(challenge: Challenge, *, show_poster: bool = False) -> None:
+def start_challenge(challenge: Challenge, *, show_poster: bool = True) -> None:
     init_ranking_state(
         mode=challenge.mode,
         theme=challenge.theme,
@@ -1466,7 +1592,7 @@ def maybe_open_url_challenge() -> None:
     challenge = resolve_challenge_from_url()
     st.session_state["loaded_url_challenge"] = challenge_id
     if not challenge:
-        st.warning("这个挑战链接暂时不可用，可以先从下方内置挑战开始。")
+        st.warning("这个片单入口暂时不可用，可以先从下方内置片单开始。")
         return
 
     if st.session_state.get(k("started"), False):
@@ -1495,7 +1621,7 @@ def render_public_metrics() -> None:
         f"""
         <div class="hero-proof">
           <div class="hero-proof-item"><div class="hero-proof-value">{completed}</div><div class="hero-proof-label">已完成榜单</div></div>
-          <div class="hero-proof-item"><div class="hero-proof-value">{today_users}</div><div class="hero-proof-label">今日挑战</div></div>
+          <div class="hero-proof-item"><div class="hero-proof-value">{today_users}</div><div class="hero-proof-label">今日开排</div></div>
           <div class="hero-proof-item"><div class="hero-proof-value">{avg:.1f}</div><div class="hero-proof-label">平均比较次数</div></div>
         </div>
         """,
@@ -1533,7 +1659,7 @@ def render_admin_dashboard() -> None:
         for template_id, count in metrics.get("top_templates", []):
             st.write(f"{template_id}: {count}")
     with right:
-        st.subheader("热门挑战")
+        st.subheader("热门片单")
         for challenge_id, count in metrics.get("top_challenges", []):
             st.write(f"{challenge_id}: {count}")
 
@@ -1548,7 +1674,7 @@ def render_cover_header() -> None:
         f"""
         <div class="launch-hero">
           <div class="hero-copy">
-            <div class="hero-kicker">电影偏爱挑战 · 公开测试版</div>
+            <div class="hero-kicker">电影审美名单 · 公开测试版</div>
             <h1 class="hero-title">{html.escape(HERO_TITLE)}</h1>
             <p class="hero-subtitle">{html.escape(HERO_SUBTITLE)} {html.escape(HERO_TAGLINE)}</p>
           </div>
@@ -1574,9 +1700,9 @@ def get_poster_for_option(name: str) -> Optional[bytes]:
 
     failed = st.session_state.setdefault(k("poster_fetch_failed"), [])
     if name in failed:
-        return None
+        return get_best_poster_bytes(name, allow_fallback=True)
 
-    poster_bytes = fetch_douban_poster_bytes(name)
+    poster_bytes = get_best_poster_bytes(name, allow_fallback=True)
     poster_map[name] = poster_bytes
     st.session_state[k("poster_map")] = poster_map
     if poster_bytes is None and name not in failed:
@@ -1813,7 +1939,7 @@ def generate_challenge_poster_bytes(theme: str, challenge_url: str, item_count: 
     draw.rounded_rectangle((48, 48, width - 48, height - 48), radius=34, fill=palette["card"], outline=palette["outline"], width=2)
 
     y = 110
-    draw.text((80, y), "电影偏爱挑战", font=subtitle_font, fill=palette["accent"])
+    draw.text((80, y), "电影审美片单", font=subtitle_font, fill=palette["accent"])
     y += 72
     for line in wrap_text(draw, theme, title_font, width - 160):
         draw.text((80, y), line, font=title_font, fill=palette["title"])
@@ -1824,8 +1950,8 @@ def generate_challenge_poster_bytes(theme: str, challenge_url: str, item_count: 
     y += 48
     body_lines = [
         f"{item_count} 部电影",
-        "一直二选一，排出你的电影审美名片",
-        "发给朋友，看看你们到底差在哪",
+        "每次只选更喜欢的一部",
+        "发给朋友，看看彼此的喜欢如何不同",
     ]
     for line in body_lines:
         draw.text((80, y), line, font=body_font, fill=palette["text"])
@@ -1833,8 +1959,8 @@ def generate_challenge_poster_bytes(theme: str, challenge_url: str, item_count: 
 
     y += 40
     draw.rounded_rectangle((80, y, width - 80, y + 220), radius=22, fill=(255, 255, 255), outline=palette["outline"], width=2)
-    draw.text((110, y + 36), "挑战入口", font=subtitle_font, fill=palette["title"])
-    url_lines = wrap_text(draw, challenge_url or "部署后复制挑战链接", small_font, width - 220)
+    draw.text((110, y + 36), "同题入口", font=subtitle_font, fill=palette["title"])
+    url_lines = wrap_text(draw, challenge_url or "部署后复制同题入口", small_font, width - 220)
     yy = y + 94
     for line in url_lines[:4]:
         draw.text((110, yy), line, font=small_font, fill=palette["muted"])
@@ -2003,14 +2129,14 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
             )
 
     challenge_poster = generate_challenge_poster_bytes(
-        st.session_state.get(k("theme"), "电影偏爱挑战"),
+        st.session_state.get(k("theme"), "电影审美片单"),
         challenge_url,
         len(st.session_state.get(k("source_options"), [])),
     )
-    with st.expander("邀请朋友挑战的海报", expanded=False):
+    with st.expander("邀请朋友同排的海报", expanded=False):
         show_image_compat(challenge_poster)
         render_download_button_compat(
-            "下载挑战海报",
+            "下载同题海报",
             data=challenge_poster,
             file_name=f"{slugify_filename(st.session_state.get(k('theme'), 'challenge'))}_challenge.png",
             mime="image/png",
@@ -2039,7 +2165,7 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
     with st.expander("可直接发布的分享文案", expanded=True):
         st.text_area("文案", value=share_caption, height=220)
         st.caption("发朋友圈、群聊或评论区时直接使用；JSON 可以发给朋友做榜单对比。")
-        if render_copy_button("复制挑战链接", challenge_url, "copy_result_challenge_link", "挑战链接"):
+        if render_copy_button("复制同题入口", challenge_url, "copy_result_challenge_link", "同题入口"):
             track_event(
                 EVENT_SHARE_LINK_COPIED,
                 challenge_id=challenge_id,
@@ -2077,7 +2203,7 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
         with d2:
             render_download_button_compat("下载 CSV", csv_bytes, f"{base_name}.csv", "text/csv", "btn_export_csv")
         with d3:
-            render_download_button_compat("下载挑战 JSON", json_bytes, f"{base_name}.json", "application/json", "btn_export_json")
+            render_download_button_compat("下载同题 JSON", json_bytes, f"{base_name}.json", "application/json", "btn_export_json")
         with d4:
             render_download_button_compat("下载 Markdown", md_bytes, f"{base_name}.md", "text/markdown", "btn_export_md")
 
@@ -2160,7 +2286,7 @@ def render_right_panel() -> None:
         st.markdown("### 你更喜欢哪一个？")
     else:
         if st.session_state.get(k("top_k_boundary_check"), False):
-            st.caption("这个候选会先挑战当前榜单末位；如果没有更喜欢它，会直接跳过，减少不必要比较。")
+            st.caption("这部电影会先和当前名单末位比较；如果你没那么喜欢它，会直接略过，少做几次选择。")
         st.markdown("### 你更喜欢哪一部？")
 
     if side_shuffle:
@@ -2170,8 +2296,8 @@ def render_right_panel() -> None:
 
     left_title = current if current_on_left else opponent
     right_title = opponent if current_on_left else current
-    left_label = "新挑战者" if current_on_left else "榜单守擂"
-    right_label = "榜单守擂" if current_on_left else "新挑战者"
+    left_label = "这次出现" if current_on_left else "名单里的电影"
+    right_label = "名单里的电影" if current_on_left else "这次出现"
 
     ctrl1, ctrl2, ctrl3, ctrl4 = st.columns(4)
     with ctrl1:
@@ -2201,7 +2327,7 @@ def render_right_panel() -> None:
         right_title=right_title,
         left_label=left_label,
         right_label=right_label,
-        show_poster=show_poster and mode == MODE_DOUBAN,
+        show_poster=show_poster,
         key=component_key,
     )
     if choice:
@@ -2272,8 +2398,8 @@ def render_mode_selection_page() -> None:
     current_mode = get_selected_mode()
     render_step_header(
         1,
-        "今日电影挑战",
-        "选一份片单开排，3 分钟生成你的电影审美名片。",
+        "今日片单",
+        "不用先想完整排名，只要一组一组选更喜欢的电影。",
     )
 
     card_html = []
@@ -2281,7 +2407,7 @@ def render_mode_selection_page() -> None:
         card_html.append(
             f'<div class="challenge-card">'
             f'<div>'
-            f'<span class="challenge-badge">{html.escape(str(template.get("badge", "电影挑战")))}</span>'
+            f'<span class="challenge-badge">{html.escape(str(template.get("badge", "电影片单")))}</span>'
             f'<div class="challenge-title">{html.escape(str(template["name"]))}</div>'
             f'<div class="challenge-copy">{html.escape(str(template.get("tagline", "")))}</div>'
             f'</div>'
@@ -2290,23 +2416,33 @@ def render_mode_selection_page() -> None:
         )
     st.markdown(f'<div class="challenge-grid">{"".join(card_html)}</div>', unsafe_allow_html=True)
 
-    for row_start in range(0, len(FILM_CHALLENGE_TEMPLATES), 3):
-        cols = st.columns(3)
-        for idx, template in enumerate(FILM_CHALLENGE_TEMPLATES[row_start : row_start + 3]):
-            with cols[idx]:
-                template_id = str(template["id"])
-                if render_button_compat(f"开排：{template['name']}", key=f"btn_start_template_{template_id}", use_container_width=True, button_type="primary"):
-                    start_challenge(challenge_from_template(template))
-                template_url = build_template_url(template_id)
-                if render_copy_button("复制挑战链接", template_url, f"copy_template_{template_id}", "挑战链接"):
-                    track_event(
-                        EVENT_SHARE_LINK_COPIED,
-                        challenge_id=template_id,
-                        mode=MODE_CUSTOM,
-                        template_id=template_id,
-                        source_channel=get_source_channel(),
-                        payload={"surface": "home_template"},
-                    )
+    cols = st.columns(len(FILM_CHALLENGE_TEMPLATES))
+    for idx, template in enumerate(FILM_CHALLENGE_TEMPLATES):
+        with cols[idx]:
+            template_id = str(template["id"])
+            if render_button_compat("开始", key=f"btn_start_template_{template_id}", use_container_width=True, button_type="primary"):
+                start_challenge(challenge_from_template(template))
+
+    with st.expander("把同题入口发给朋友", expanded=False):
+        selected_template_name = st.selectbox(
+            "选择片单",
+            [str(template["name"]) for template in FILM_CHALLENGE_TEMPLATES],
+            key="home_share_template_name",
+        )
+        selected_template = next(
+            template for template in FILM_CHALLENGE_TEMPLATES if str(template["name"]) == selected_template_name
+        )
+        template_id = str(selected_template["id"])
+        template_url = build_template_url(template_id)
+        if render_copy_button("复制同题入口", template_url, f"copy_template_{template_id}", "同题入口"):
+            track_event(
+                EVENT_SHARE_LINK_COPIED,
+                challenge_id=template_id,
+                mode=MODE_CUSTOM,
+                template_id=template_id,
+                source_channel=get_source_channel(),
+                payload={"surface": "home_template"},
+            )
 
     safe_divider()
     st.subheader("想排自己的电影片单？")
@@ -2314,16 +2450,16 @@ def render_mode_selection_page() -> None:
         "选择创建方式",
         [MODE_CUSTOM, MODE_DOUBAN],
         index=0 if current_mode == MODE_CUSTOM else 1,
-        help="自定义片单适合主题挑战；豆瓣模式会读取豆瓣 Top250。",
+        help="自定义片单适合私人主题；豆瓣模式会读取豆瓣 Top250。",
         key="ui_mode_step1",
     )
     set_selected_mode(mode)
 
     safe_divider()
     if mode == MODE_CUSTOM:
-        st.info("自定义片单：把你想挑战的电影粘进来，生成同题挑战链接。")
+        st.info("自定义片单：把你想比较的电影粘进来，生成同题入口。")
     else:
-        st.info("豆瓣电影模式：设置 Top 数量和候选范围，快速做一份大众高分片挑战。")
+        st.info("豆瓣电影模式：设置 Top 数量和候选范围，快速整理一份大众高分片名单。")
 
     spacer, next_col = st.columns([1, 1])
     with spacer:
@@ -2382,7 +2518,7 @@ def render_personalization_controls(prefix: str) -> dict:
                 "对局口令",
                 key=f"{prefix}_seed_text",
                 placeholder="例：weekend-001",
-                help="同样候选 + 同样口令会得到同样出场顺序，方便朋友接力挑战。",
+                help="同样候选 + 同样口令会得到同样出场顺序，方便朋友同排一份片单。",
             )
         c3, c4 = st.columns(2)
         with c3:
@@ -2404,7 +2540,7 @@ def render_personalization_controls(prefix: str) -> dict:
 
 
 def reset_custom_parameter_defaults() -> None:
-    st.session_state["ui_custom_theme"] = "我的电影审美挑战"
+    st.session_state["ui_custom_theme"] = "我的电影审美片单"
     st.session_state["ui_custom_options_text"] = ""
     st.session_state["ui_custom_top_k_enabled"] = False
     st.session_state["ui_custom_top_k"] = 10
@@ -2436,7 +2572,7 @@ def render_custom_parameter_page(mode: str) -> None:
 
     render_custom_template_gallery()
 
-    st.text_input("挑战标题", value=st.session_state.get("ui_custom_theme", "我的电影审美挑战"), key="ui_custom_theme")
+    st.text_input("片单标题", value=st.session_state.get("ui_custom_theme", "我的电影审美片单"), key="ui_custom_theme")
     st.text_area(
         "电影片单（每行一个，也可以直接粘贴逗号分隔）",
         value=st.session_state.get("ui_custom_options_text", ""),
@@ -2474,14 +2610,14 @@ def render_custom_parameter_page(mode: str) -> None:
 
     personalization = render_personalization_controls("ui_custom")
 
-    with st.expander("生成同题挑战链接", expanded=False):
-        st.caption("生成后会把挑战标题和电影片单保存到 Supabase；如果未配置 Supabase，会生成较长的本地 payload 链接。")
-        if render_button_compat("生成挑战链接", key="btn_create_custom_challenge", use_container_width=True, button_type="primary"):
+    with st.expander("生成同题入口", expanded=False):
+        st.caption("生成后会把片单标题和电影列表保存到 Supabase；如果未配置 Supabase，会生成较长的本地 payload 入口。")
+        if render_button_compat("生成同题入口", key="btn_create_custom_challenge", use_container_width=True, button_type="primary"):
             if len(options) < 2:
-                st.warning("至少需要 2 部电影才能生成挑战。")
+                st.warning("至少需要 2 部电影才能生成同题入口。")
             else:
                 challenge = save_challenge(
-                    theme=(st.session_state.get("ui_custom_theme", "") or "").strip() or "我的电影审美挑战",
+                    theme=(st.session_state.get("ui_custom_theme", "") or "").strip() or "我的电影审美片单",
                     mode=mode,
                     items=options,
                     top_k=estimate_top_k,
@@ -2495,10 +2631,10 @@ def render_custom_parameter_page(mode: str) -> None:
                     )
                     st.session_state["ui_custom_challenge_caption"] = challenge_share_caption(challenge.theme, st.session_state["ui_custom_challenge_url"])
                     st.session_state["ui_custom_challenge_id"] = challenge.id
-                    st.success("挑战链接已生成。")
+                    st.success("同题入口已生成。")
         custom_url = st.session_state.get("ui_custom_challenge_url", "")
         if custom_url:
-            if render_copy_button("复制挑战链接", custom_url, "copy_custom_challenge_url", "挑战链接"):
+            if render_copy_button("复制同题入口", custom_url, "copy_custom_challenge_url", "同题入口"):
                 track_event(
                     EVENT_SHARE_LINK_COPIED,
                     challenge_id=st.session_state.get("ui_custom_challenge_id", ""),
@@ -2506,7 +2642,7 @@ def render_custom_parameter_page(mode: str) -> None:
                     source_channel=get_source_channel(),
                     payload={"surface": "custom_setup"},
                 )
-            st.text_area("挑战发布文案", value=st.session_state.get("ui_custom_challenge_caption", ""), height=120)
+            st.text_area("分享文案", value=st.session_state.get("ui_custom_challenge_caption", ""), height=120)
 
     with st.expander("查看当前候选项", expanded=False):
         render_searchable_item_preview(options, "ui_custom_preview_search")
@@ -2530,7 +2666,7 @@ def render_custom_parameter_page(mode: str) -> None:
                     theme=(st.session_state.get("ui_custom_theme", "") or "").strip() or "我的榜单",
                     options=options,
                     top_k=estimate_top_k,
-                    show_poster=False,
+                    show_poster=True,
                     user_name=personalization["user_name"],
                     seed_text=personalization["seed_text"],
                     blind_mode=personalization["blind_mode"],
@@ -2550,7 +2686,7 @@ def render_douban_parameter_page(mode: str) -> None:
 
     render_douban_preset_buttons()
 
-    st.text_input("挑战标题", value=st.session_state.get("ui_douban_theme", "我的豆瓣电影审美榜"), key="ui_douban_theme")
+    st.text_input("片单标题", value=st.session_state.get("ui_douban_theme", "我的豆瓣电影审美榜"), key="ui_douban_theme")
 
     top_k = int(
         st.number_input(
@@ -2564,7 +2700,7 @@ def render_douban_parameter_page(mode: str) -> None:
     )
     pool_n = int(
         st.number_input(
-            "从豆瓣 Top 多少部里挑战",
+            "从豆瓣 Top 多少部里整理",
             min_value=1,
             max_value=250,
             value=int(st.session_state.get("ui_douban_pool_n", 100)),
@@ -2637,8 +2773,8 @@ def render_parameter_page() -> None:
     mode = get_selected_mode()
     render_step_header(
         2,
-        "定制这次电影挑战",
-        "补充挑战标题、电影范围和分享设置。",
+        "定制这次电影片单",
+        "补充片单标题、电影范围和分享设置。",
     )
 
     if mode == MODE_CUSTOM:
@@ -2777,7 +2913,7 @@ def main() -> None:
     if analytics_enabled():
         st.caption("说明：本应用只记录匿名访问、开局、完成和分享事件，不记录姓名、IP 或自定义完整榜单内容。")
     else:
-        st.caption("说明：未配置 Supabase 时，应用仍可完整使用；公开统计和短挑战链接会自动降级。")
+        st.caption("说明：未配置 Supabase 时，应用仍可完整使用；公开统计和短入口会自动降级。")
 
 
 if __name__ == "__main__":
