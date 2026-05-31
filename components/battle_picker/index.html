@@ -141,7 +141,7 @@
       const hotkey = escapeHtml(data?.hotkey || (side === "left" ? "A / ←" : "D / →"));
       const poster = data?.poster
         ? `<img class="poster" src="${data.poster}" alt="${title}">`
-        : `<div class="fallback">海报暂时不可用<br>点击卡片选择</div>`;
+        : `<div class="fallback">暂无真实海报<br>只按片名判断</div>`;
       const choice = side === "left" ? "A" : "B";
       return `
         <button class="card" type="button" data-choice="${side}" aria-label="选择 ${label}">

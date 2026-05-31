@@ -61,10 +61,11 @@ from launch_copy import (
 # =========================
 DOUBAN_TOP250_URL = "https://movie.douban.com/top250"
 DOUBAN_SUGGEST_URL = "https://movie.douban.com/j/subject_suggest"
+IMDB_SUGGEST_URL = "https://v3.sg.media-imdb.com/suggestion"
 APP_TITLE = "电影审美名片"
 APP_SUBTITLE = HERO_SUBTITLE
 COVER_IMAGE_PATH = Path(__file__).parent / "assets" / "cover_banner.png"
-POSTER_CACHE_DIR = Path(__file__).parent / "cache" / "posters"
+POSTER_CACHE_DIR = Path(__file__).parent / "cache" / "verified_posters"
 BATTLE_PICKER_COMPONENT = components.declare_component(
     "battle_picker",
     path=str(Path(__file__).parent / "components" / "battle_picker"),
@@ -82,6 +83,65 @@ HEADERS = {
     ),
     "Referer": "https://movie.douban.com/",
     "Accept": "application/json, text/plain, */*",
+}
+
+# 精确到 IMDb ID 的备用海报源，只覆盖内置片单里豆瓣 Top250 不稳定命中的影片。
+CURATED_IMDB_POSTERS: Dict[str, Dict[str, str]] = {
+    "追随": {"query": "following", "imdb_id": "tt0154506"},
+    "记忆碎片": {"query": "memento", "imdb_id": "tt0209144"},
+    "失眠症": {"query": "insomnia", "imdb_id": "tt0278504"},
+    "蝙蝠侠：侠影之谜": {"query": "batman_begins", "imdb_id": "tt0372784"},
+    "致命魔术": {"query": "the_prestige", "imdb_id": "tt0482571"},
+    "蝙蝠侠：黑暗骑士": {"query": "the_dark_knight", "imdb_id": "tt0468569"},
+    "盗梦空间": {"query": "inception", "imdb_id": "tt1375666"},
+    "蝙蝠侠：黑暗骑士崛起": {"query": "the_dark_knight_rises", "imdb_id": "tt1345836"},
+    "星际穿越": {"query": "interstellar", "imdb_id": "tt0816692"},
+    "敦刻尔克": {"query": "dunkirk", "imdb_id": "tt5013056"},
+    "信条": {"query": "tenet", "imdb_id": "tt6723592"},
+    "奥本海默": {"query": "oppenheimer", "imdb_id": "tt15398776"},
+    "风之谷": {"query": "nausicaa_of_the_valley_of_the_wind", "imdb_id": "tt0087544"},
+    "天空之城": {"query": "castle_in_the_sky", "imdb_id": "tt0092067"},
+    "龙猫": {"query": "my_neighbor_totoro", "imdb_id": "tt0096283"},
+    "魔女宅急便": {"query": "kikis_delivery_service", "imdb_id": "tt0097814"},
+    "红猪": {"query": "porco_rosso", "imdb_id": "tt0104652"},
+    "幽灵公主": {"query": "princess_mononoke", "imdb_id": "tt0119698"},
+    "千与千寻": {"query": "spirited_away", "imdb_id": "tt0245429"},
+    "哈尔的移动城堡": {"query": "howls_moving_castle", "imdb_id": "tt0347149"},
+    "悬崖上的金鱼姬": {"query": "ponyo", "imdb_id": "tt0876563"},
+    "起风了": {"query": "the_wind_rises", "imdb_id": "tt2013293"},
+    "你想活出怎样的人生": {"query": "the_boy_and_the_heron", "imdb_id": "tt6587046"},
+    "霸王别姬": {"query": "farewell_my_concubine", "imdb_id": "tt0106332"},
+    "活着": {"query": "to_live", "imdb_id": "tt0110081"},
+    "无间道": {"query": "infernal_affairs", "imdb_id": "tt0338564"},
+    "大话西游之大圣娶亲": {"query": "a_chinese_odyssey_part_two_cinderella", "imdb_id": "tt0114996"},
+    "让子弹飞": {"query": "let_the_bullets_fly", "imdb_id": "tt1533117"},
+    "鬼子来了": {"query": "devils_on_the_doorstep", "imdb_id": "tt0245929"},
+    "饮食男女": {"query": "eat_drink_man_woman", "imdb_id": "tt0111797"},
+    "牯岭街少年杀人事件": {"query": "a_brighter_summer_day", "imdb_id": "tt0101985"},
+    "阳光灿烂的日子": {"query": "in_the_heat_of_the_sun", "imdb_id": "tt0111786"},
+    "花样年华": {"query": "in_the_mood_for_love", "imdb_id": "tt0118694"},
+    "一一": {"query": "yi_yi", "imdb_id": "tt0244316"},
+    "悲情城市": {"query": "a_city_of_sadness", "imdb_id": "tt0096908"},
+    "喜宴": {"query": "the_wedding_banquet", "imdb_id": "tt0107156"},
+    "甜蜜蜜": {"query": "comrades_almost_a_love_story", "imdb_id": "tt0117905"},
+    "卧虎藏龙": {"query": "crouching_tiger_hidden_dragon", "imdb_id": "tt0190332"},
+    "重庆森林": {"query": "chungking_express", "imdb_id": "tt0109424"},
+    "春光乍泄": {"query": "happy_together", "imdb_id": "tt0118845"},
+    "芙蓉镇": {"query": "hibiscus_town", "imdb_id": "tt0093206"},
+    "我不是药神": {"query": "dying_to_survive", "imdb_id": "tt7362036"},
+    "哪吒之魔童降世": {"query": "ne_zha", "imdb_id": "tt10627720"},
+    "爱在黎明破晓前": {"query": "before_sunrise", "imdb_id": "tt0112471"},
+    "爱在日落黄昏时": {"query": "before_sunset", "imdb_id": "tt0381681"},
+    "怦然心动": {"query": "flipped", "imdb_id": "tt0817177"},
+    "花束般的恋爱": {"query": "we_made_a_beautiful_bouquet", "imdb_id": "tt11219254"},
+    "消失的爱人": {"query": "gone_girl", "imdb_id": "tt2267998"},
+    "婚姻故事": {"query": "marriage_story", "imdb_id": "tt7653254"},
+    "泰坦尼克号": {"query": "titanic", "imdb_id": "tt0120338"},
+    "时空恋旅人": {"query": "about_time", "imdb_id": "tt2194499"},
+    "恋恋笔记本": {"query": "the_notebook", "imdb_id": "tt0332280"},
+    "一天": {"query": "one_day", "imdb_id": "tt1563738"},
+    "她": {"query": "her", "imdb_id": "tt1798709"},
+    "蓝色情人节": {"query": "blue_valentine", "imdb_id": "tt1120985"},
 }
 
 MODE_CUSTOM = "自定义模式"
@@ -772,6 +832,48 @@ def fetch_poster_bytes_from_url(img_url: str) -> Optional[bytes]:
     return None
 
 
+def normalize_imdb_query(query: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", query.lower()).strip("_")
+
+
+@st.cache_data(show_spinner=False)
+def fetch_imdb_poster_bytes(title: str) -> Optional[bytes]:
+    poster_meta = CURATED_IMDB_POSTERS.get(title)
+    if not poster_meta:
+        return None
+
+    query = normalize_imdb_query(poster_meta.get("query", ""))
+    imdb_id = poster_meta.get("imdb_id", "")
+    if not query or not imdb_id:
+        return None
+
+    try:
+        resp = requests.get(
+            f"{IMDB_SUGGEST_URL}/{query[0]}/{query}.json",
+            headers={"User-Agent": HEADERS["User-Agent"], "Accept": "application/json"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return None
+
+    items = data.get("d", []) if isinstance(data, dict) else []
+    if not isinstance(items, list):
+        return None
+
+    exact_item = None
+    for item in items:
+        if isinstance(item, dict) and item.get("id") == imdb_id:
+            exact_item = item
+            break
+    if not exact_item:
+        return None
+
+    image_url = (exact_item.get("i") or {}).get("imageUrl") if isinstance(exact_item.get("i"), dict) else ""
+    return fetch_poster_bytes_from_url(image_url)
+
+
 @st.cache_data(show_spinner=False)
 def fetch_douban_poster_bytes(title: str) -> Optional[bytes]:
     poster_url = fetch_douban_top250_poster_index().get(title)
@@ -807,38 +909,7 @@ def fetch_douban_poster_bytes(title: str) -> Optional[bytes]:
     return fetch_poster_bytes_from_url(img_url)
 
 
-def generate_title_poster_bytes(title: str) -> bytes:
-    width, height = 720, 1040
-    bg_options = [
-        ((31, 38, 55), (234, 238, 247), (95, 132, 255)),
-        ((58, 36, 38), (255, 246, 234), (194, 68, 58)),
-        ((27, 49, 55), (235, 247, 244), (41, 150, 132)),
-        ((43, 40, 64), (244, 241, 255), (116, 96, 212)),
-    ]
-    bg, paper, accent = bg_options[stable_int(title) % len(bg_options)]
-    img = Image.new("RGB", (width, height), bg)
-    draw = ImageDraw.Draw(img)
-
-    draw.rounded_rectangle((48, 58, width - 48, height - 58), radius=34, fill=paper, outline=accent, width=4)
-    draw.text((88, 108), "片名海报", font=load_font(28, bold=True), fill=accent)
-    draw.line((88, 160, width - 88, 160), fill=accent, width=3)
-
-    title_font = load_font(58, bold=True)
-    lines = wrap_text(draw, title, title_font, width - 176)
-    y = 240
-    for line in lines[:6]:
-        draw.text((88, y), line, font=title_font, fill=(22, 26, 36))
-        y += 72
-
-    draw.text((88, height - 170), "真实海报暂未抓到", font=load_font(30), fill=(98, 106, 120))
-    draw.text((88, height - 126), "先用片名继续二选一", font=load_font(30), fill=(98, 106, 120))
-
-    out = io.BytesIO()
-    img.save(out, format="PNG")
-    return out.getvalue()
-
-
-def get_best_poster_bytes(title: str, primary_url: str = "", allow_fallback: bool = True) -> Optional[bytes]:
+def get_best_poster_bytes(title: str, primary_url: str = "") -> Optional[bytes]:
     cached = read_cached_poster(title)
     if cached:
         return cached
@@ -846,15 +917,12 @@ def get_best_poster_bytes(title: str, primary_url: str = "", allow_fallback: boo
     poster_bytes = fetch_poster_bytes_from_url(primary_url) if primary_url else None
     if poster_bytes is None:
         poster_bytes = fetch_douban_poster_bytes(title)
+    if poster_bytes is None:
+        poster_bytes = fetch_imdb_poster_bytes(title)
 
     if poster_bytes:
         write_cached_poster(title, poster_bytes)
         return poster_bytes
-
-    if allow_fallback:
-        fallback = generate_title_poster_bytes(title)
-        write_cached_poster(title, fallback)
-        return fallback
 
     return None
 
@@ -878,7 +946,7 @@ def prepare_douban_candidates_ui(limit: int, warm_posters: bool) -> tuple[List[s
             title = entry.get("title")
             if not title:
                 continue
-            poster_bytes = get_best_poster_bytes(title, entry.get("poster_url") or "", allow_fallback=True)
+            poster_bytes = get_best_poster_bytes(title, entry.get("poster_url") or "")
             poster_map[title] = poster_bytes
             bar.progress(int(idx / total_steps * 100))
     else:
@@ -1700,9 +1768,9 @@ def get_poster_for_option(name: str) -> Optional[bytes]:
 
     failed = st.session_state.setdefault(k("poster_fetch_failed"), [])
     if name in failed:
-        return get_best_poster_bytes(name, allow_fallback=True)
+        return None
 
-    poster_bytes = get_best_poster_bytes(name, allow_fallback=True)
+    poster_bytes = get_best_poster_bytes(name)
     poster_map[name] = poster_bytes
     st.session_state[k("poster_map")] = poster_map
     if poster_bytes is None and name not in failed:
