@@ -19,17 +19,58 @@ import streamlit.components.v1 as components
 from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 
+from analytics import (
+    EVENT_CHALLENGE_OPENED,
+    EVENT_PAGE_VIEW,
+    EVENT_POSTER_DOWNLOADED,
+    EVENT_RANKING_COMPLETED,
+    EVENT_RANKING_STARTED,
+    EVENT_SHARE_LINK_COPIED,
+    analytics_enabled,
+    fetch_admin_metrics,
+    fetch_public_metrics,
+    get_admin_token,
+    get_public_app_url,
+    get_session_id,
+    track_event,
+    track_once,
+)
+from challenge_store import (
+    Challenge,
+    build_challenge_url,
+    build_template_url,
+    challenge_from_template,
+    decode_fallback_payload,
+    fetch_challenge,
+    save_challenge,
+)
+from launch_copy import (
+    FILM_CHALLENGE_TEMPLATES,
+    HERO_SUBTITLE,
+    HERO_TAGLINE,
+    HERO_TITLE,
+    LAUNCH_CHECKLIST,
+    RESUME_BULLETS,
+    challenge_share_caption,
+    get_template,
+    result_share_caption,
+)
+
 # =========================
 # 基础配置
 # =========================
 DOUBAN_TOP250_URL = "https://movie.douban.com/top250"
 DOUBAN_SUGGEST_URL = "https://movie.douban.com/j/subject_suggest"
-APP_TITLE = "偏爱对决"
-APP_SUBTITLE = "用一次次二选一，排出真正属于你的榜单。"
+APP_TITLE = "电影审美名片"
+APP_SUBTITLE = HERO_SUBTITLE
 COVER_IMAGE_PATH = Path(__file__).parent / "assets" / "cover_banner.png"
 BATTLE_PICKER_COMPONENT = components.declare_component(
     "battle_picker",
     path=str(Path(__file__).parent / "components" / "battle_picker"),
+)
+COPY_BUTTON_COMPONENT = components.declare_component(
+    "copy_button",
+    path=str(Path(__file__).parent / "components" / "copy_button"),
 )
 
 HEADERS = {
@@ -47,24 +88,24 @@ MODE_DOUBAN = "豆瓣电影模式"
 
 CUSTOM_TEMPLATES = [
     {
-        "name": "华语歌手",
-        "theme": "我的华语歌手偏爱榜",
-        "items": ["周杰伦", "陈奕迅", "王菲", "张学友", "孙燕姿", "林俊杰", "蔡依林", "李宗盛", "张惠妹", "陶喆", "梁静茹", "五月天"],
-    },
-    {
         "name": "周末电影",
-        "theme": "我的周末电影 Top",
-        "items": ["肖申克的救赎", "霸王别姬", "千与千寻", "泰坦尼克号", "盗梦空间", "星际穿越", "疯狂动物城", "机器人总动员", "怦然心动", "海上钢琴师"],
+        "theme": "我的周末电影偏爱榜",
+        "items": ["千与千寻", "星际穿越", "盗梦空间", "怦然心动", "机器人总动员", "海上钢琴师", "疯狂动物城", "泰坦尼克号", "阿甘正传", "肖申克的救赎"],
     },
     {
-        "name": "游戏神作",
-        "theme": "我的游戏神作榜",
-        "items": ["塞尔达传说：旷野之息", "艾尔登法环", "荒野大镖客：救赎2", "巫师3", "黑神话：悟空", "赛博朋克2077", "只狼", "星露谷物语", "空洞骑士", "传送门2"],
+        "name": "导演私藏",
+        "theme": "我的导演作品偏爱榜",
+        "items": ["花样年华", "重庆森林", "一一", "牯岭街少年杀人事件", "饮食男女", "阳光灿烂的日子", "让子弹飞", "无间道", "霸王别姬", "活着"],
     },
     {
-        "name": "旅行城市",
-        "theme": "最想再去一次的城市",
-        "items": ["上海", "北京", "成都", "杭州", "重庆", "广州", "南京", "厦门", "西安", "青岛", "苏州", "香港"],
+        "name": "爱情电影",
+        "theme": "我的爱情电影偏爱榜",
+        "items": ["爱在黎明破晓前", "爱在日落黄昏时", "怦然心动", "花束般的恋爱", "时空恋旅人", "泰坦尼克号", "甜蜜蜜", "重庆森林", "恋恋笔记本", "一天"],
+    },
+    {
+        "name": "动画电影",
+        "theme": "我的动画电影偏爱榜",
+        "items": ["千与千寻", "龙猫", "天空之城", "哈尔的移动城堡", "疯狂动物城", "机器人总动员", "寻梦环游记", "飞屋环游记", "你想活出怎样的人生", "哪吒之魔童降世"],
     },
 ]
 
@@ -89,6 +130,9 @@ HISTORY_KEYS = [
     "skipped_items",
     "top_k_boundary_check",
     "defers",
+    "challenge_id",
+    "template_id",
+    "source_channel",
 ]
 
 RANKING_STATE_KEYS = [
@@ -118,6 +162,10 @@ RANKING_STATE_KEYS = [
     "blind_mode",
     "side_shuffle",
     "defers",
+    "challenge_id",
+    "template_id",
+    "source_channel",
+    "completion_event_signature",
     "share_poster_bytes",
     "share_poster_signature",
 ]
@@ -152,9 +200,9 @@ def render_button_compat(
         return st.button(label, key=key)
 
 
-def render_download_button_compat(label: str, data: bytes, file_name: str, mime: str, key: str) -> None:
+def render_download_button_compat(label: str, data: bytes, file_name: str, mime: str, key: str, on_click=None) -> None:
     try:
-        st.download_button(label, data=data, file_name=file_name, mime=mime, key=key, use_container_width=True)
+        st.download_button(label, data=data, file_name=file_name, mime=mime, key=key, use_container_width=True, on_click=on_click)
     except TypeError:
         st.download_button(label, data=data, file_name=file_name, mime=mime, key=key)
 
@@ -193,6 +241,31 @@ def image_file_data_uri(path: Path) -> Optional[str]:
 def stable_int(value: str) -> int:
     digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
     return int(digest[:16], 16)
+
+
+def get_query_param(name: str) -> str:
+    try:
+        value = st.query_params.get(name, "")
+    except Exception:
+        try:
+            value = st.experimental_get_query_params().get(name, [""])
+        except Exception:
+            value = ""
+    if isinstance(value, list):
+        return str(value[0]) if value else ""
+    return str(value or "")
+
+
+def render_copy_button(label: str, text: str, key: str, placeholder: str = "") -> bool:
+    result = COPY_BUTTON_COMPONENT(label=label, text=text, placeholder=placeholder, key=key, default=None)
+    if isinstance(result, dict):
+        return bool(result.get("copied"))
+    return False
+
+
+def get_source_channel() -> str:
+    channel = get_query_param("src") or get_query_param("utm_source") or "direct"
+    return channel[:60]
 
 
 def bordered_container():
@@ -329,6 +402,135 @@ def render_app_styles() -> None:
             border-radius: 10px;
             display: block;
         }
+        .launch-hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
+            gap: 26px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .hero-copy {
+            min-width: 0;
+        }
+        .hero-kicker {
+            color: #315efb;
+            font-size: 13px;
+            font-weight: 850;
+            letter-spacing: 0;
+            margin-bottom: 8px;
+        }
+        .hero-title {
+            color: #101828;
+            font-size: clamp(34px, 5vw, 64px);
+            font-weight: 950;
+            letter-spacing: 0;
+            line-height: 1.02;
+            margin: 0 0 12px;
+        }
+        .hero-subtitle {
+            color: #3f4756;
+            font-size: 17px;
+            line-height: 1.62;
+            margin: 0 0 14px;
+            max-width: 620px;
+        }
+        .hero-proof {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin: 14px 0 2px;
+        }
+        .hero-proof-item {
+            border: 1px solid #e6e8ef;
+            border-radius: 8px;
+            padding: 10px;
+            background: #fff;
+        }
+        .hero-proof-value {
+            color: #101828;
+            font-weight: 900;
+            font-size: 20px;
+            line-height: 1.25;
+        }
+        .hero-proof-label {
+            color: #667085;
+            font-size: 12px;
+            line-height: 1.3;
+            margin-top: 2px;
+        }
+        .example-card {
+            border: 1px solid #e0e7ff;
+            border-radius: 8px;
+            background: #f8f9ff;
+            padding: 16px;
+        }
+        .example-title {
+            color: #101828;
+            font-size: 18px;
+            font-weight: 900;
+            margin-bottom: 10px;
+        }
+        .example-rank {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-top: 1px solid #e6e8ef;
+            padding: 9px 0;
+            color: #202636;
+            font-weight: 750;
+        }
+        .example-rank span:first-child {
+            width: 34px;
+            color: #315efb;
+            font-weight: 900;
+        }
+        .challenge-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin: 8px 0 14px;
+        }
+        .challenge-card {
+            border: 1px solid #e6e8ef;
+            border-radius: 8px;
+            background: #fff;
+            padding: 14px;
+            min-height: 150px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .challenge-badge {
+            display: inline-block;
+            width: fit-content;
+            border: 1px solid #d9e2ff;
+            border-radius: 999px;
+            color: #315efb;
+            background: #f4f7ff;
+            padding: 4px 8px;
+            font-size: 12px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+        .challenge-title {
+            color: #101828;
+            font-size: 17px;
+            font-weight: 900;
+            line-height: 1.3;
+            margin-bottom: 6px;
+        }
+        .challenge-copy {
+            color: #667085;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+        .dashboard-table {
+            border: 1px solid #e6e8ef;
+            border-radius: 8px;
+            background: #fff;
+            padding: 12px;
+            margin: 8px 0;
+        }
         .rank-card {
             border: 1px solid #e6e8ef;
             border-radius: 8px;
@@ -396,6 +598,13 @@ def render_app_styles() -> None:
             }
             .insight-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .launch-hero,
+            .challenge-grid {
+                grid-template-columns: 1fr;
+            }
+            .hero-proof {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
             }
             .battle-title {
                 font-size: 22px;
@@ -574,6 +783,9 @@ def init_ranking_state(
     seed_text: str = "",
     blind_mode: bool = False,
     side_shuffle: bool = True,
+    challenge_id: str = "",
+    template_id: str = "",
+    source_channel: str = "",
     initial_poster_map: Optional[Dict[str, Optional[bytes]]] = None,
 ) -> None:
     opts = options[:]
@@ -614,8 +826,30 @@ def init_ranking_state(
     st.session_state[k("blind_mode")] = blind_mode
     st.session_state[k("side_shuffle")] = side_shuffle
     st.session_state[k("defers")] = 0
+    st.session_state[k("challenge_id")] = challenge_id
+    st.session_state[k("template_id")] = template_id
+    st.session_state[k("source_channel")] = source_channel or get_source_channel()
+    st.session_state[k("completion_event_signature")] = ""
     st.session_state[k("share_poster_bytes")] = b""
     st.session_state[k("share_poster_signature")] = ""
+
+    safe_source = "custom" if not template_id and not challenge_id else "shared"
+    track_event(
+        EVENT_RANKING_STARTED,
+        challenge_id=challenge_id,
+        mode=mode,
+        template_id=template_id,
+        source_channel=source_channel or get_source_channel(),
+        payload={
+            "total": len(opts),
+            "top_k": top_k,
+            "has_seed": bool(clean_seed),
+            "blind_mode": blind_mode,
+            "side_shuffle": side_shuffle,
+            "source": safe_source,
+            "session_hint": get_session_id()[-8:],
+        },
+    )
 
 
 def clear_ranking_state() -> None:
@@ -633,6 +867,9 @@ def reset_same_config() -> None:
     seed_text = st.session_state.get(k("seed_text"), "")
     blind_mode = st.session_state.get(k("blind_mode"), False)
     side_shuffle = st.session_state.get(k("side_shuffle"), True)
+    challenge_id = st.session_state.get(k("challenge_id"), "")
+    template_id = st.session_state.get(k("template_id"), "")
+    source_channel = st.session_state.get(k("source_channel"), "")
     source_poster_map = st.session_state.get(k("source_poster_map"), {})
 
     if len(options) < 2:
@@ -649,6 +886,9 @@ def reset_same_config() -> None:
         seed_text=seed_text,
         blind_mode=blind_mode,
         side_shuffle=side_shuffle,
+        challenge_id=challenge_id,
+        template_id=template_id,
+        source_channel=source_channel,
         initial_poster_map=source_poster_map,
     )
     rerun()
@@ -1038,27 +1278,24 @@ def build_share_caption(
     comparisons: int,
     user_name: str,
     seed_text: str,
+    challenge_url: str = "",
 ) -> str:
-    top_items = ranked[: min(8, len(ranked))]
-    lines = [
-        f"我刚用「{APP_TITLE}」排出了「{theme}」。",
-    ]
+    caption = result_share_caption(
+        app_title=APP_TITLE,
+        theme=theme,
+        ranked=ranked,
+        comparisons=comparisons,
+        challenge_url=challenge_url,
+        seed_text=seed_text,
+    )
+    extras = []
     if user_name:
-        lines.append(f"署名：{user_name}")
-    if ranked:
-        lines.append(f"冠军：{ranked[0]}")
-    lines.append("我的榜单：")
-    lines.extend(f"{idx}. {item}" for idx, item in enumerate(top_items, 1))
-    if len(ranked) > len(top_items):
-        lines.append(f"...还有 {len(ranked) - len(top_items)} 个排名")
-    lines.append(f"这份榜单经过 {comparisons} 次二选一生成。")
+        extras.append(f"署名：{user_name}")
     if skipped_items:
-        lines.append(f"跳过了 {len(skipped_items)} 个没看过/不熟悉项。")
-    if seed_text:
-        lines.append(f"对局口令：{seed_text}。拿同一份候选来挑战我。")
-    else:
-        lines.append("拿同一份候选来挑战我。")
-    return "\n".join(lines)
+        extras.append(f"跳过了 {len(skipped_items)} 个没看过/不熟悉项。")
+    if extras:
+        return caption + "\n" + "\n".join(extras)
+    return caption
 
 
 def result_archetype(comparisons: int, expected: int, skipped_count: int, ranked_count: int) -> str:
@@ -1165,17 +1402,168 @@ def render_friend_compare(my_ranked: List[str]) -> None:
             st.caption(f"分歧最大：{item}，你排第 {mine}，对方排第 {friend}，相差 {gap} 位。")
 
 
+def current_challenge_for_share() -> Challenge:
+    return Challenge(
+        id=st.session_state.get(k("challenge_id"), ""),
+        theme=st.session_state.get(k("theme"), "电影偏爱挑战"),
+        mode=st.session_state.get(k("mode"), MODE_CUSTOM),
+        items=st.session_state.get(k("source_options"), []),
+        top_k=st.session_state.get(k("top_k")),
+        seed_text=st.session_state.get(k("seed_text"), ""),
+        source="result_share",
+        template_id=st.session_state.get(k("template_id"), ""),
+    )
+
+
+def current_challenge_url() -> str:
+    challenge = current_challenge_for_share()
+    if challenge.id:
+        return build_challenge_url(challenge)
+    return build_challenge_url(challenge, use_payload_fallback=True)
+
+
+def start_challenge(challenge: Challenge, *, show_poster: bool = False) -> None:
+    init_ranking_state(
+        mode=challenge.mode,
+        theme=challenge.theme,
+        options=challenge.items,
+        top_k=challenge.top_k,
+        show_poster=show_poster,
+        user_name="",
+        seed_text=challenge.seed_text or challenge.id,
+        blind_mode=True,
+        side_shuffle=True,
+        challenge_id=challenge.id,
+        template_id=challenge.template_id,
+        source_channel=get_source_channel(),
+        initial_poster_map=None,
+    )
+    st.session_state["ui_selected_mode"] = MODE_CUSTOM
+    st.session_state["ui_step"] = 3
+    rerun()
+
+
+def resolve_challenge_from_url() -> Optional[Challenge]:
+    challenge_id = get_query_param("challenge")
+    if challenge_id:
+        template = get_template(challenge_id)
+        if template:
+            return challenge_from_template(template)
+        return fetch_challenge(challenge_id)
+
+    payload = get_query_param("payload")
+    if payload:
+        return decode_fallback_payload(payload)
+
+    return None
+
+
+def maybe_open_url_challenge() -> None:
+    challenge_id = get_query_param("challenge") or get_query_param("payload")
+    if not challenge_id or st.session_state.get("loaded_url_challenge") == challenge_id:
+        return
+
+    challenge = resolve_challenge_from_url()
+    st.session_state["loaded_url_challenge"] = challenge_id
+    if not challenge:
+        st.warning("这个挑战链接暂时不可用，可以先从下方内置挑战开始。")
+        return
+
+    if st.session_state.get(k("started"), False):
+        clear_ranking_state()
+
+    track_once(
+        f"challenge_opened_{challenge.id}",
+        EVENT_CHALLENGE_OPENED,
+        challenge_id=challenge.id,
+        mode=challenge.mode,
+        template_id=challenge.template_id,
+        source_channel=get_source_channel(),
+        payload={"item_count": len(challenge.items), "top_k": challenge.top_k},
+    )
+    start_challenge(challenge)
+
+
+def render_public_metrics() -> None:
+    metrics = fetch_public_metrics()
+    completed = metrics.get("completed", 0)
+    today_users = metrics.get("today_users", 0)
+    avg = metrics.get("avg_comparisons", 0.0)
+    if not metrics.get("enabled"):
+        completed, today_users, avg = 0, 0, 0.0
+    st.markdown(
+        f"""
+        <div class="hero-proof">
+          <div class="hero-proof-item"><div class="hero-proof-value">{completed}</div><div class="hero-proof-label">已完成榜单</div></div>
+          <div class="hero-proof-item"><div class="hero-proof-value">{today_users}</div><div class="hero-proof-label">今日挑战</div></div>
+          <div class="hero-proof-item"><div class="hero-proof-value">{avg:.1f}</div><div class="hero-proof-label">平均比较次数</div></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_admin_dashboard() -> None:
+    token = get_query_param("admin")
+    expected = get_admin_token()
+    if not expected or token != expected:
+        st.error("后台口令无效或未配置。")
+        return
+
+    st.title("电影审美名片 · 匿名数据看板")
+    metrics = fetch_admin_metrics()
+    if not metrics.get("enabled"):
+        st.warning("Supabase 还没有配置，暂时没有可展示的数据。")
+        return
+
+    counts = metrics.get("counts", {})
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.metric("访问", counts.get(EVENT_PAGE_VIEW, 0))
+    with c2:
+        st.metric("开局", counts.get(EVENT_RANKING_STARTED, 0))
+    with c3:
+        st.metric("完成", counts.get(EVENT_RANKING_COMPLETED, 0), f"{metrics.get('completion_rate', 0):.1%}")
+    with c4:
+        st.metric("复制分享", counts.get(EVENT_SHARE_LINK_COPIED, 0), f"{metrics.get('share_rate', 0):.1%}")
+
+    left, right = st.columns(2)
+    with left:
+        st.subheader("热门模板")
+        for template_id, count in metrics.get("top_templates", []):
+            st.write(f"{template_id}: {count}")
+    with right:
+        st.subheader("热门挑战")
+        for challenge_id, count in metrics.get("top_challenges", []):
+            st.write(f"{challenge_id}: {count}")
+
+    with st.expander("最近事件", expanded=False):
+        st.json(metrics.get("recent_events", [])[:50])
+
+
 def render_cover_header() -> None:
-    text_col, image_col = st.columns([1, 1.05])
-    with text_col:
-        st.markdown('<span class="cover-tag">电影 / 歌手 / 游戏 / 任意偏好</span>', unsafe_allow_html=True)
-        st.markdown(f'<div class="cover-title">{APP_TITLE}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="cover-subtitle">{APP_SUBTITLE}</div>', unsafe_allow_html=True)
-        st.caption("选 A 还是选 B，剩下的交给排序器。")
-    with image_col:
-        cover_src = image_file_data_uri(COVER_IMAGE_PATH)
-        if cover_src:
-            st.markdown(f'<img class="cover-image" src="{cover_src}" alt="{APP_TITLE} 封面">', unsafe_allow_html=True)
+    cover_src = image_file_data_uri(COVER_IMAGE_PATH)
+    image_html = f'<img class="cover-image" src="{cover_src}" alt="{APP_TITLE} 封面">' if cover_src else ""
+    st.markdown(
+        f"""
+        <div class="launch-hero">
+          <div class="hero-copy">
+            <div class="hero-kicker">电影偏爱挑战 · 公开测试版</div>
+            <h1 class="hero-title">{html.escape(HERO_TITLE)}</h1>
+            <p class="hero-subtitle">{html.escape(HERO_SUBTITLE)} {html.escape(HERO_TAGLINE)}</p>
+          </div>
+          <div class="example-card">
+            {image_html}
+            <div class="example-title">示例结果：我的电影审美名片</div>
+            <div class="example-rank"><span>#01</span><div>千与千寻</div></div>
+            <div class="example-rank"><span>#02</span><div>星际穿越</div></div>
+            <div class="example-rank"><span>#03</span><div>霸王别姬</div></div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    render_public_metrics()
     safe_divider()
 
 
@@ -1412,6 +1800,54 @@ def generate_share_poster_bytes(
     return out.getvalue()
 
 
+def generate_challenge_poster_bytes(theme: str, challenge_url: str, item_count: int) -> bytes:
+    width, height = 1080, 1350
+    palette = get_share_palette("热映红毯")
+    title_font = load_font(58, bold=True)
+    subtitle_font = load_font(32)
+    body_font = load_font(28)
+    small_font = load_font(22)
+
+    img = Image.new("RGB", (width, height), palette["bg"])
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle((48, 48, width - 48, height - 48), radius=34, fill=palette["card"], outline=palette["outline"], width=2)
+
+    y = 110
+    draw.text((80, y), "电影偏爱挑战", font=subtitle_font, fill=palette["accent"])
+    y += 72
+    for line in wrap_text(draw, theme, title_font, width - 160):
+        draw.text((80, y), line, font=title_font, fill=palette["title"])
+        y += 68
+
+    y += 24
+    draw.line((80, y, width - 80, y), fill=palette["outline"], width=2)
+    y += 48
+    body_lines = [
+        f"{item_count} 部电影",
+        "一直二选一，排出你的电影审美名片",
+        "发给朋友，看看你们到底差在哪",
+    ]
+    for line in body_lines:
+        draw.text((80, y), line, font=body_font, fill=palette["text"])
+        y += 52
+
+    y += 40
+    draw.rounded_rectangle((80, y, width - 80, y + 220), radius=22, fill=(255, 255, 255), outline=palette["outline"], width=2)
+    draw.text((110, y + 36), "挑战入口", font=subtitle_font, fill=palette["title"])
+    url_lines = wrap_text(draw, challenge_url or "部署后复制挑战链接", small_font, width - 220)
+    yy = y + 94
+    for line in url_lines[:4]:
+        draw.text((110, yy), line, font=small_font, fill=palette["muted"])
+        yy += 32
+
+    footer = f"{APP_TITLE} · {datetime.now().strftime('%Y-%m-%d')}"
+    draw.text((80, height - 110), footer, font=small_font, fill=palette["muted"])
+
+    out = io.BytesIO()
+    img.save(out, format="PNG")
+    return out.getvalue()
+
+
 def ensure_share_poster_generated() -> None:
     ranked = st.session_state.get(k("ranked"), [])
     if not ranked:
@@ -1473,6 +1909,42 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
     user_name = st.session_state.get(k("user_name"), "")
     seed_text = st.session_state.get(k("seed_text"), "")
     defers = st.session_state.get(k("defers"), 0)
+    challenge_id = st.session_state.get(k("challenge_id"), "")
+    template_id = st.session_state.get(k("template_id"), "")
+    source_channel = st.session_state.get(k("source_channel"), "")
+    challenge_url = current_challenge_url()
+
+    completion_signature = build_share_poster_signature(
+        st.session_state.get(k("theme"), "我的排序"),
+        ranked,
+        skipped_items,
+        top_k,
+        st.session_state.get(k("mode"), MODE_CUSTOM),
+        user_name,
+        "completion",
+        "event",
+    )
+    if st.session_state.get(k("completion_event_signature")) != completion_signature:
+        payload = {
+            "total": total,
+            "ranked_count": len(ranked),
+            "skipped_count": len(skipped_items),
+            "comparisons": comparisons,
+            "top_k": top_k,
+            "defers": defers,
+            "session_hint": get_session_id()[-8:],
+        }
+        if template_id and ranked:
+            payload["winner"] = ranked[0]
+        track_event(
+            EVENT_RANKING_COMPLETED,
+            challenge_id=challenge_id,
+            mode=st.session_state.get(k("mode"), MODE_CUSTOM),
+            template_id=template_id,
+            source_channel=source_channel,
+            payload=payload,
+        )
+        st.session_state[k("completion_event_signature")] = completion_signature
 
     if top_k is None:
         st.success("🎉 排序完成！下面是你的完整排名：")
@@ -1520,7 +1992,38 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                 file_name=file_name,
                 mime="image/png",
                 key="btn_download_share_poster",
+                on_click=lambda: track_event(
+                    EVENT_POSTER_DOWNLOADED,
+                    challenge_id=challenge_id,
+                    mode=st.session_state.get(k("mode"), MODE_CUSTOM),
+                    template_id=template_id,
+                    source_channel=source_channel,
+                    payload={"poster_type": "result"},
+                ),
             )
+
+    challenge_poster = generate_challenge_poster_bytes(
+        st.session_state.get(k("theme"), "电影偏爱挑战"),
+        challenge_url,
+        len(st.session_state.get(k("source_options"), [])),
+    )
+    with st.expander("邀请朋友挑战的海报", expanded=False):
+        show_image_compat(challenge_poster)
+        render_download_button_compat(
+            "下载挑战海报",
+            data=challenge_poster,
+            file_name=f"{slugify_filename(st.session_state.get(k('theme'), 'challenge'))}_challenge.png",
+            mime="image/png",
+            key="btn_download_challenge_poster",
+            on_click=lambda: track_event(
+                EVENT_POSTER_DOWNLOADED,
+                challenge_id=challenge_id,
+                mode=st.session_state.get(k("mode"), MODE_CUSTOM),
+                template_id=template_id,
+                source_channel=source_channel,
+                payload={"poster_type": "challenge"},
+            ),
+        )
 
     theme = st.session_state.get(k("theme"), "ranking")
     mode = st.session_state.get(k("mode"), MODE_CUSTOM)
@@ -1531,10 +2034,29 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
         comparisons=comparisons,
         user_name=user_name,
         seed_text=seed_text,
+        challenge_url=challenge_url,
     )
     with st.expander("可直接发布的分享文案", expanded=True):
         st.text_area("文案", value=share_caption, height=220)
         st.caption("发朋友圈、群聊或评论区时直接使用；JSON 可以发给朋友做榜单对比。")
+        if render_copy_button("复制挑战链接", challenge_url, "copy_result_challenge_link", "挑战链接"):
+            track_event(
+                EVENT_SHARE_LINK_COPIED,
+                challenge_id=challenge_id,
+                mode=mode,
+                template_id=template_id,
+                source_channel=source_channel,
+                payload={"surface": "result"},
+            )
+        if render_copy_button("复制发布文案", share_caption, "copy_result_share_caption", "发布文案"):
+            track_event(
+                EVENT_SHARE_LINK_COPIED,
+                challenge_id=challenge_id,
+                mode=mode,
+                template_id=template_id,
+                source_channel=source_channel,
+                payload={"surface": "caption"},
+            )
 
     txt_bytes, csv_bytes, json_bytes, md_bytes = build_export_payloads(
         theme=theme,
@@ -1730,7 +2252,7 @@ def render_step_header(step: int, title: str, subtitle: str = "") -> None:
     cols = st.columns(3)
     labels = [
         ("① 选择模式", 1),
-        ("② 填写参数", 2),
+        ("② 定制片单", 2),
         ("③ 开始对决", 3),
     ]
     for col, (label, idx) in zip(cols, labels):
@@ -1750,30 +2272,64 @@ def render_mode_selection_page() -> None:
     current_mode = get_selected_mode()
     render_step_header(
         1,
-        "先决定你要用哪种排序模式",
-        "这一步只选模式，不填参数。",
+        "今日电影挑战",
+        "选一份片单开排，3 分钟生成你的电影审美名片。",
     )
 
+    card_html = []
+    for template in FILM_CHALLENGE_TEMPLATES:
+        card_html.append(
+            f'<div class="challenge-card">'
+            f'<div>'
+            f'<span class="challenge-badge">{html.escape(str(template.get("badge", "电影挑战")))}</span>'
+            f'<div class="challenge-title">{html.escape(str(template["name"]))}</div>'
+            f'<div class="challenge-copy">{html.escape(str(template.get("tagline", "")))}</div>'
+            f'</div>'
+            f'<div class="mini-note">{len(template.get("items", []))} 部电影 · Top {template.get("top_k", 10)}</div>'
+            f'</div>'
+        )
+    st.markdown(f'<div class="challenge-grid">{"".join(card_html)}</div>', unsafe_allow_html=True)
+
+    for row_start in range(0, len(FILM_CHALLENGE_TEMPLATES), 3):
+        cols = st.columns(3)
+        for idx, template in enumerate(FILM_CHALLENGE_TEMPLATES[row_start : row_start + 3]):
+            with cols[idx]:
+                template_id = str(template["id"])
+                if render_button_compat(f"开排：{template['name']}", key=f"btn_start_template_{template_id}", use_container_width=True, button_type="primary"):
+                    start_challenge(challenge_from_template(template))
+                template_url = build_template_url(template_id)
+                if render_copy_button("复制挑战链接", template_url, f"copy_template_{template_id}", "挑战链接"):
+                    track_event(
+                        EVENT_SHARE_LINK_COPIED,
+                        challenge_id=template_id,
+                        mode=MODE_CUSTOM,
+                        template_id=template_id,
+                        source_channel=get_source_channel(),
+                        payload={"surface": "home_template"},
+                    )
+
+    safe_divider()
+    st.subheader("想排自己的电影片单？")
     mode = st.radio(
-        "选择模式",
+        "选择创建方式",
         [MODE_CUSTOM, MODE_DOUBAN],
         index=0 if current_mode == MODE_CUSTOM else 1,
-        help="自定义模式适合任意主题；豆瓣电影模式会自动读取豆瓣 Top250 的电影。",
+        help="自定义片单适合主题挑战；豆瓣模式会读取豆瓣 Top250。",
         key="ui_mode_step1",
     )
     set_selected_mode(mode)
 
     safe_divider()
     if mode == MODE_CUSTOM:
-        st.info("自定义模式：自己填主题和候选项，歌手、游戏、电影、角色都能排。")
+        st.info("自定义片单：把你想挑战的电影粘进来，生成同题挑战链接。")
     else:
-        st.info("豆瓣电影模式：设置 Top 数量和候选范围，系统会读取豆瓣 Top250。")
+        st.info("豆瓣电影模式：设置 Top 数量和候选范围，快速做一份大众高分片挑战。")
 
     spacer, next_col = st.columns([1, 1])
     with spacer:
         st.empty()
     with next_col:
-        if render_button_compat("下一步：填写参数 →", key="btn_to_step2", use_container_width=True, button_type="primary"):
+        if render_button_compat("下一步：定制片单 →", key="btn_to_step2", use_container_width=True, button_type="primary"):
             go_to_step(2)
 
 
@@ -1848,7 +2404,7 @@ def render_personalization_controls(prefix: str) -> dict:
 
 
 def reset_custom_parameter_defaults() -> None:
-    st.session_state["ui_custom_theme"] = "我的榜单"
+    st.session_state["ui_custom_theme"] = "我的电影审美挑战"
     st.session_state["ui_custom_options_text"] = ""
     st.session_state["ui_custom_top_k_enabled"] = False
     st.session_state["ui_custom_top_k"] = 10
@@ -1856,10 +2412,13 @@ def reset_custom_parameter_defaults() -> None:
     st.session_state["ui_custom_seed_text"] = ""
     st.session_state["ui_custom_blind_mode"] = False
     st.session_state["ui_custom_side_shuffle"] = True
+    st.session_state.pop("ui_custom_challenge_url", None)
+    st.session_state.pop("ui_custom_challenge_caption", None)
+    st.session_state.pop("ui_custom_challenge_id", None)
 
 
 def reset_douban_parameter_defaults() -> None:
-    st.session_state["ui_douban_theme"] = "我的豆瓣电影榜"
+    st.session_state["ui_douban_theme"] = "我的豆瓣电影审美榜"
     st.session_state["ui_douban_top_k"] = 10
     st.session_state["ui_douban_pool_n"] = 100
     st.session_state["ui_douban_show_poster"] = True
@@ -1877,17 +2436,17 @@ def render_custom_parameter_page(mode: str) -> None:
 
     render_custom_template_gallery()
 
-    st.text_input("榜单名称", value=st.session_state.get("ui_custom_theme", "我的榜单"), key="ui_custom_theme")
+    st.text_input("挑战标题", value=st.session_state.get("ui_custom_theme", "我的电影审美挑战"), key="ui_custom_theme")
     st.text_area(
-        "候选项（每行一个）",
+        "电影片单（每行一个，也可以直接粘贴逗号分隔）",
         value=st.session_state.get("ui_custom_options_text", ""),
         height=320,
         key="ui_custom_options_text",
-        placeholder="例：\n周杰伦\n陈奕迅\n王菲\n张学友",
+        placeholder="例：\n千与千寻\n星际穿越\n霸王别姬\n盗梦空间",
     )
 
     options = parse_options_text(st.session_state.get("ui_custom_options_text", ""))
-    st.caption(f"当前有效候选项：{len(options)} 个（已自动去重、去空行）。")
+    st.caption(f"当前有效电影：{len(options)} 部（已自动去重、去空行）。")
     st.caption("支持每行一个，也支持用逗号、顿号、分号或竖线一次性粘贴。")
 
     top_k_enabled = st.checkbox(
@@ -1914,6 +2473,40 @@ def render_custom_parameter_page(mode: str) -> None:
     st.caption(f"预计比较次数大约：{estimated_comparisons(len(options), estimate_top_k)} 次。")
 
     personalization = render_personalization_controls("ui_custom")
+
+    with st.expander("生成同题挑战链接", expanded=False):
+        st.caption("生成后会把挑战标题和电影片单保存到 Supabase；如果未配置 Supabase，会生成较长的本地 payload 链接。")
+        if render_button_compat("生成挑战链接", key="btn_create_custom_challenge", use_container_width=True, button_type="primary"):
+            if len(options) < 2:
+                st.warning("至少需要 2 部电影才能生成挑战。")
+            else:
+                challenge = save_challenge(
+                    theme=(st.session_state.get("ui_custom_theme", "") or "").strip() or "我的电影审美挑战",
+                    mode=mode,
+                    items=options,
+                    top_k=estimate_top_k,
+                    seed_text=personalization["seed_text"] or f"custom-{stable_int('||'.join(options)) % 100000}",
+                    source="custom_challenge",
+                )
+                if challenge:
+                    st.session_state["ui_custom_challenge_url"] = build_challenge_url(
+                        challenge,
+                        use_payload_fallback=not analytics_enabled(),
+                    )
+                    st.session_state["ui_custom_challenge_caption"] = challenge_share_caption(challenge.theme, st.session_state["ui_custom_challenge_url"])
+                    st.session_state["ui_custom_challenge_id"] = challenge.id
+                    st.success("挑战链接已生成。")
+        custom_url = st.session_state.get("ui_custom_challenge_url", "")
+        if custom_url:
+            if render_copy_button("复制挑战链接", custom_url, "copy_custom_challenge_url", "挑战链接"):
+                track_event(
+                    EVENT_SHARE_LINK_COPIED,
+                    challenge_id=st.session_state.get("ui_custom_challenge_id", ""),
+                    mode=mode,
+                    source_channel=get_source_channel(),
+                    payload={"surface": "custom_setup"},
+                )
+            st.text_area("挑战发布文案", value=st.session_state.get("ui_custom_challenge_caption", ""), height=120)
 
     with st.expander("查看当前候选项", expanded=False):
         render_searchable_item_preview(options, "ui_custom_preview_search")
@@ -1942,6 +2535,9 @@ def render_custom_parameter_page(mode: str) -> None:
                     seed_text=personalization["seed_text"],
                     blind_mode=personalization["blind_mode"],
                     side_shuffle=personalization["side_shuffle"],
+                    challenge_id=st.session_state.get("ui_custom_challenge_id", ""),
+                    template_id="",
+                    source_channel=get_source_channel(),
                     initial_poster_map=None,
                 )
                 st.session_state["ui_step"] = 3
@@ -1954,11 +2550,11 @@ def render_douban_parameter_page(mode: str) -> None:
 
     render_douban_preset_buttons()
 
-    st.text_input("榜单名称", value=st.session_state.get("ui_douban_theme", "我的豆瓣电影榜"), key="ui_douban_theme")
+    st.text_input("挑战标题", value=st.session_state.get("ui_douban_theme", "我的豆瓣电影审美榜"), key="ui_douban_theme")
 
     top_k = int(
         st.number_input(
-            "最后要排出 Top 多少",
+            "最后保留 Top 多少",
             min_value=1,
             max_value=250,
             value=int(st.session_state.get("ui_douban_top_k", 10)),
@@ -1968,7 +2564,7 @@ def render_douban_parameter_page(mode: str) -> None:
     )
     pool_n = int(
         st.number_input(
-            "从豆瓣 Top 多少部里选",
+            "从豆瓣 Top 多少部里挑战",
             min_value=1,
             max_value=250,
             value=int(st.session_state.get("ui_douban_pool_n", 100)),
@@ -1987,7 +2583,7 @@ def render_douban_parameter_page(mode: str) -> None:
     if pool_n < top_k:
         st.error("候选范围不能小于 Top 数量。请让候选范围 >= Top。")
     else:
-        st.caption(f"将从豆瓣 Top250 中读取前 {pool_n} 部电影，最后给出你的 Top {top_k}。")
+        st.caption(f"将从豆瓣 Top250 中读取前 {pool_n} 部电影，最后生成你的 Top {top_k} 审美名片。")
         st.caption(f"预计比较次数大约：{estimated_comparisons(pool_n, top_k)} 次。")
 
     if render_button_compat("👀 预览候选电影", key="btn_preview_douban_step2", use_container_width=True):
@@ -2024,7 +2620,7 @@ def render_douban_parameter_page(mode: str) -> None:
             else:
                 st.session_state["ui_pending_douban"] = {
                     "mode": mode,
-                    "theme": (st.session_state.get("ui_douban_theme", "") or "").strip() or "我的豆瓣电影榜",
+                    "theme": (st.session_state.get("ui_douban_theme", "") or "").strip() or "我的豆瓣电影审美榜",
                     "top_k": top_k,
                     "pool_n": pool_n,
                     "show_poster": show_poster,
@@ -2041,8 +2637,8 @@ def render_parameter_page() -> None:
     mode = get_selected_mode()
     render_step_header(
         2,
-        "填写本次排序参数",
-        "补充榜单名称、候选范围和展示设置。",
+        "定制这次电影挑战",
+        "补充挑战标题、电影范围和分享设置。",
     )
 
     if mode == MODE_CUSTOM:
@@ -2085,6 +2681,9 @@ def render_douban_prepare_page() -> None:
             seed_text=str(pending.get("seed_text", "")),
             blind_mode=bool(pending.get("blind_mode", False)),
             side_shuffle=bool(pending.get("side_shuffle", True)),
+            challenge_id="",
+            template_id="douban-live",
+            source_channel=get_source_channel(),
             initial_poster_map=poster_map,
         )
         st.session_state.pop("ui_pending_douban", None)
@@ -2105,7 +2704,7 @@ def render_sorting_page() -> None:
     with labels[0]:
         st.caption("① 选择模式")
     with labels[1]:
-        st.caption("② 填写参数")
+        st.caption("② 定制片单")
     with labels[2]:
         st.markdown("**③ 开始对决**")
 
@@ -2117,7 +2716,7 @@ def render_sorting_page() -> None:
     safe_divider()
     nav1, nav2 = st.columns(2)
     with nav1:
-        if render_button_compat("← 返回第 2 步修改参数", key="btn_back_to_step2", use_container_width=True):
+        if render_button_compat("← 返回第 2 步修改片单", key="btn_back_to_step2", use_container_width=True):
             go_to_step(2)
     with nav2:
         if render_button_compat("重新选择模式", key="btn_back_to_step1", use_container_width=True):
@@ -2135,10 +2734,26 @@ def main() -> None:
     )
     render_app_styles()
 
+    if get_query_param("admin"):
+        render_admin_dashboard()
+        return
+
     if "ui_selected_mode" not in st.session_state:
         st.session_state["ui_selected_mode"] = MODE_CUSTOM
     if "ui_step" not in st.session_state:
         st.session_state["ui_step"] = 1
+
+    track_once(
+        f"page_view_{get_source_channel()}",
+        EVENT_PAGE_VIEW,
+        source_channel=get_source_channel(),
+        payload={
+            "has_challenge": bool(get_query_param("challenge")),
+            "has_payload": bool(get_query_param("payload")),
+            "session_hint": get_session_id()[-8:],
+        },
+    )
+    maybe_open_url_challenge()
 
     step = get_ui_step()
     if step == 3:
@@ -2159,7 +2774,10 @@ def main() -> None:
         render_sorting_page()
 
     safe_divider()
-    st.caption("说明：豆瓣模式准备阶段会显示“准备中...”。如果网络异常或海报抓取失败，单张海报可能不显示，但排序功能仍可继续。")
+    if analytics_enabled():
+        st.caption("说明：本应用只记录匿名访问、开局、完成和分享事件，不记录姓名、IP 或自定义完整榜单内容。")
+    else:
+        st.caption("说明：未配置 Supabase 时，应用仍可完整使用；公开统计和短挑战链接会自动降级。")
 
 
 if __name__ == "__main__":
