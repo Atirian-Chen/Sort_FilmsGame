@@ -488,9 +488,19 @@ def render_app_styles() -> None:
         }
         div[data-testid="stButton"] > button[kind="primary"],
         div[data-testid="stButton"] > button[data-testid="baseButton-primary"] {
-            border-color: #2b2f36;
-            background: #2b2f36;
-            color: #fffaf4;
+            border-color: #2b2f36 !important;
+            background: #2b2f36 !important;
+            color: #fffaf4 !important;
+        }
+        div[data-testid="stButton"] > button[kind="primary"] *,
+        div[data-testid="stButton"] > button[data-testid="baseButton-primary"] * {
+            color: #fffaf4 !important;
+        }
+        div[data-testid="stButton"] > button[kind="primary"]:hover,
+        div[data-testid="stButton"] > button[data-testid="baseButton-primary"]:hover {
+            border-color: #171a1f !important;
+            background: #171a1f !important;
+            color: #fffaf4 !important;
         }
         div[data-testid="stMetric"] {
             background: #fffdf9;
@@ -709,7 +719,7 @@ def render_app_styles() -> None:
             display: grid;
             grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 8px;
-            margin: 6px 0 8px;
+            margin: 8px 0 8px;
         }
         .challenge-card {
             border: 1px solid #e7e1d8;
@@ -812,6 +822,12 @@ def render_app_styles() -> None:
             color: #7a746c;
             font-size: 13px;
             line-height: 1.5;
+        }
+        .home-step-copy {
+            color: #7a746c;
+            font-size: 15px;
+            line-height: 1.45;
+            margin: 6px 0 6px;
         }
         @media (max-width: 820px) {
             section.main > div {
@@ -2825,7 +2841,7 @@ def set_selected_mode(mode: str) -> None:
     st.session_state["ui_selected_mode"] = mode
 
 
-def render_step_header(step: int, title: str, subtitle: str = "") -> None:
+def render_step_header(step: int, title: str, subtitle: str = "", compact: bool = False) -> None:
     step = max(1, min(3, int(step)))
     st.progress(step / 3)
 
@@ -2842,18 +2858,24 @@ def render_step_header(step: int, title: str, subtitle: str = "") -> None:
             else:
                 st.caption(label)
 
-    st.subheader(title)
+    if title.strip():
+        st.subheader(title)
     if subtitle:
-        st.caption(subtitle)
-    safe_divider()
+        if compact:
+            st.markdown(f'<div class="home-step-copy">{html.escape(subtitle)}</div>', unsafe_allow_html=True)
+        else:
+            st.caption(subtitle)
+    if not compact:
+        safe_divider()
 
 
 def render_mode_selection_page() -> None:
     current_mode = get_selected_mode()
     render_step_header(
         1,
-        "今日可排的片单",
+        "",
         "不用先想完整顺序，只在两部电影之间作一次取舍。",
+        compact=True,
     )
 
     card_html = []
