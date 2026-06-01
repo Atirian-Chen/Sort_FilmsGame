@@ -409,12 +409,66 @@ def render_app_styles() -> None:
     st.markdown(
         """
         <style>
+        html,
+        body,
+        [data-testid="stAppViewContainer"],
         .stApp {
-            background: #fbfaf7;
-            color: #1f2328;
+            background: #fbfaf7 !important;
+            color: #1f2328 !important;
+        }
+        [data-testid="stHeader"] {
+            background: rgba(251, 250, 247, 0.92) !important;
+        }
+        [data-testid="stToolbar"] {
+            color: #1f2328 !important;
         }
         section.main > div {
             padding-top: 1rem;
+        }
+        .stApp h1,
+        .stApp h2,
+        .stApp h3,
+        .stApp h4,
+        .stApp h5,
+        .stApp h6,
+        .stApp [data-testid="stMarkdownContainer"],
+        .stApp [data-testid="stCaptionContainer"] {
+            color: #1f2328;
+        }
+        .stApp [data-testid="stCaptionContainer"],
+        .stApp [data-testid="stCaptionContainer"] p {
+            color: #7a746c !important;
+        }
+        div[data-testid="stRadio"] label,
+        div[data-testid="stRadio"] label p,
+        div[data-testid="stRadio"] label span {
+            color: #1f2328 !important;
+        }
+        div[data-testid="stRadio"] [role="radiogroup"] {
+            gap: 0.25rem;
+        }
+        div[data-testid="stRadio"] label > div:first-child {
+            border-color: #2b2f36 !important;
+        }
+        div[data-testid="stExpander"] {
+            background: #fffdf9;
+            border-color: #e7e1d8;
+            color: #1f2328;
+        }
+        div[data-testid="stSelectbox"] label,
+        div[data-testid="stTextInput"] label,
+        div[data-testid="stNumberInput"] label,
+        div[data-testid="stCheckbox"] label,
+        div[data-testid="stTextArea"] label,
+        div[data-testid="stFileUploader"] label {
+            color: #1f2328 !important;
+        }
+        div[data-testid="stTextInput"] input,
+        div[data-testid="stNumberInput"] input,
+        div[data-testid="stTextArea"] textarea {
+            background: #fffdf9 !important;
+            color: #1f2328 !important;
+            border-color: #d8d1c6 !important;
         }
         div[data-testid="stButton"] > button {
             min-height: 34px;
@@ -1955,7 +2009,6 @@ def render_cover_header() -> None:
         """,
         unsafe_allow_html=True,
     )
-    render_public_metrics()
     safe_divider()
 
 
@@ -2868,6 +2921,9 @@ def render_mode_selection_page() -> None:
     with next_col:
         if render_button_compat("继续整理", key="btn_to_step2", use_container_width=True, button_type="primary"):
             go_to_step(2)
+
+    safe_divider()
+    render_public_metrics()
 
 
 def render_custom_template_gallery() -> None:
