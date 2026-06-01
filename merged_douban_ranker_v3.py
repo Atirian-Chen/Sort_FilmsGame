@@ -760,8 +760,39 @@ def render_app_styles() -> None:
             line-height: 1.5;
         }
         @media (max-width: 820px) {
+            section.main > div {
+                padding-top: 0.35rem;
+            }
+            h3 {
+                font-size: 1.25rem;
+                margin: 0.45rem 0 0.35rem;
+            }
+            div[data-testid="stHorizontalBlock"] {
+                flex-direction: row !important;
+                gap: 0.35rem !important;
+            }
+            div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+                min-width: 0 !important;
+            }
+            div[data-testid="stButton"] > button {
+                min-height: 30px;
+                font-size: 12px;
+                padding: 0.24rem 0.38rem;
+            }
             .compact-status {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 5px;
+                margin: 3px 0 5px;
+            }
+            .status-chip {
+                padding: 5px 6px;
+            }
+            .status-label {
+                font-size: 10px;
+            }
+            .status-value {
+                font-size: 13px;
+                line-height: 1.22;
             }
             .insight-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -781,7 +812,7 @@ def render_app_styles() -> None:
             }
             .poster-choice-frame,
             .poster-placeholder {
-                height: min(38vh, 360px);
+                height: min(34vh, 230px);
             }
         }
         </style>
@@ -2114,7 +2145,7 @@ def generate_share_poster_bytes(
     thumb_size = (86, 124)
     palette = get_share_palette(poster_style)
     poster_bytes_map = poster_bytes_map or {}
-    share_url = share_url or get_public_app_url()
+    share_url = get_public_app_url()
 
     measure_img = Image.new("RGB", (1, 1))
     measure_draw = ImageDraw.Draw(measure_img)
@@ -2232,8 +2263,8 @@ def generate_share_poster_bytes(
     qr_img = make_qr_image(share_url, 144)
     img.paste(qr_img, (padding + 20, qr_y + 20))
     qr_text_x = padding + 188
-    draw.text((qr_text_x, qr_y + 30), "扫码打开这份片单", font=subtitle_font, fill=(31, 35, 40))
-    draw.text((qr_text_x, qr_y + 72), "也排一次，看看你的顺序会怎么变。", font=small_font, fill=(98, 106, 120))
+    draw.text((qr_text_x, qr_y + 30), "扫码打开电影审美名单", font=subtitle_font, fill=(31, 35, 40))
+    draw.text((qr_text_x, qr_y + 72), "从首页进入，排出你自己的顺序。", font=small_font, fill=(98, 106, 120))
     for idx, line in enumerate(wrap_text(draw, share_url, tiny_font, width - qr_text_x - padding - 20)[:2]):
         draw.text((qr_text_x, qr_y + 112 + idx * 24), line, font=tiny_font, fill=(112, 118, 130))
 
@@ -2248,6 +2279,7 @@ def generate_share_poster_bytes(
 def generate_challenge_poster_bytes(theme: str, challenge_url: str, item_count: int) -> bytes:
     width, height = 1080, 1350
     palette = get_share_palette("银幕红")
+    home_url = get_public_app_url()
     title_font = load_font(58, bold=True)
     subtitle_font = load_font(32)
     body_font = load_font(28)
@@ -2278,10 +2310,10 @@ def generate_challenge_poster_bytes(theme: str, challenge_url: str, item_count: 
 
     y += 40
     draw.rounded_rectangle((80, y, width - 80, y + 260), radius=24, fill=(255, 255, 255), outline=palette["outline"], width=2)
-    qr_img = make_qr_image(challenge_url or get_public_app_url(), 150)
+    qr_img = make_qr_image(home_url, 150)
     img.paste(qr_img, (110, y + 54))
-    draw.text((290, y + 44), "同一份片单", font=subtitle_font, fill=palette["title"])
-    url_lines = wrap_text(draw, challenge_url or "部署后复制片单链接", small_font, width - 220)
+    draw.text((290, y + 44), "打开首页", font=subtitle_font, fill=palette["title"])
+    url_lines = wrap_text(draw, home_url, small_font, width - 220)
     yy = y + 104
     for line in url_lines[:4]:
         draw.text((290, yy), line, font=small_font, fill=palette["muted"])
@@ -2299,6 +2331,7 @@ def ensure_share_poster_generated(share_url: str = "") -> None:
     ranked = st.session_state.get(k("ranked"), [])
     if not ranked:
         return
+    share_url = get_public_app_url()
 
     theme = st.session_state.get(k("theme"), "我的排序")
     skipped_items = st.session_state.get(k("skipped_items"), [])
