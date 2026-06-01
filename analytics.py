@@ -25,6 +25,8 @@ TRACKED_EVENTS = [
     EVENT_SHARE_LINK_COPIED,
 ]
 
+DEFAULT_PUBLIC_APP_URL = "https://sortfilmsgamegit.streamlit.app"
+
 
 def get_secret(name: str, default: str = "") -> str:
     try:
@@ -50,7 +52,7 @@ def get_admin_token() -> str:
 
 
 def get_public_app_url() -> str:
-    return get_secret("PUBLIC_APP_URL").rstrip("/")
+    return (get_secret("PUBLIC_APP_URL") or DEFAULT_PUBLIC_APP_URL).rstrip("/")
 
 
 def get_session_id() -> str:

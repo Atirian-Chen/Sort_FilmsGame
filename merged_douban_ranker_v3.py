@@ -11,13 +11,14 @@ import random
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
+import qrcode
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
 from bs4 import BeautifulSoup
-from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 
 from analytics import (
     EVENT_CHALLENGE_OPENED,
@@ -177,7 +178,7 @@ DOUBAN_PRESETS = [
 ]
 
 SHARE_POSTER_STYLES = ["留白卡片", "银幕红", "夜场蓝"]
-SHARE_POSTER_FORMATS = ["方图 1:1", "长图 9:16", "自适应长图"]
+SHARE_POSTER_FORMATS = ["自适应长图", "长图 9:16", "方图 1:1"]
 
 HISTORY_KEYS = [
     "remaining",
@@ -282,11 +283,77 @@ def show_image_compat(image_data: bytes) -> bool:
         return False
 
 
+def image_mime_type(image_data: bytes) -> str:
+    if image_data.startswith(b"\xff\xd8"):
+        return "image/jpeg"
+    if image_data.startswith(b"\x89PNG"):
+        return "image/png"
+    if image_data.startswith(b"RIFF") and b"WEBP" in image_data[:16]:
+        return "image/webp"
+    return "image/png"
+
+
 def poster_data_uri(image_data: Optional[bytes]) -> Optional[str]:
     if not image_data:
         return None
     encoded = base64.b64encode(image_data).decode("ascii")
-    return f"data:image/png;base64,{encoded}"
+    return f"data:{image_mime_type(image_data)};base64,{encoded}"
+
+
+@st.cache_data(show_spinner=False, max_entries=512)
+def poster_preview_data_uri(image_data: bytes, max_width: int = 360, max_height: int = 520) -> Optional[str]:
+    try:
+        with Image.open(io.BytesIO(image_data)) as img:
+            img = ImageOps.exif_transpose(img)
+            img = img.convert("RGB")
+            img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+            output = io.BytesIO()
+            img.save(output, format="JPEG", quality=82, optimize=True)
+            encoded = base64.b64encode(output.getvalue()).decode("ascii")
+            return f"data:image/jpeg;base64,{encoded}"
+    except Exception:
+        return poster_data_uri(image_data)
+
+
+def image_from_bytes(image_data: Optional[bytes]) -> Optional[Image.Image]:
+    if not image_data:
+        return None
+    try:
+        img = Image.open(io.BytesIO(image_data))
+        return img.convert("RGB")
+    except Exception:
+        return None
+
+
+def make_rounded_rect_mask(size: Tuple[int, int], radius: int) -> Image.Image:
+    mask = Image.new("L", size, 0)
+    draw = ImageDraw.Draw(mask)
+    draw.rounded_rectangle((0, 0, size[0], size[1]), radius=radius, fill=255)
+    return mask
+
+
+def render_poster_thumb(image_data: Optional[bytes], size: Tuple[int, int], bg: Tuple[int, int, int]) -> Image.Image:
+    thumb = Image.new("RGB", size, bg)
+    poster = image_from_bytes(image_data)
+    if poster:
+        poster.thumbnail((size[0], size[1]), Image.Resampling.LANCZOS)
+        x = (size[0] - poster.width) // 2
+        y = (size[1] - poster.height) // 2
+        thumb.paste(poster, (x, y))
+    return thumb
+
+
+def make_qr_image(url: str, size: int = 164) -> Image.Image:
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=8,
+        border=2,
+    )
+    qr.add_data(url or get_public_app_url())
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#1f2328", back_color="white").convert("RGB")
+    return img.resize((size, size), Image.Resampling.NEAREST)
 
 
 def image_file_data_uri(path: Path) -> Optional[str]:
@@ -791,10 +858,11 @@ def normalize_image_bytes(image_bytes: bytes) -> Optional[bytes]:
 
     try:
         with Image.open(io.BytesIO(image_bytes)) as img:
-            if img.mode not in ("RGB", "RGBA"):
-                img = img.convert("RGB")
+            img = ImageOps.exif_transpose(img)
+            img = img.convert("RGB")
+            img.thumbnail((720, 1080), Image.Resampling.LANCZOS)
             output = io.BytesIO()
-            img.save(output, format="PNG")
+            img.save(output, format="JPEG", quality=88, optimize=True, progressive=True)
             return output.getvalue()
     except (UnidentifiedImageError, OSError, ValueError):
         return None
@@ -802,14 +870,31 @@ def normalize_image_bytes(image_bytes: bytes) -> Optional[bytes]:
 
 def poster_cache_path(title: str) -> Path:
     digest = hashlib.sha1(title.encode("utf-8")).hexdigest()[:16]
+    return POSTER_CACHE_DIR / f"{digest}.jpg"
+
+
+def legacy_poster_cache_path(title: str) -> Path:
+    digest = hashlib.sha1(title.encode("utf-8")).hexdigest()[:16]
     return POSTER_CACHE_DIR / f"{digest}.png"
 
 
 def read_cached_poster(title: str) -> Optional[bytes]:
-    path = poster_cache_path(title)
+    current_path = poster_cache_path(title)
     try:
-        if path.exists():
-            return path.read_bytes()
+        if current_path.exists():
+            return current_path.read_bytes()
+    except OSError:
+        return None
+
+    legacy_path = legacy_poster_cache_path(title)
+    try:
+        if legacy_path.exists():
+            legacy_bytes = legacy_path.read_bytes()
+            migrated = normalize_image_bytes(legacy_bytes)
+            if migrated:
+                write_cached_poster(title, migrated)
+                return migrated
+            return legacy_bytes
     except OSError:
         return None
     return None
@@ -1797,10 +1882,19 @@ def render_cover_header() -> None:
     safe_divider()
 
 
-def get_poster_for_option(name: str) -> Optional[bytes]:
+def get_poster_for_option(name: str, *, fetch: bool = True) -> Optional[bytes]:
     poster_map = st.session_state.setdefault(k("poster_map"), {})
     if poster_map.get(name):
         return poster_map[name]
+
+    cached = read_cached_poster(name)
+    if cached:
+        poster_map[name] = cached
+        st.session_state[k("poster_map")] = poster_map
+        return cached
+
+    if not fetch:
+        return None
 
     failed = st.session_state.setdefault(k("poster_fetch_failed"), [])
     if name in failed:
@@ -1875,6 +1969,7 @@ def build_share_poster_signature(
     user_name: str,
     poster_style: str,
     poster_format: str,
+    share_url: str = "",
 ) -> str:
     return "|".join(
         [
@@ -1883,6 +1978,7 @@ def build_share_poster_signature(
             user_name,
             poster_style,
             poster_format,
+            share_url,
             "full" if top_k is None else f"top{top_k}",
             "ranked:" + "||".join(ranked),
             "skipped:" + "||".join(skipped_items),
@@ -1892,27 +1988,30 @@ def build_share_poster_signature(
 
 def get_share_palette(poster_style: str) -> dict:
     palettes = {
-        "热映红毯": {
+        "银幕红": {
             "bg": (54, 20, 23),
             "card": (255, 248, 238),
+            "row": (255, 252, 246),
             "outline": (242, 199, 122),
             "title": (70, 28, 28),
             "text": (30, 28, 26),
             "muted": (113, 89, 75),
             "accent": (192, 49, 49),
         },
-        "午夜霓虹": {
+        "夜场蓝": {
             "bg": (14, 18, 32),
             "card": (25, 31, 48),
+            "row": (33, 40, 61),
             "outline": (81, 102, 151),
             "title": (236, 242, 255),
             "text": (236, 242, 255),
             "muted": (171, 185, 214),
             "accent": (111, 231, 214),
         },
-        "清爽白卡": {
+        "留白卡片": {
             "bg": (246, 247, 251),
             "card": (255, 255, 255),
+            "row": (250, 251, 254),
             "outline": (228, 231, 236),
             "title": (20, 24, 35),
             "text": (20, 24, 35),
@@ -1920,7 +2019,28 @@ def get_share_palette(poster_style: str) -> dict:
             "accent": (73, 93, 241),
         },
     }
-    return palettes.get(poster_style, palettes["清爽白卡"])
+    aliases = {
+        "热映红毯": "银幕红",
+        "午夜霓虹": "夜场蓝",
+        "清爽白卡": "留白卡片",
+    }
+    return palettes.get(aliases.get(poster_style, poster_style), palettes["留白卡片"])
+
+
+def get_result_poster_bytes(title: str) -> Optional[bytes]:
+    poster_map = st.session_state.get(k("poster_map"), {})
+    if poster_map.get(title):
+        return poster_map[title]
+
+    cached = read_cached_poster(title)
+    if cached:
+        return cached
+
+    poster_bytes = get_best_poster_bytes(title)
+    if poster_bytes:
+        poster_map[title] = poster_bytes
+        st.session_state[k("poster_map")] = poster_map
+    return poster_bytes
 
 
 def generate_share_poster_bytes(
@@ -1932,37 +2052,51 @@ def generate_share_poster_bytes(
     user_name: str,
     poster_style: str,
     poster_format: str,
+    share_url: str = "",
+    poster_bytes_map: Optional[Dict[str, Optional[bytes]]] = None,
 ) -> bytes:
     width = 1080
     fixed_height = None
-    if poster_format == "方图 1:1":
-        fixed_height = 1080
-    elif poster_format == "长图 9:16":
+    if poster_format == "长图 9:16":
         fixed_height = 1920
+    elif poster_format == "方图 1:1":
+        fixed_height = 1080
 
     padding = 64
-    line_height = 56
+    row_height = 144
+    row_gap = 12
+    thumb_size = (86, 124)
     palette = get_share_palette(poster_style)
+    poster_bytes_map = poster_bytes_map or {}
+    share_url = share_url or get_public_app_url()
 
     measure_img = Image.new("RGB", (1, 1))
     measure_draw = ImageDraw.Draw(measure_img)
 
-    title_font = load_font(52, bold=True)
+    title_font = load_font(50, bold=True)
     subtitle_font = load_font(26)
-    item_font = load_font(34)
+    item_font = load_font(32)
     small_font = load_font(22)
+    tiny_font = load_font(18)
 
-    max_text_width = width - padding * 2 - 120
-    if fixed_height is None:
-        display_ranked = ranked
-    else:
-        display_ranked = ranked[: 12 if fixed_height == 1080 else 22]
+    title_lines = wrap_text(measure_draw, theme, title_font, width - padding * 2)
+    title_height = len(title_lines) * 60
+    header_height = title_height + 54 + (34 if user_name else 0) + 34
+    qr_block_height = 184
+    bottom_margin = 48
 
+    display_ranked = ranked
+    if fixed_height is not None:
+        available = fixed_height - padding - header_height - qr_block_height - bottom_margin
+        max_rows = max(3, available // (row_height + row_gap))
+        display_ranked = ranked[: min(len(ranked), max_rows)]
+
+    text_x = padding + 56 + thumb_size[0] + 28
+    max_text_width = width - text_x - padding
     ranked_layout = []
     for item in display_ranked:
         wrapped = wrap_text(measure_draw, item, item_font, max_text_width)
-        row_height = max(line_height, len(wrapped) * 40 + 12)
-        ranked_layout.append((item, wrapped, row_height))
+        ranked_layout.append((item, wrapped))
 
     skipped_lines: List[str] = []
     if skipped_items:
@@ -1971,15 +2105,13 @@ def generate_share_poster_bytes(
             joined += "……"
         skipped_lines = wrap_text(measure_draw, joined, small_font, width - padding * 2)
 
-    content_height = padding + 78 + 54 + 28
-    if user_name:
-        content_height += 34
-    content_height += sum(row_height for _, _, row_height in ranked_layout)
+    content_height = padding + header_height + len(ranked_layout) * (row_height + row_gap)
     if len(display_ranked) < len(ranked):
         content_height += 38
     if skipped_items:
         content_height += 12 + 2 + 24 + 36 + len(skipped_lines) * 28
-    height = fixed_height or max(760, content_height + 140)
+    content_height += qr_block_height + bottom_margin
+    height = fixed_height or max(900, content_height)
 
     img = Image.new("RGB", (width, height), palette["bg"])
     draw = ImageDraw.Draw(img)
@@ -1987,8 +2119,9 @@ def generate_share_poster_bytes(
     draw.rounded_rectangle((36, 36, width - 36, height - 36), radius=36, fill=palette["card"], outline=palette["outline"], width=2)
 
     y = padding
-    draw.text((padding, y), theme, font=title_font, fill=palette["title"])
-    y += 78
+    for line in title_lines:
+        draw.text((padding, y), line, font=title_font, fill=palette["title"])
+        y += 60
 
     if top_k is None:
         subtitle = "完整偏爱顺序"
@@ -2005,15 +2138,35 @@ def generate_share_poster_bytes(
     draw.line((padding, y, width - padding, y), fill=palette["outline"], width=2)
     y += 28
 
-    for idx, (_, wrapped, row_height) in enumerate(ranked_layout, 1):
+    thumb_mask = make_rounded_rect_mask(thumb_size, 12)
+    for idx, (item, wrapped) in enumerate(ranked_layout, 1):
+        row_bottom = y + row_height
+        draw.rounded_rectangle((padding, y, width - padding, row_bottom), radius=20, fill=palette.get("row", palette["card"]))
         rank_text = f"{idx:02d}"
-        draw.text((padding, y), rank_text, font=item_font, fill=palette["accent"])
+        draw.text((padding + 2, y + 44), rank_text, font=item_font, fill=palette["accent"])
+
+        thumb_x = padding + 58
+        thumb_y = y + 10
+        poster_thumb = render_poster_thumb(poster_bytes_map.get(item), thumb_size, (238, 239, 243))
+        if poster_bytes_map.get(item):
+            img.paste(poster_thumb, (thumb_x, thumb_y), thumb_mask)
+        else:
+            draw.rounded_rectangle(
+                (thumb_x, thumb_y, thumb_x + thumb_size[0], thumb_y + thumb_size[1]),
+                radius=12,
+                fill=(238, 239, 243),
+                outline=palette["outline"],
+                width=1,
+            )
+            draw.text((thumb_x + 15, thumb_y + 42), "暂无\n海报", font=tiny_font, fill=(112, 118, 130), spacing=4)
+
+        text_y = y + max(24, (row_height - len(wrapped) * 38) // 2)
         for j, line in enumerate(wrapped):
-            draw.text((padding + 90, y + j * 40), line, font=item_font, fill=palette["text"])
-        y += row_height
+            draw.text((text_x, text_y + j * 38), line, font=item_font, fill=palette["text"])
+        y = row_bottom + row_gap
 
     if len(display_ranked) < len(ranked):
-        draw.text((padding + 90, y), f"还有 {len(ranked) - len(display_ranked)} 项完整名单", font=small_font, fill=palette["muted"])
+        draw.text((text_x, y), f"还有 {len(ranked) - len(display_ranked)} 项完整名单", font=small_font, fill=palette["muted"])
         y += 38
 
     if skipped_items:
@@ -2028,6 +2181,16 @@ def generate_share_poster_bytes(
             draw.text((padding, y), line, font=small_font, fill=palette["muted"])
             y += 28
 
+    qr_y = min(max(y + 12, height - padding - qr_block_height), height - padding - qr_block_height)
+    draw.rounded_rectangle((padding, qr_y, width - padding, qr_y + qr_block_height), radius=24, fill=(255, 255, 255), outline=palette["outline"], width=2)
+    qr_img = make_qr_image(share_url, 144)
+    img.paste(qr_img, (padding + 20, qr_y + 20))
+    qr_text_x = padding + 188
+    draw.text((qr_text_x, qr_y + 30), "扫码打开这份片单", font=subtitle_font, fill=(31, 35, 40))
+    draw.text((qr_text_x, qr_y + 72), "也排一次，看看你的顺序会怎么变。", font=small_font, fill=(98, 106, 120))
+    for idx, line in enumerate(wrap_text(draw, share_url, tiny_font, width - qr_text_x - padding - 20)[:2]):
+        draw.text((qr_text_x, qr_y + 112 + idx * 24), line, font=tiny_font, fill=(112, 118, 130))
+
     footer = f"{APP_TITLE} · {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     draw.text((padding, height - 70), footer, font=small_font, fill=palette["muted"])
 
@@ -2038,7 +2201,7 @@ def generate_share_poster_bytes(
 
 def generate_challenge_poster_bytes(theme: str, challenge_url: str, item_count: int) -> bytes:
     width, height = 1080, 1350
-    palette = get_share_palette("热映红毯")
+    palette = get_share_palette("银幕红")
     title_font = load_font(58, bold=True)
     subtitle_font = load_font(32)
     body_font = load_font(28)
@@ -2068,12 +2231,14 @@ def generate_challenge_poster_bytes(theme: str, challenge_url: str, item_count: 
         y += 52
 
     y += 40
-    draw.rounded_rectangle((80, y, width - 80, y + 220), radius=22, fill=(255, 255, 255), outline=palette["outline"], width=2)
-    draw.text((110, y + 36), "同一份片单", font=subtitle_font, fill=palette["title"])
+    draw.rounded_rectangle((80, y, width - 80, y + 260), radius=24, fill=(255, 255, 255), outline=palette["outline"], width=2)
+    qr_img = make_qr_image(challenge_url or get_public_app_url(), 150)
+    img.paste(qr_img, (110, y + 54))
+    draw.text((290, y + 44), "同一份片单", font=subtitle_font, fill=palette["title"])
     url_lines = wrap_text(draw, challenge_url or "部署后复制片单链接", small_font, width - 220)
-    yy = y + 94
+    yy = y + 104
     for line in url_lines[:4]:
-        draw.text((110, yy), line, font=small_font, fill=palette["muted"])
+        draw.text((290, yy), line, font=small_font, fill=palette["muted"])
         yy += 32
 
     footer = f"{APP_TITLE} · {datetime.now().strftime('%Y-%m-%d')}"
@@ -2084,7 +2249,7 @@ def generate_challenge_poster_bytes(theme: str, challenge_url: str, item_count: 
     return out.getvalue()
 
 
-def ensure_share_poster_generated() -> None:
+def ensure_share_poster_generated(share_url: str = "") -> None:
     ranked = st.session_state.get(k("ranked"), [])
     if not ranked:
         return
@@ -2096,12 +2261,29 @@ def ensure_share_poster_generated() -> None:
     user_name = st.session_state.get(k("user_name"), "")
     poster_style = st.session_state.get(k("share_poster_style"), SHARE_POSTER_STYLES[0])
     poster_format = st.session_state.get(k("share_poster_format"), SHARE_POSTER_FORMATS[0])
-    signature = build_share_poster_signature(theme, ranked, skipped_items, top_k, mode, user_name, poster_style, poster_format)
+    signature = build_share_poster_signature(theme, ranked, skipped_items, top_k, mode, user_name, poster_style, poster_format, share_url)
 
     if st.session_state.get(k("share_poster_signature")) == signature and st.session_state.get(k("share_poster_bytes")):
         return
 
-    poster_bytes = generate_share_poster_bytes(theme, ranked, skipped_items, top_k, mode, user_name, poster_style, poster_format)
+    display_count = len(ranked)
+    if poster_format == "方图 1:1":
+        display_count = min(display_count, 5)
+    elif poster_format == "长图 9:16":
+        display_count = min(display_count, 10)
+    poster_bytes_map = {title: get_result_poster_bytes(title) for title in ranked[:display_count]}
+    poster_bytes = generate_share_poster_bytes(
+        theme,
+        ranked,
+        skipped_items,
+        top_k,
+        mode,
+        user_name,
+        poster_style,
+        poster_format,
+        share_url=share_url,
+        poster_bytes_map=poster_bytes_map,
+    )
     st.session_state[k("share_poster_bytes")] = poster_bytes
     st.session_state[k("share_poster_signature")] = signature
 
@@ -2121,8 +2303,10 @@ def render_battle_picker(
     show_poster: bool,
     key: str,
 ) -> Optional[str]:
-    left_poster = poster_data_uri(get_poster_for_option(left_title)) if show_poster else None
-    right_poster = poster_data_uri(get_poster_for_option(right_title)) if show_poster else None
+    left_poster_bytes = get_poster_for_option(left_title, fetch=False) if show_poster else None
+    right_poster_bytes = get_poster_for_option(right_title, fetch=False) if show_poster else None
+    left_poster = poster_preview_data_uri(left_poster_bytes) if left_poster_bytes else None
+    right_poster = poster_preview_data_uri(right_poster_bytes) if right_poster_bytes else None
     result = BATTLE_PICKER_COMPONENT(
         left={"label": left_label, "title": left_title, "poster": left_poster, "hotkey": "A / ←"},
         right={"label": right_label, "title": right_title, "poster": right_poster, "hotkey": "D / →"},
@@ -2215,7 +2399,7 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
             SHARE_POSTER_FORMATS,
             key=k("share_poster_format"),
         )
-    ensure_share_poster_generated()
+    ensure_share_poster_generated(challenge_url)
 
     poster_bytes = st.session_state.get(k("share_poster_bytes"), b"")
     if poster_bytes:
