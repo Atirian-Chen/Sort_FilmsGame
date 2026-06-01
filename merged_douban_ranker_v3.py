@@ -730,6 +730,15 @@ def render_app_styles() -> None:
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+            color: inherit;
+            text-decoration: none !important;
+            transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+        }
+        .challenge-card:hover {
+            border-color: #9b6a58;
+            box-shadow: 0 0 0 3px rgba(155, 106, 88, 0.10);
+            transform: translateY(-1px);
+            text-decoration: none !important;
         }
         .challenge-badge {
             display: inline-block;
@@ -754,6 +763,24 @@ def render_app_styles() -> None:
             color: #6f665d;
             font-size: 12px;
             line-height: 1.38;
+        }
+        .challenge-foot {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .challenge-action {
+            display: block;
+            width: 100%;
+            border-radius: 6px;
+            background: #2b2f36;
+            color: #fffaf4 !important;
+            font-size: 13px;
+            font-weight: 760;
+            line-height: 1;
+            text-align: center;
+            padding: 11px 10px;
         }
         .dashboard-table {
             border: 1px solid #e7e1d8;
@@ -821,7 +848,7 @@ def render_app_styles() -> None:
         .mini-note {
             color: #7a746c;
             font-size: 13px;
-            line-height: 1.5;
+            line-height: 1.35;
         }
         .home-step-copy {
             color: #7a746c;
@@ -2880,24 +2907,21 @@ def render_mode_selection_page() -> None:
 
     card_html = []
     for template in FILM_CHALLENGE_TEMPLATES:
+        template_id = html.escape(str(template["id"]), quote=True)
         card_html.append(
-            f'<div class="challenge-card">'
+            f'<a class="challenge-card" href="?list={template_id}" target="_self" aria-label="整理 {html.escape(str(template["name"]), quote=True)}">'
             f'<div>'
             f'<span class="challenge-badge">{html.escape(str(template.get("badge", "电影片单")))}</span>'
             f'<div class="challenge-title">{html.escape(str(template["name"]))}</div>'
             f'<div class="challenge-copy">{html.escape(str(template.get("tagline", "")))}</div>'
             f'</div>'
+            f'<div class="challenge-foot">'
             f'<div class="mini-note">{len(template.get("items", []))} 部电影 · 前 {template.get("top_k", 10)} 名</div>'
+            f'<span class="challenge-action">整理</span>'
             f'</div>'
+            f'</a>'
         )
     st.markdown(f'<div class="challenge-grid">{"".join(card_html)}</div>', unsafe_allow_html=True)
-
-    cols = st.columns(len(FILM_CHALLENGE_TEMPLATES))
-    for idx, template in enumerate(FILM_CHALLENGE_TEMPLATES):
-        with cols[idx]:
-            template_id = str(template["id"])
-            if render_button_compat("整理", key=f"btn_start_template_{template_id}", use_container_width=True, button_type="primary"):
-                start_challenge(challenge_from_template(template))
 
     with st.expander("把这份片单发给朋友", expanded=False):
         selected_template_name = st.selectbox(
