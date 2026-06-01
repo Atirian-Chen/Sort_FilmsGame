@@ -62,7 +62,7 @@ from launch_copy import (
 DOUBAN_TOP250_URL = "https://movie.douban.com/top250"
 DOUBAN_SUGGEST_URL = "https://movie.douban.com/j/subject_suggest"
 IMDB_SUGGEST_URL = "https://v3.sg.media-imdb.com/suggestion"
-APP_TITLE = "电影审美名片"
+APP_TITLE = "电影审美名单"
 APP_SUBTITLE = HERO_SUBTITLE
 COVER_IMAGE_PATH = Path(__file__).parent / "assets" / "cover_banner.png"
 POSTER_CACHE_DIR = Path(__file__).parent / "cache" / "verified_posters"
@@ -144,39 +144,39 @@ CURATED_IMDB_POSTERS: Dict[str, Dict[str, str]] = {
     "蓝色情人节": {"query": "blue_valentine", "imdb_id": "tt1120985"},
 }
 
-MODE_CUSTOM = "自定义模式"
-MODE_DOUBAN = "豆瓣电影模式"
+MODE_CUSTOM = "自备片单"
+MODE_DOUBAN = "豆瓣高分"
 
 CUSTOM_TEMPLATES = [
     {
         "name": "周末电影",
-        "theme": "我的周末电影偏爱榜",
+        "theme": "我的周末电影名单",
         "items": ["千与千寻", "星际穿越", "盗梦空间", "怦然心动", "机器人总动员", "海上钢琴师", "疯狂动物城", "泰坦尼克号", "阿甘正传", "肖申克的救赎"],
     },
     {
         "name": "导演私藏",
-        "theme": "我的导演作品偏爱榜",
+        "theme": "我的导演作品名单",
         "items": ["花样年华", "重庆森林", "一一", "牯岭街少年杀人事件", "饮食男女", "阳光灿烂的日子", "让子弹飞", "无间道", "霸王别姬", "活着"],
     },
     {
         "name": "爱情电影",
-        "theme": "我的爱情电影偏爱榜",
+        "theme": "我的爱情电影名单",
         "items": ["爱在黎明破晓前", "爱在日落黄昏时", "怦然心动", "花束般的恋爱", "时空恋旅人", "泰坦尼克号", "甜蜜蜜", "重庆森林", "恋恋笔记本", "一天"],
     },
     {
         "name": "动画电影",
-        "theme": "我的动画电影偏爱榜",
+        "theme": "我的动画电影名单",
         "items": ["千与千寻", "龙猫", "天空之城", "哈尔的移动城堡", "疯狂动物城", "机器人总动员", "寻梦环游记", "飞屋环游记", "你想活出怎样的人生", "哪吒之魔童降世"],
     },
 ]
 
 DOUBAN_PRESETS = [
-    ("快排局", 10, 40),
-    ("标准局", 10, 100),
-    ("深挖局", 20, 180),
+    ("轻量", 10, 40),
+    ("标准", 10, 100),
+    ("细排", 20, 180),
 ]
 
-SHARE_POSTER_STYLES = ["清爽白卡", "热映红毯", "午夜霓虹"]
+SHARE_POSTER_STYLES = ["留白卡片", "银幕红", "夜场蓝"]
 SHARE_POSTER_FORMATS = ["方图 1:1", "长图 9:16", "自适应长图"]
 
 HISTORY_KEYS = [
@@ -340,25 +340,60 @@ def render_app_styles() -> None:
     st.markdown(
         """
         <style>
+        .stApp {
+            background: #fbfaf7;
+            color: #1f2328;
+        }
+        section.main > div {
+            padding-top: 1rem;
+        }
+        div[data-testid="stButton"] > button {
+            min-height: 34px;
+            border-radius: 6px;
+            border-color: #d8d1c6;
+            background: #fffdf9;
+            color: #2b2f36;
+            font-size: 13px;
+            font-weight: 650;
+            padding: 0.34rem 0.72rem;
+            box-shadow: none;
+        }
+        div[data-testid="stButton"] > button:hover {
+            border-color: #9b6a58;
+            color: #6f3f31;
+            background: #fffaf4;
+        }
+        div[data-testid="stButton"] > button[kind="primary"],
+        div[data-testid="stButton"] > button[data-testid="baseButton-primary"] {
+            border-color: #2b2f36;
+            background: #2b2f36;
+            color: #fffaf4;
+        }
+        div[data-testid="stMetric"] {
+            background: #fffdf9;
+            border: 1px solid #e7e1d8;
+            border-radius: 8px;
+            padding: 10px 12px;
+        }
         .compact-status {
             display: grid;
             grid-template-columns: repeat(6, minmax(0, 1fr));
-            gap: 8px;
+            gap: 7px;
             margin: 4px 0 8px;
         }
         .status-chip {
-            border: 1px solid #e6e8ef;
+            border: 1px solid #e7e1d8;
             border-radius: 8px;
-            padding: 8px 10px;
-            background: #fff;
+            padding: 7px 9px;
+            background: #fffdf9;
         }
         .status-label {
-            color: #667085;
+            color: #7a746c;
             font-size: 12px;
             line-height: 1.2;
         }
         .status-value {
-            color: #151922;
+            color: #1f2328;
             font-size: 16px;
             font-weight: 700;
             line-height: 1.35;
@@ -372,12 +407,12 @@ def render_app_styles() -> None:
             margin-bottom: 6px;
         }
         .battle-label {
-            color: #475467;
+            color: #6f665d;
             font-size: 13px;
             font-weight: 700;
         }
         .battle-title {
-            color: #101828;
+            color: #1f2328;
             font-size: clamp(18px, 2.3vw, 24px);
             font-weight: 800;
             line-height: 1.25;
@@ -387,10 +422,10 @@ def render_app_styles() -> None:
         }
         .poster-placeholder {
             height: min(46vh, 440px);
-            border: 1px dashed #cfd4dc;
+            border: 1px dashed #d8d1c6;
             border-radius: 8px;
-            background: #f7f8fb;
-            color: #667085;
+            background: #fffaf4;
+            color: #7a746c;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -400,9 +435,9 @@ def render_app_styles() -> None:
         }
         .poster-choice-frame {
             height: min(46vh, 440px);
-            border: 1px solid #e6e8ef;
+            border: 1px solid #e7e1d8;
             border-radius: 8px;
-            background: #f8f9fb;
+            background: #fffaf4;
             padding: 8px;
             margin-bottom: 8px;
         }
@@ -418,13 +453,13 @@ def render_app_styles() -> None:
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #475467;
+            color: #6f665d;
             font-weight: 700;
             text-align: center;
             padding: 16px;
         }
         .choice-help {
-            color: #667085;
+            color: #7a746c;
             font-size: 13px;
             font-weight: 700;
             margin: 6px 0 0;
@@ -437,21 +472,21 @@ def render_app_styles() -> None:
             font-size: clamp(30px, 4vw, 50px);
             font-weight: 900;
             line-height: 1.05;
-            color: #111827;
+            color: #1f2328;
             margin: 8px 0 8px;
         }
         .cover-subtitle {
-            color: #4b5563;
+            color: #5f574f;
             font-size: 16px;
             line-height: 1.55;
             margin-bottom: 8px;
         }
         .cover-tag {
             display: inline-block;
-            border: 1px solid #d0d5dd;
+            border: 1px solid #d8d1c6;
             border-radius: 999px;
             padding: 6px 12px;
-            color: #475467;
+            color: #6f665d;
             font-weight: 700;
             font-size: 13px;
             background: #fff;
@@ -466,30 +501,31 @@ def render_app_styles() -> None:
         .launch-hero {
             display: grid;
             grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
-            gap: 14px;
+            gap: 18px;
             align-items: center;
-            margin-bottom: 6px;
+            margin-bottom: 8px;
+            padding: 4px 0 2px;
         }
         .hero-copy {
             min-width: 0;
         }
         .hero-kicker {
-            color: #315efb;
+            color: #8a4f3d;
             font-size: 12px;
             font-weight: 850;
             letter-spacing: 0;
             margin-bottom: 6px;
         }
         .hero-title {
-            color: #101828;
-            font-size: clamp(30px, 4vw, 48px);
-            font-weight: 950;
+            color: #1f2328;
+            font-size: clamp(32px, 4vw, 50px);
+            font-weight: 880;
             letter-spacing: 0;
             line-height: 1.02;
             margin: 0 0 8px;
         }
         .hero-subtitle {
-            color: #3f4756;
+            color: #5f574f;
             font-size: 15px;
             line-height: 1.5;
             margin: 0;
@@ -498,35 +534,35 @@ def render_app_styles() -> None:
         .hero-proof {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 6px;
+            gap: 7px;
             margin: 8px 0 2px;
         }
         .hero-proof-item {
-            border: 1px solid #e6e8ef;
+            border: 1px solid #e7e1d8;
             border-radius: 8px;
-            padding: 8px 9px;
-            background: #fff;
+            padding: 8px 10px;
+            background: #fffdf9;
         }
         .hero-proof-value {
-            color: #101828;
+            color: #1f2328;
             font-weight: 900;
             font-size: 17px;
             line-height: 1.25;
         }
         .hero-proof-label {
-            color: #667085;
+            color: #7a746c;
             font-size: 11px;
             line-height: 1.3;
             margin-top: 2px;
         }
         .example-card {
-            border: 1px solid #e0e7ff;
+            border: 1px solid #e7e1d8;
             border-radius: 8px;
-            background: #f8f9ff;
-            padding: 10px;
+            background: #fffdf9;
+            padding: 12px;
         }
         .example-title {
-            color: #101828;
+            color: #1f2328;
             font-size: 15px;
             font-weight: 900;
             margin-bottom: 6px;
@@ -535,15 +571,15 @@ def render_app_styles() -> None:
             display: flex;
             align-items: center;
             gap: 8px;
-            border-top: 1px solid #e6e8ef;
+            border-top: 1px solid #eee7dd;
             padding: 6px 0;
-            color: #202636;
+            color: #2b2f36;
             font-weight: 750;
             font-size: 13px;
         }
         .example-rank span:first-child {
             width: 34px;
-            color: #315efb;
+            color: #8a4f3d;
             font-weight: 900;
         }
         .challenge-grid {
@@ -553,11 +589,11 @@ def render_app_styles() -> None:
             margin: 6px 0 8px;
         }
         .challenge-card {
-            border: 1px solid #e6e8ef;
+            border: 1px solid #e7e1d8;
             border-radius: 8px;
-            background: #fff;
-            padding: 10px;
-            min-height: 118px;
+            background: #fffdf9;
+            padding: 11px;
+            min-height: 112px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -565,53 +601,53 @@ def render_app_styles() -> None:
         .challenge-badge {
             display: inline-block;
             width: fit-content;
-            border: 1px solid #d9e2ff;
+            border: 1px solid #ead9cc;
             border-radius: 999px;
-            color: #315efb;
-            background: #f4f7ff;
+            color: #8a4f3d;
+            background: #fff6ef;
             padding: 3px 7px;
             font-size: 11px;
             font-weight: 800;
             margin-bottom: 6px;
         }
         .challenge-title {
-            color: #101828;
+            color: #1f2328;
             font-size: 15px;
-            font-weight: 900;
+            font-weight: 820;
             line-height: 1.3;
             margin-bottom: 4px;
         }
         .challenge-copy {
-            color: #667085;
+            color: #6f665d;
             font-size: 12px;
             line-height: 1.38;
         }
         .dashboard-table {
-            border: 1px solid #e6e8ef;
+            border: 1px solid #e7e1d8;
             border-radius: 8px;
-            background: #fff;
+            background: #fffdf9;
             padding: 12px;
             margin: 8px 0;
         }
         .rank-card {
-            border: 1px solid #e6e8ef;
+            border: 1px solid #e7e1d8;
             border-radius: 8px;
             padding: 10px 12px;
             margin: 8px 0;
-            background: #fff;
+            background: #fffdf9;
         }
         .rank-card.top-rank {
-            border-color: #c8d2ff;
-            background: #f8f9ff;
+            border-color: #ead9cc;
+            background: #fff6ef;
         }
         .rank-num {
             display: inline-block;
             width: 44px;
-            color: #4355db;
+            color: #8a4f3d;
             font-weight: 800;
         }
         .rank-name {
-            color: #151922;
+            color: #1f2328;
             font-weight: 650;
             overflow-wrap: anywhere;
         }
@@ -622,35 +658,35 @@ def render_app_styles() -> None:
             margin: 10px 0 12px;
         }
         .insight-card {
-            border: 1px solid #e6e8ef;
+            border: 1px solid #e7e1d8;
             border-radius: 8px;
-            background: #fff;
+            background: #fffdf9;
             padding: 12px;
             min-width: 0;
         }
         .insight-label {
-            color: #667085;
+            color: #7a746c;
             font-size: 12px;
             line-height: 1.25;
             margin-bottom: 4px;
         }
         .insight-value {
-            color: #101828;
+            color: #1f2328;
             font-size: 17px;
             font-weight: 800;
             line-height: 1.3;
             overflow-wrap: anywhere;
         }
         .share-callout {
-            border: 1px solid #d9e2ff;
+            border: 1px solid #ead9cc;
             border-radius: 8px;
-            background: #f7f9ff;
+            background: #fff6ef;
             padding: 12px 14px;
-            color: #24324b;
+            color: #4b352d;
             margin: 8px 0 12px;
         }
         .mini-note {
-            color: #667085;
+            color: #7a746c;
             font-size: 13px;
             line-height: 1.5;
         }
@@ -1386,19 +1422,19 @@ def build_export_payloads(
 
     txt_lines = [
         theme,
-        f"署名：{user_name or '匿名'}",
+        f"署名：{user_name or '未署名'}",
         f"模式：{mode}",
         "类型：完整排序" if top_k is None else f"类型：Top {min(top_k, len(ranked))}",
-        f"比较次数：{comparisons}",
-        f"稍后再比：{defers}",
-        f"对局口令：{seed_text or '未设置'}",
+        f"取舍次数：{comparisons}",
+        f"暂放次数：{defers}",
+        f"顺序口令：{seed_text or '未设置'}",
         f"生成时间：{generated_at}",
         "",
-        "排名结果：",
+        "整理结果：",
     ]
     txt_lines.extend(f"{idx}. {item}" for idx, item in enumerate(ranked, 1))
     if skipped_items:
-        txt_lines.extend(["", "已跳过："])
+        txt_lines.extend(["", "已略过："])
         txt_lines.extend(f"- {item}" for item in skipped_items)
     txt_bytes = "\n".join(txt_lines).encode("utf-8-sig")
 
@@ -1433,17 +1469,17 @@ def build_export_payloads(
     md_lines = [
         f"# {theme}",
         "",
-        f"- 署名：{user_name or '匿名'}",
+        f"- 署名：{user_name or '未署名'}",
         f"- 模式：{mode}",
-        f"- 比较次数：{comparisons}",
-        f"- 稍后再比：{defers}",
+        f"- 取舍次数：{comparisons}",
+        f"- 暂放次数：{defers}",
     ]
     if seed_text:
-        md_lines.append(f"- 对局口令：`{seed_text}`")
-    md_lines.extend(["", "## 排名结果"])
+        md_lines.append(f"- 顺序口令：`{seed_text}`")
+    md_lines.extend(["", "## 整理结果"])
     md_lines.extend(f"{idx}. {item}" for idx, item in enumerate(ranked, 1))
     if skipped_items:
-        md_lines.extend(["", "## 已跳过"])
+        md_lines.extend(["", "## 已略过"])
         md_lines.extend(f"- {item}" for item in skipped_items)
     md_bytes = "\n".join(md_lines).encode("utf-8")
 
@@ -1486,7 +1522,7 @@ def build_share_caption(
     if user_name:
         extras.append(f"署名：{user_name}")
     if skipped_items:
-        extras.append(f"跳过了 {len(skipped_items)} 个没看过/不熟悉项。")
+        extras.append(f"略过了 {len(skipped_items)} 部暂时不想判断的电影。")
     if extras:
         return caption + "\n" + "\n".join(extras)
     return caption
@@ -1494,15 +1530,15 @@ def build_share_caption(
 
 def result_archetype(comparisons: int, expected: int, skipped_count: int, ranked_count: int) -> str:
     if ranked_count <= 1:
-        return "刚开榜"
+        return "刚开始整理"
     ratio = comparisons / max(1, expected)
     if skipped_count >= max(3, ranked_count // 4):
-        return "精准筛选派"
+        return "取舍清晰"
     if ratio <= 0.65:
-        return "果断派"
+        return "直觉很稳"
     if ratio >= 1.1:
-        return "认真纠结派"
-    return "稳定输出派"
+        return "认真斟酌"
+    return "节奏稳定"
 
 
 def render_result_insights(total: int, comparisons: int, top_k: Optional[int]) -> None:
@@ -1517,10 +1553,10 @@ def render_result_insights(total: int, comparisons: int, top_k: Optional[int]) -
     st.markdown(
         f"""
         <div class="insight-grid">
-          <div class="insight-card"><div class="insight-label">冠军</div><div class="insight-value">{html.escape(champion)}</div></div>
+          <div class="insight-card"><div class="insight-label">最前面</div><div class="insight-value">{html.escape(champion)}</div></div>
           <div class="insight-card"><div class="insight-label">前三名</div><div class="insight-value">{html.escape(podium)}</div></div>
-          <div class="insight-card"><div class="insight-label">人格标签</div><div class="insight-value">{html.escape(archetype)}</div></div>
-          <div class="insight-card"><div class="insight-label">相对预估少做</div><div class="insight-value">{html.escape(efficiency)}</div></div>
+          <div class="insight-card"><div class="insight-label">整理节奏</div><div class="insight-value">{html.escape(archetype)}</div></div>
+          <div class="insight-card"><div class="insight-label">少做判断</div><div class="insight-value">{html.escape(efficiency)}</div></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1562,9 +1598,9 @@ def compare_rankings(my_ranked: List[str], friend_ranked: List[str]) -> dict:
 
 
 def render_friend_compare(my_ranked: List[str]) -> None:
-    with st.expander("好友榜单对比", expanded=False):
-        st.caption("让朋友下载 JSON 榜单后发给你，导入这里就能看到你们到底差在哪。")
-        uploaded = st.file_uploader("导入朋友的 JSON 榜单", type=["json"], key="friend_ranking_json")
+    with st.expander("两份名单的差异", expanded=False):
+        st.caption("导入另一份 JSON 名单，看看你们把同一批电影放在了哪里。")
+        uploaded = st.file_uploader("导入另一份 JSON 名单", type=["json"], key="friend_ranking_json")
         if not uploaded:
             return
         try:
@@ -1574,18 +1610,18 @@ def render_friend_compare(my_ranked: List[str]) -> None:
             st.error(f"读取失败：{e}")
             return
         if not friend_ranked:
-            st.warning("这个 JSON 里没有可识别的排名结果。")
+            st.warning("这个 JSON 里没有可识别的整理结果。")
             return
         comparison = compare_rankings(my_ranked, friend_ranked)
         shared = comparison["shared"]
         if not shared:
-            st.info("你们的榜单没有重合候选项。")
+            st.info("两份名单里没有重合电影。")
             return
-        friend_name = payload.get("user_name") or "朋友"
+        friend_name = payload.get("user_name") or "对方"
         st.markdown(
             f"""
             <div class="share-callout">
-              你和 {html.escape(str(friend_name))} 共有 {len(shared)} 个重合项；Top 5 重合 {comparison["top_overlap"]} 个；平均排名差 {comparison["avg_gap"]:.1f} 位。
+              你和 {html.escape(str(friend_name))} 共有 {len(shared)} 部重合电影；前 5 名重合 {comparison["top_overlap"]} 部；平均相差 {comparison["avg_gap"]:.1f} 位。
             </div>
             """,
             unsafe_allow_html=True,
@@ -1593,13 +1629,13 @@ def render_friend_compare(my_ranked: List[str]) -> None:
         biggest = comparison["biggest_gap"]
         if biggest:
             item, gap, mine, friend = biggest
-            st.caption(f"分歧最大：{item}，你排第 {mine}，对方排第 {friend}，相差 {gap} 位。")
+            st.caption(f"相差最大：{item}，你放在第 {mine} 位，对方放在第 {friend} 位，相差 {gap} 位。")
 
 
 def current_challenge_for_share() -> Challenge:
     return Challenge(
         id=st.session_state.get(k("challenge_id"), ""),
-        theme=st.session_state.get(k("theme"), "电影审美片单"),
+        theme=st.session_state.get(k("theme"), "电影审美名单"),
         mode=st.session_state.get(k("mode"), MODE_CUSTOM),
         items=st.session_state.get(k("source_options"), []),
         top_k=st.session_state.get(k("top_k")),
@@ -1638,7 +1674,7 @@ def start_challenge(challenge: Challenge, *, show_poster: bool = True) -> None:
 
 
 def resolve_challenge_from_url() -> Optional[Challenge]:
-    challenge_id = get_query_param("challenge")
+    challenge_id = get_query_param("list") or get_query_param("challenge")
     if challenge_id:
         template = get_template(challenge_id)
         if template:
@@ -1653,7 +1689,7 @@ def resolve_challenge_from_url() -> Optional[Challenge]:
 
 
 def maybe_open_url_challenge() -> None:
-    challenge_id = get_query_param("challenge") or get_query_param("payload")
+    challenge_id = get_query_param("list") or get_query_param("challenge") or get_query_param("payload")
     if not challenge_id or st.session_state.get("loaded_url_challenge") == challenge_id:
         return
 
@@ -1688,9 +1724,9 @@ def render_public_metrics() -> None:
     st.markdown(
         f"""
         <div class="hero-proof">
-          <div class="hero-proof-item"><div class="hero-proof-value">{completed}</div><div class="hero-proof-label">已完成榜单</div></div>
-          <div class="hero-proof-item"><div class="hero-proof-value">{today_users}</div><div class="hero-proof-label">今日开排</div></div>
-          <div class="hero-proof-item"><div class="hero-proof-value">{avg:.1f}</div><div class="hero-proof-label">平均比较次数</div></div>
+          <div class="hero-proof-item"><div class="hero-proof-value">{completed}</div><div class="hero-proof-label">已整理名单</div></div>
+          <div class="hero-proof-item"><div class="hero-proof-value">{today_users}</div><div class="hero-proof-label">今日整理</div></div>
+          <div class="hero-proof-item"><div class="hero-proof-value">{avg:.1f}</div><div class="hero-proof-label">平均取舍次数</div></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1704,7 +1740,7 @@ def render_admin_dashboard() -> None:
         st.error("后台口令无效或未配置。")
         return
 
-    st.title("电影审美名片 · 匿名数据看板")
+    st.title("电影审美名单 · 匿名数据看板")
     metrics = fetch_admin_metrics()
     if not metrics.get("enabled"):
         st.warning("Supabase 还没有配置，暂时没有可展示的数据。")
@@ -1715,11 +1751,11 @@ def render_admin_dashboard() -> None:
     with c1:
         st.metric("访问", counts.get(EVENT_PAGE_VIEW, 0))
     with c2:
-        st.metric("开局", counts.get(EVENT_RANKING_STARTED, 0))
+        st.metric("开始整理", counts.get(EVENT_RANKING_STARTED, 0))
     with c3:
         st.metric("完成", counts.get(EVENT_RANKING_COMPLETED, 0), f"{metrics.get('completion_rate', 0):.1%}")
     with c4:
-        st.metric("复制分享", counts.get(EVENT_SHARE_LINK_COPIED, 0), f"{metrics.get('share_rate', 0):.1%}")
+        st.metric("复制链接", counts.get(EVENT_SHARE_LINK_COPIED, 0), f"{metrics.get('share_rate', 0):.1%}")
 
     left, right = st.columns(2)
     with left:
@@ -1742,13 +1778,13 @@ def render_cover_header() -> None:
         f"""
         <div class="launch-hero">
           <div class="hero-copy">
-            <div class="hero-kicker">电影审美名单 · 公开测试版</div>
+            <div class="hero-kicker">电影片单整理器</div>
             <h1 class="hero-title">{html.escape(HERO_TITLE)}</h1>
             <p class="hero-subtitle">{html.escape(HERO_SUBTITLE)} {html.escape(HERO_TAGLINE)}</p>
           </div>
           <div class="example-card">
             {image_html}
-            <div class="example-title">示例结果：我的电影审美名片</div>
+            <div class="example-title">示例：一份电影审美名单</div>
             <div class="example-rank"><span>#01</span><div>千与千寻</div></div>
             <div class="example-rank"><span>#02</span><div>星际穿越</div></div>
             <div class="example-rank"><span>#03</span><div>霸王别姬</div></div>
@@ -1949,11 +1985,11 @@ def generate_share_poster_bytes(
     y += 78
 
     if top_k is None:
-        subtitle = "完整偏爱排序"
+        subtitle = "完整偏爱顺序"
     elif mode == MODE_DOUBAN:
-        subtitle = f"豆瓣电影 Top {min(top_k, len(ranked))}"
+        subtitle = f"豆瓣电影前 {min(top_k, len(ranked))} 名"
     else:
-        subtitle = f"自定义 Top {min(top_k, len(ranked))}"
+        subtitle = f"保留前 {min(top_k, len(ranked))} 名"
     draw.text((padding, y), subtitle, font=subtitle_font, fill=palette["muted"])
     y += 54
     if user_name:
@@ -1971,14 +2007,14 @@ def generate_share_poster_bytes(
         y += row_height
 
     if len(display_ranked) < len(ranked):
-        draw.text((padding + 90, y), f"还有 {len(ranked) - len(display_ranked)} 项完整结果", font=small_font, fill=palette["muted"])
+        draw.text((padding + 90, y), f"还有 {len(ranked) - len(display_ranked)} 项完整名单", font=small_font, fill=palette["muted"])
         y += 38
 
     if skipped_items:
         y += 12
         draw.line((padding, y, width - padding, y), fill=palette["outline"], width=2)
         y += 24
-        skipped_text = f"已跳过未看过/不熟悉项：{len(skipped_items)} 个"
+        skipped_text = f"已略过暂不判断的电影：{len(skipped_items)} 部"
         draw.text((padding, y), skipped_text, font=small_font, fill=palette["muted"])
         y += 36
 
@@ -2007,7 +2043,7 @@ def generate_challenge_poster_bytes(theme: str, challenge_url: str, item_count: 
     draw.rounded_rectangle((48, 48, width - 48, height - 48), radius=34, fill=palette["card"], outline=palette["outline"], width=2)
 
     y = 110
-    draw.text((80, y), "电影审美片单", font=subtitle_font, fill=palette["accent"])
+    draw.text((80, y), "电影审美名单", font=subtitle_font, fill=palette["accent"])
     y += 72
     for line in wrap_text(draw, theme, title_font, width - 160):
         draw.text((80, y), line, font=title_font, fill=palette["title"])
@@ -2027,8 +2063,8 @@ def generate_challenge_poster_bytes(theme: str, challenge_url: str, item_count: 
 
     y += 40
     draw.rounded_rectangle((80, y, width - 80, y + 220), radius=22, fill=(255, 255, 255), outline=palette["outline"], width=2)
-    draw.text((110, y + 36), "同题入口", font=subtitle_font, fill=palette["title"])
-    url_lines = wrap_text(draw, challenge_url or "部署后复制同题入口", small_font, width - 220)
+    draw.text((110, y + 36), "同一份片单", font=subtitle_font, fill=palette["title"])
+    url_lines = wrap_text(draw, challenge_url or "部署后复制片单链接", small_font, width - 220)
     yy = y + 94
     for line in url_lines[:4]:
         draw.text((110, yy), line, font=small_font, fill=palette["muted"])
@@ -2141,21 +2177,21 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
         st.session_state[k("completion_event_signature")] = completion_signature
 
     if top_k is None:
-        st.success("🎉 排序完成！下面是你的完整排名：")
+        st.success("已经整理完成。下面是你的完整名单。")
     else:
-        st.success(f"🎉 排序完成！下面是你的 Top {len(ranked)}：")
+        st.success(f"已经整理完成。下面是你的前 {len(ranked)} 名。")
 
     render_result_insights(total=total, comparisons=comparisons, top_k=top_k)
     render_ranked_list(ranked)
 
-    summary = f"共处理 {total} 个候选项，完成比较 {comparisons} 次。"
+    summary = f"共整理 {total} 部电影，作出 {comparisons} 次取舍。"
     if skipped_items:
-        summary += f" 已跳过 {len(skipped_items)} 项。"
+        summary += f" 已略过 {len(skipped_items)} 项。"
     if defers:
-        summary += f" 稍后再比 {defers} 次。"
+        summary += f" 暂放 {defers} 次。"
     st.caption(summary)
 
-    st.subheader("分享资产")
+    st.subheader("保存与分享")
     if st.session_state.get(k("share_poster_style")) not in SHARE_POSTER_STYLES:
         st.session_state[k("share_poster_style")] = SHARE_POSTER_STYLES[0]
     if st.session_state.get(k("share_poster_format")) not in SHARE_POSTER_FORMATS:
@@ -2177,11 +2213,11 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
 
     poster_bytes = st.session_state.get(k("share_poster_bytes"), b"")
     if poster_bytes:
-        with st.expander("🖼️ 可分享海报", expanded=True):
+        with st.expander("结果海报", expanded=True):
             show_image_compat(poster_bytes)
             file_name = f"{slugify_filename(st.session_state.get(k('theme'), 'ranking'))}_share.png"
             render_download_button_compat(
-                "⬇️ 下载分享海报",
+                "下载结果海报",
                 data=poster_bytes,
                 file_name=file_name,
                 mime="image/png",
@@ -2197,14 +2233,14 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
             )
 
     challenge_poster = generate_challenge_poster_bytes(
-        st.session_state.get(k("theme"), "电影审美片单"),
+        st.session_state.get(k("theme"), "电影审美名单"),
         challenge_url,
         len(st.session_state.get(k("source_options"), [])),
     )
-    with st.expander("邀请朋友同排的海报", expanded=False):
+    with st.expander("同一份片单海报", expanded=False):
         show_image_compat(challenge_poster)
         render_download_button_compat(
-            "下载同题海报",
+            "下载片单海报",
             data=challenge_poster,
             file_name=f"{slugify_filename(st.session_state.get(k('theme'), 'challenge'))}_challenge.png",
             mime="image/png",
@@ -2230,10 +2266,10 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
         seed_text=seed_text,
         challenge_url=challenge_url,
     )
-    with st.expander("可直接发布的分享文案", expanded=True):
+    with st.expander("发布文案", expanded=True):
         st.text_area("文案", value=share_caption, height=220)
-        st.caption("发朋友圈、群聊或评论区时直接使用；JSON 可以发给朋友做榜单对比。")
-        if render_copy_button("复制同题入口", challenge_url, "copy_result_challenge_link", "同题入口"):
+        st.caption("发朋友圈、群聊或评论区时可以直接使用；JSON 可用于查看两份名单的差异。")
+        if render_copy_button("复制片单链接", challenge_url, "copy_result_challenge_link", "片单链接"):
             track_event(
                 EVENT_SHARE_LINK_COPIED,
                 challenge_id=challenge_id,
@@ -2242,7 +2278,7 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                 source_channel=source_channel,
                 payload={"surface": "result"},
             )
-        if render_copy_button("复制发布文案", share_caption, "copy_result_share_caption", "发布文案"):
+        if render_copy_button("复制文案", share_caption, "copy_result_share_caption", "发布文案"):
             track_event(
                 EVENT_SHARE_LINK_COPIED,
                 challenge_id=challenge_id,
@@ -2271,7 +2307,7 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
         with d2:
             render_download_button_compat("下载 CSV", csv_bytes, f"{base_name}.csv", "text/csv", "btn_export_csv")
         with d3:
-            render_download_button_compat("下载同题 JSON", json_bytes, f"{base_name}.json", "application/json", "btn_export_json")
+            render_download_button_compat("下载片单 JSON", json_bytes, f"{base_name}.json", "application/json", "btn_export_json")
         with d4:
             render_download_button_compat("下载 Markdown", md_bytes, f"{base_name}.md", "text/markdown", "btn_export_md")
 
@@ -2279,20 +2315,20 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        if render_button_compat("↩️ 撤销上一步", key="btn_undo_result", use_container_width=True):
+        if render_button_compat("撤销上一步", key="btn_undo_result", use_container_width=True):
             undo_last_step()
     with col2:
-        if render_button_compat("重新排序", key="btn_reset_same", use_container_width=True):
+        if render_button_compat("再排一次", key="btn_reset_same", use_container_width=True):
             reset_same_config()
     with col3:
-        if render_button_compat("清空结果", key="btn_clear_result", use_container_width=True):
+        if render_button_compat("清空", key="btn_clear_result", use_container_width=True):
             clear_ranking_state()
             rerun()
 
 
 def render_right_panel() -> None:
     if not st.session_state.get(k("started"), False):
-        st.info("参数填写完成后，点击开始按钮即可。")
+        st.info("片单准备好后，就可以开始逐组选择。")
         return
 
     theme = st.session_state.get(k("theme"), "我的排序")
@@ -2309,7 +2345,7 @@ def render_right_panel() -> None:
     defers = st.session_state.get(k("defers"), 0)
 
     if st.session_state.get(k("finished"), False):
-        st.subheader(f"当前主题：{theme}")
+        st.subheader(f"这份片单：{theme}")
         render_result_section(total=total, comparisons=comparisons, top_k=top_k)
         return
 
@@ -2328,33 +2364,33 @@ def render_right_panel() -> None:
     st.progress(progress)
     remaining_estimate = estimated_remaining_comparisons(total, processed, top_k)
     if top_k is None:
-        mode_label = "自定义完整排序"
+        mode_label = "完整顺序"
     elif mode == MODE_DOUBAN:
-        mode_label = f"豆瓣 Top {top_k}"
+        mode_label = f"豆瓣前 {top_k} 名"
     else:
-        mode_label = f"自定义 Top {top_k}"
-    player_label = user_name or "匿名玩家"
+        mode_label = f"保留前 {top_k} 名"
+    player_label = user_name or "未署名"
 
     st.markdown(
         f"""
         <div class="compact-status">
           <div class="status-chip"><div class="status-label">主题</div><div class="status-value">{html.escape(theme)}</div></div>
-          <div class="status-chip"><div class="status-label">玩家</div><div class="status-value">{html.escape(player_label)}</div></div>
+          <div class="status-chip"><div class="status-label">署名</div><div class="status-value">{html.escape(player_label)}</div></div>
           <div class="status-chip"><div class="status-label">进度</div><div class="status-value">{processed}/{total}</div></div>
-          <div class="status-chip"><div class="status-label">已比较</div><div class="status-value">{comparisons}</div></div>
+          <div class="status-chip"><div class="status-label">已取舍</div><div class="status-value">{comparisons}</div></div>
           <div class="status-chip"><div class="status-label">预计剩余</div><div class="status-value">约 {remaining_estimate}</div></div>
-          <div class="status-chip"><div class="status-label">跳过 / 稍后</div><div class="status-value">{len(skipped_items)} / {defers}</div></div>
+          <div class="status-chip"><div class="status-label">略过 / 暂放</div><div class="status-value">{len(skipped_items)} / {defers}</div></div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.caption(f"{mode_label}。快捷键：A/← 选择左侧，D/→ 选择右侧。{'盲排已开启，对局中隐藏当前榜单。' if blind_mode else ''}")
+    st.caption(f"{mode_label}。快捷键：A/← 选择左侧，D/→ 选择右侧。{'已隐藏过程名单，结束后再揭晓。' if blind_mode else ''}")
 
     if top_k is None:
         st.markdown("### 你更喜欢哪一个？")
     else:
         if st.session_state.get(k("top_k_boundary_check"), False):
-            st.caption("这部电影会先和当前名单末位比较；如果你没那么喜欢它，会直接略过，少做几次选择。")
+            st.caption("这部电影会先和当前名单末位相遇；如果没有进入前列，会自然略过。")
         st.markdown("### 你更喜欢哪一部？")
 
     if side_shuffle:
@@ -2364,29 +2400,29 @@ def render_right_panel() -> None:
 
     left_title = current if current_on_left else opponent
     right_title = opponent if current_on_left else current
-    left_label = "这次出现" if current_on_left else "名单里的电影"
-    right_label = "名单里的电影" if current_on_left else "这次出现"
+    left_label = "新进入" if current_on_left else "名单中"
+    right_label = "名单中" if current_on_left else "新进入"
 
     ctrl1, ctrl2, ctrl3, ctrl4 = st.columns(4)
     with ctrl1:
-        label_left = "没看过 A" if mode == MODE_DOUBAN else "不熟悉 A"
+        label_left = "未看过 A" if mode == MODE_DOUBAN else "略过 A"
         if render_button_compat(label_left, key="btn_skip_left", use_container_width=True):
             if current_on_left:
                 handle_skip_current_item()
             else:
                 handle_skip_opponent_item()
     with ctrl2:
-        label_right = "没看过 B" if mode == MODE_DOUBAN else "不熟悉 B"
+        label_right = "未看过 B" if mode == MODE_DOUBAN else "略过 B"
         if render_button_compat(label_right, key="btn_skip_right", use_container_width=True):
             if current_on_left:
                 handle_skip_opponent_item()
             else:
                 handle_skip_current_item()
     with ctrl3:
-        if render_button_compat("稍后再比", key="btn_defer_pair", use_container_width=True):
+        if render_button_compat("暂放", key="btn_defer_pair", use_container_width=True):
             handle_defer_current_pair()
     with ctrl4:
-        if render_button_compat("撤销上一步", key="btn_undo_live", use_container_width=True):
+        if render_button_compat("上一步", key="btn_undo_live", use_container_width=True):
             undo_last_step()
 
     component_key = f"battle_{processed}_{comparisons}_{stable_int(current + opponent)}"
@@ -2404,16 +2440,16 @@ def render_right_panel() -> None:
         return
 
     ranked = st.session_state.get(k("ranked"), [])
-    expander_title = "📊 当前榜单" if top_k is None else f"📊 当前 Top {len(ranked)}"
+    expander_title = "过程名单" if top_k is None else f"当前前 {len(ranked)} 名"
     if blind_mode:
-        st.caption("盲排模式：当前榜单会在结束后揭晓。")
+        st.caption("过程名单已隐藏，结束后再揭晓。")
     else:
         with st.expander(expander_title, expanded=False):
             for i, item in enumerate(ranked, 1):
                 st.write(f"{i}. {item}")
 
     if skipped_items:
-        with st.expander("⏭️ 已跳过的候选项", expanded=False):
+        with st.expander("已略过的电影", expanded=False):
             for i, item in enumerate(skipped_items, 1):
                 st.write(f"{i}. {item}")
 
@@ -2445,9 +2481,9 @@ def render_step_header(step: int, title: str, subtitle: str = "") -> None:
 
     cols = st.columns(3)
     labels = [
-        ("① 选择模式", 1),
-        ("② 定制片单", 2),
-        ("③ 开始对决", 3),
+        ("① 选片单", 1),
+        ("② 定范围", 2),
+        ("③ 作取舍", 3),
     ]
     for col, (label, idx) in zip(cols, labels):
         with col:
@@ -2466,8 +2502,8 @@ def render_mode_selection_page() -> None:
     current_mode = get_selected_mode()
     render_step_header(
         1,
-        "今日片单",
-        "不用先想完整排名，只要一组一组选更喜欢的电影。",
+        "今日可排的片单",
+        "不用先想完整顺序，只在两部电影之间作一次取舍。",
     )
 
     card_html = []
@@ -2479,7 +2515,7 @@ def render_mode_selection_page() -> None:
             f'<div class="challenge-title">{html.escape(str(template["name"]))}</div>'
             f'<div class="challenge-copy">{html.escape(str(template.get("tagline", "")))}</div>'
             f'</div>'
-            f'<div class="mini-note">{len(template.get("items", []))} 部电影 · Top {template.get("top_k", 10)}</div>'
+            f'<div class="mini-note">{len(template.get("items", []))} 部电影 · 前 {template.get("top_k", 10)} 名</div>'
             f'</div>'
         )
     st.markdown(f'<div class="challenge-grid">{"".join(card_html)}</div>', unsafe_allow_html=True)
@@ -2488,10 +2524,10 @@ def render_mode_selection_page() -> None:
     for idx, template in enumerate(FILM_CHALLENGE_TEMPLATES):
         with cols[idx]:
             template_id = str(template["id"])
-            if render_button_compat("开始", key=f"btn_start_template_{template_id}", use_container_width=True, button_type="primary"):
+            if render_button_compat("整理", key=f"btn_start_template_{template_id}", use_container_width=True, button_type="primary"):
                 start_challenge(challenge_from_template(template))
 
-    with st.expander("把同题入口发给朋友", expanded=False):
+    with st.expander("把这份片单发给朋友", expanded=False):
         selected_template_name = st.selectbox(
             "选择片单",
             [str(template["name"]) for template in FILM_CHALLENGE_TEMPLATES],
@@ -2502,7 +2538,7 @@ def render_mode_selection_page() -> None:
         )
         template_id = str(selected_template["id"])
         template_url = build_template_url(template_id)
-        if render_copy_button("复制同题入口", template_url, f"copy_template_{template_id}", "同题入口"):
+        if render_copy_button("复制片单链接", template_url, f"copy_template_{template_id}", "片单链接"):
             track_event(
                 EVENT_SHARE_LINK_COPIED,
                 challenge_id=template_id,
@@ -2513,33 +2549,33 @@ def render_mode_selection_page() -> None:
             )
 
     safe_divider()
-    st.subheader("想排自己的电影片单？")
+    st.subheader("写下自己的片单")
     mode = st.radio(
-        "选择创建方式",
+        "片单来源",
         [MODE_CUSTOM, MODE_DOUBAN],
         index=0 if current_mode == MODE_CUSTOM else 1,
-        help="自定义片单适合私人主题；豆瓣模式会读取豆瓣 Top250。",
+        help="自备片单适合私人主题；豆瓣高分会读取豆瓣 Top250。",
         key="ui_mode_step1",
     )
     set_selected_mode(mode)
 
     safe_divider()
     if mode == MODE_CUSTOM:
-        st.info("自定义片单：把你想比较的电影粘进来，生成同题入口。")
+        st.caption("把想整理的电影粘进来，也可以生成一条片单链接发给朋友。")
     else:
-        st.info("豆瓣电影模式：设置 Top 数量和候选范围，快速整理一份大众高分片名单。")
+        st.caption("设置保留名次和候选范围，从豆瓣高分片里整理自己的顺序。")
 
     spacer, next_col = st.columns([1, 1])
     with spacer:
         st.empty()
     with next_col:
-        if render_button_compat("下一步：定制片单 →", key="btn_to_step2", use_container_width=True, button_type="primary"):
+        if render_button_compat("继续整理", key="btn_to_step2", use_container_width=True, button_type="primary"):
             go_to_step(2)
 
 
 def render_custom_template_gallery() -> None:
-    with st.expander("快速开局模板", expanded=not bool(st.session_state.get("ui_custom_options_text", ""))):
-        st.caption("先用模板跑通一局，再替换成自己的候选，能显著降低第一次使用的门槛。")
+    with st.expander("片单灵感", expanded=not bool(st.session_state.get("ui_custom_options_text", ""))):
+        st.caption("先放入一组电影，再慢慢替换成自己的名单。")
         cols = st.columns(4)
         for idx, template in enumerate(CUSTOM_TEMPLATES):
             with cols[idx % 4]:
@@ -2550,8 +2586,8 @@ def render_custom_template_gallery() -> None:
 
 
 def render_douban_preset_buttons() -> None:
-    with st.expander("对局强度预设", expanded=True):
-        st.caption("快排适合分享，标准适合认真排，深挖适合电影爱好者。")
+    with st.expander("整理深度", expanded=True):
+        st.caption("轻量适合几分钟完成，标准适合认真整理，细排适合想多看几轮的时候。")
         cols = st.columns(len(DOUBAN_PRESETS))
         for idx, (label, top_k, pool_n) in enumerate(DOUBAN_PRESETS):
             with cols[idx]:
@@ -2572,7 +2608,7 @@ def render_personalization_controls(prefix: str) -> dict:
         if key_name not in st.session_state:
             st.session_state[key_name] = default_value
 
-    with st.expander("传播设置", expanded=True):
+    with st.expander("署名与顺序", expanded=True):
         c1, c2 = st.columns(2)
         with c1:
             user_name = st.text_input(
@@ -2583,20 +2619,20 @@ def render_personalization_controls(prefix: str) -> dict:
             )
         with c2:
             seed_text = st.text_input(
-                "对局口令",
+                "顺序口令",
                 key=f"{prefix}_seed_text",
                 placeholder="例：weekend-001",
-                help="同样候选 + 同样口令会得到同样出场顺序，方便朋友同排一份片单。",
+                help="同样候选 + 同样口令会得到同样出场顺序，方便朋友整理同一份片单。",
             )
         c3, c4 = st.columns(2)
         with c3:
             blind_mode = st.checkbox(
-                "盲排模式：对局中隐藏当前榜单",
+                "隐藏过程名单，结束后再揭晓",
                 key=f"{prefix}_blind_mode",
             )
         with c4:
             side_shuffle = st.checkbox(
-                "左右随机：降低固定位置偏差",
+                "左右随机，降低固定位置偏差",
                 key=f"{prefix}_side_shuffle",
             )
     return {
@@ -2608,7 +2644,7 @@ def render_personalization_controls(prefix: str) -> dict:
 
 
 def reset_custom_parameter_defaults() -> None:
-    st.session_state["ui_custom_theme"] = "我的电影审美片单"
+    st.session_state["ui_custom_theme"] = "我的电影审美名单"
     st.session_state["ui_custom_options_text"] = ""
     st.session_state["ui_custom_top_k_enabled"] = False
     st.session_state["ui_custom_top_k"] = 10
@@ -2622,7 +2658,7 @@ def reset_custom_parameter_defaults() -> None:
 
 
 def reset_douban_parameter_defaults() -> None:
-    st.session_state["ui_douban_theme"] = "我的豆瓣电影审美榜"
+    st.session_state["ui_douban_theme"] = "我的豆瓣电影名单"
     st.session_state["ui_douban_top_k"] = 10
     st.session_state["ui_douban_pool_n"] = 100
     st.session_state["ui_douban_show_poster"] = True
@@ -2640,9 +2676,9 @@ def render_custom_parameter_page(mode: str) -> None:
 
     render_custom_template_gallery()
 
-    st.text_input("片单标题", value=st.session_state.get("ui_custom_theme", "我的电影审美片单"), key="ui_custom_theme")
+    st.text_input("片单标题", value=st.session_state.get("ui_custom_theme", "我的电影审美名单"), key="ui_custom_theme")
     st.text_area(
-        "电影片单（每行一个，也可以直接粘贴逗号分隔）",
+        "电影名单（每行一部，也可以直接粘贴逗号分隔）",
         value=st.session_state.get("ui_custom_options_text", ""),
         height=320,
         key="ui_custom_options_text",
@@ -2654,7 +2690,7 @@ def render_custom_parameter_page(mode: str) -> None:
     st.caption("支持每行一个，也支持用逗号、顿号、分号或竖线一次性粘贴。")
 
     top_k_enabled = st.checkbox(
-        "只排前 N 名，缩短分享局",
+        "只保留前 N 名",
         value=bool(st.session_state.get("ui_custom_top_k_enabled", False)),
         key="ui_custom_top_k_enabled",
     )
@@ -2665,7 +2701,7 @@ def render_custom_parameter_page(mode: str) -> None:
             st.session_state["ui_custom_top_k"] = max_top_k
         custom_top_k = int(
             st.number_input(
-                "最终保留 Top N",
+                "最终保留前 N 名",
                 min_value=1,
                 max_value=max_top_k,
                 value=int(st.session_state.get("ui_custom_top_k", min(10, max_top_k))),
@@ -2674,18 +2710,18 @@ def render_custom_parameter_page(mode: str) -> None:
             )
         )
     estimate_top_k = custom_top_k if custom_top_k and len(options) >= 2 else None
-    st.caption(f"预计比较次数大约：{estimated_comparisons(len(options), estimate_top_k)} 次。")
+    st.caption(f"预计需要取舍约 {estimated_comparisons(len(options), estimate_top_k)} 次。")
 
     personalization = render_personalization_controls("ui_custom")
 
-    with st.expander("生成同题入口", expanded=False):
-        st.caption("生成后会把片单标题和电影列表保存到 Supabase；如果未配置 Supabase，会生成较长的本地 payload 入口。")
-        if render_button_compat("生成同题入口", key="btn_create_custom_challenge", use_container_width=True, button_type="primary"):
+    with st.expander("生成片单链接", expanded=False):
+        st.caption("生成后会保存片单标题和电影列表；未配置 Supabase 时，会退回较长的本地链接。")
+        if render_button_compat("生成片单链接", key="btn_create_custom_challenge", use_container_width=True, button_type="primary"):
             if len(options) < 2:
-                st.warning("至少需要 2 部电影才能生成同题入口。")
+                st.warning("至少需要 2 部电影才能生成片单链接。")
             else:
                 challenge = save_challenge(
-                    theme=(st.session_state.get("ui_custom_theme", "") or "").strip() or "我的电影审美片单",
+                    theme=(st.session_state.get("ui_custom_theme", "") or "").strip() or "我的电影审美名单",
                     mode=mode,
                     items=options,
                     top_k=estimate_top_k,
@@ -2699,10 +2735,10 @@ def render_custom_parameter_page(mode: str) -> None:
                     )
                     st.session_state["ui_custom_challenge_caption"] = challenge_share_caption(challenge.theme, st.session_state["ui_custom_challenge_url"])
                     st.session_state["ui_custom_challenge_id"] = challenge.id
-                    st.success("同题入口已生成。")
+                    st.success("片单链接已生成。")
         custom_url = st.session_state.get("ui_custom_challenge_url", "")
         if custom_url:
-            if render_copy_button("复制同题入口", custom_url, "copy_custom_challenge_url", "同题入口"):
+            if render_copy_button("复制片单链接", custom_url, "copy_custom_challenge_url", "片单链接"):
                 track_event(
                     EVENT_SHARE_LINK_COPIED,
                     challenge_id=st.session_state.get("ui_custom_challenge_id", ""),
@@ -2717,21 +2753,21 @@ def render_custom_parameter_page(mode: str) -> None:
 
     nav1, nav2, nav3 = st.columns(3)
     with nav1:
-        if render_button_compat("← 返回上一步", key="btn_custom_back_step1", use_container_width=True):
+        if render_button_compat("返回", key="btn_custom_back_step1", use_container_width=True):
             go_to_step(1)
     with nav2:
-        if render_button_compat("🧹 清空参数", key="btn_clear_custom_step2", use_container_width=True):
+        if render_button_compat("清空", key="btn_clear_custom_step2", use_container_width=True):
             clear_ranking_state()
             st.session_state["ui_reset_custom_requested"] = True
             rerun()
     with nav3:
-        if render_button_compat("开始对决 →", key="btn_start_custom_step2", use_container_width=True, button_type="primary"):
+        if render_button_compat("开始整理", key="btn_start_custom_step2", use_container_width=True, button_type="primary"):
             if len(options) < 2:
                 st.warning("请至少输入 2 个候选项。")
             else:
                 init_ranking_state(
                     mode=mode,
-                    theme=(st.session_state.get("ui_custom_theme", "") or "").strip() or "我的榜单",
+                    theme=(st.session_state.get("ui_custom_theme", "") or "").strip() or "我的名单",
                     options=options,
                     top_k=estimate_top_k,
                     show_poster=True,
@@ -2754,11 +2790,11 @@ def render_douban_parameter_page(mode: str) -> None:
 
     render_douban_preset_buttons()
 
-    st.text_input("片单标题", value=st.session_state.get("ui_douban_theme", "我的豆瓣电影审美榜"), key="ui_douban_theme")
+    st.text_input("片单标题", value=st.session_state.get("ui_douban_theme", "我的豆瓣电影名单"), key="ui_douban_theme")
 
     top_k = int(
         st.number_input(
-            "最后保留 Top 多少",
+            "最后保留前多少名",
             min_value=1,
             max_value=250,
             value=int(st.session_state.get("ui_douban_top_k", 10)),
@@ -2768,7 +2804,7 @@ def render_douban_parameter_page(mode: str) -> None:
     )
     pool_n = int(
         st.number_input(
-            "从豆瓣 Top 多少部里整理",
+            "从豆瓣前多少部里整理",
             min_value=1,
             max_value=250,
             value=int(st.session_state.get("ui_douban_pool_n", 100)),
@@ -2778,7 +2814,7 @@ def render_douban_parameter_page(mode: str) -> None:
         )
     )
     show_poster = st.checkbox(
-        "排序时显示豆瓣海报",
+        "整理时显示电影海报",
         value=bool(st.session_state.get("ui_douban_show_poster", True)),
         key="ui_douban_show_poster",
     )
@@ -2787,10 +2823,10 @@ def render_douban_parameter_page(mode: str) -> None:
     if pool_n < top_k:
         st.error("候选范围不能小于 Top 数量。请让候选范围 >= Top。")
     else:
-        st.caption(f"将从豆瓣 Top250 中读取前 {pool_n} 部电影，最后生成你的 Top {top_k} 审美名片。")
-        st.caption(f"预计比较次数大约：{estimated_comparisons(pool_n, top_k)} 次。")
+        st.caption(f"将从豆瓣 Top250 中读取前 {pool_n} 部电影，最后生成你的前 {top_k} 名。")
+        st.caption(f"预计需要取舍约 {estimated_comparisons(pool_n, top_k)} 次。")
 
-    if render_button_compat("👀 预览候选电影", key="btn_preview_douban_step2", use_container_width=True):
+    if render_button_compat("预览候选电影", key="btn_preview_douban_step2", use_container_width=True):
         if pool_n < top_k:
             st.warning("请先修正设置：候选范围不能小于 Top 数量。")
         else:
@@ -2810,21 +2846,21 @@ def render_douban_parameter_page(mode: str) -> None:
 
     nav1, nav2, nav3 = st.columns(3)
     with nav1:
-        if render_button_compat("← 返回上一步", key="btn_douban_back_step1", use_container_width=True):
+        if render_button_compat("返回", key="btn_douban_back_step1", use_container_width=True):
             go_to_step(1)
     with nav2:
-        if render_button_compat("🧹 清空参数", key="btn_clear_douban_step2", use_container_width=True):
+        if render_button_compat("清空", key="btn_clear_douban_step2", use_container_width=True):
             clear_ranking_state()
             st.session_state["ui_reset_douban_requested"] = True
             rerun()
     with nav3:
-        if render_button_compat("准备并开始 →", key="btn_start_douban_step2", use_container_width=True, button_type="primary"):
+        if render_button_compat("开始整理", key="btn_start_douban_step2", use_container_width=True, button_type="primary"):
             if pool_n < top_k:
                 st.warning("请先修正设置：候选范围不能小于 Top 数量。")
             else:
                 st.session_state["ui_pending_douban"] = {
                     "mode": mode,
-                    "theme": (st.session_state.get("ui_douban_theme", "") or "").strip() or "我的豆瓣电影审美榜",
+                    "theme": (st.session_state.get("ui_douban_theme", "") or "").strip() or "我的豆瓣电影名单",
                     "top_k": top_k,
                     "pool_n": pool_n,
                     "show_poster": show_poster,
@@ -2841,8 +2877,8 @@ def render_parameter_page() -> None:
     mode = get_selected_mode()
     render_step_header(
         2,
-        "定制这次电影片单",
-        "补充片单标题、电影范围和分享设置。",
+        "整理这份电影名单",
+        "补充标题、电影范围和分享方式。",
     )
 
     if mode == MODE_CUSTOM:
@@ -2854,11 +2890,11 @@ def render_parameter_page() -> None:
 def render_douban_prepare_page() -> None:
     pending = st.session_state.get("ui_pending_douban")
     st.progress(0.72)
-    st.subheader("正在准备对局")
-    st.caption("正在读取豆瓣榜单和海报。准备完成后会自动进入排序页。")
+    st.subheader("正在准备片单")
+    st.caption("正在读取豆瓣电影和海报。准备完成后会自动进入选择页。")
 
     if not pending:
-        st.warning("没有待准备的豆瓣排序任务。")
+        st.warning("没有待准备的豆瓣片单。")
         if render_button_compat("返回设置", key="btn_prepare_back", use_container_width=True):
             go_to_step(2)
         return
@@ -2869,7 +2905,7 @@ def render_douban_prepare_page() -> None:
             warm_posters=bool(pending["show_poster"]),
         )
         if len(movies) < 2:
-            st.error("获取到的电影数量不足 2，无法开始排序。")
+            st.error("获取到的电影数量不足 2，无法开始整理。")
             if render_button_compat("返回设置", key="btn_prepare_failed_back", use_container_width=True):
                 st.session_state.pop("ui_pending_douban", None)
                 go_to_step(2)
@@ -2906,11 +2942,11 @@ def render_sorting_page() -> None:
     st.progress(1.0)
     labels = st.columns(3)
     with labels[0]:
-        st.caption("① 选择模式")
+        st.caption("① 选片单")
     with labels[1]:
-        st.caption("② 定制片单")
+        st.caption("② 定范围")
     with labels[2]:
-        st.markdown("**③ 开始对决**")
+        st.markdown("**③ 作取舍**")
 
     if not started:
         st.info("还没有开始。请先回到第 2 步完成设置。")
@@ -2920,10 +2956,10 @@ def render_sorting_page() -> None:
     safe_divider()
     nav1, nav2 = st.columns(2)
     with nav1:
-        if render_button_compat("← 返回第 2 步修改片单", key="btn_back_to_step2", use_container_width=True):
+        if render_button_compat("返回修改片单", key="btn_back_to_step2", use_container_width=True):
             go_to_step(2)
     with nav2:
-        if render_button_compat("重新选择模式", key="btn_back_to_step1", use_container_width=True):
+        if render_button_compat("重新选择来源", key="btn_back_to_step1", use_container_width=True):
             go_to_step(1)
 
 
@@ -2933,7 +2969,7 @@ def render_sorting_page() -> None:
 def main() -> None:
     st.set_page_config(
         page_title=APP_TITLE,
-        page_icon="🎯",
+        page_icon="🎬",
         layout="wide",
     )
     render_app_styles()
@@ -2952,7 +2988,7 @@ def main() -> None:
         EVENT_PAGE_VIEW,
         source_channel=get_source_channel(),
         payload={
-            "has_challenge": bool(get_query_param("challenge")),
+            "has_list": bool(get_query_param("list") or get_query_param("challenge")),
             "has_payload": bool(get_query_param("payload")),
             "session_hint": get_session_id()[-8:],
         },
@@ -2961,11 +2997,11 @@ def main() -> None:
 
     step = get_ui_step()
     if step == 3:
-        st.caption(f"🎯 {APP_TITLE}")
+        st.caption(APP_TITLE)
     elif step == 1:
         render_cover_header()
     else:
-        st.title(f"🎯 {APP_TITLE}")
+        st.title(APP_TITLE)
         st.markdown(APP_SUBTITLE)
 
     if step == 1:
@@ -2979,9 +3015,9 @@ def main() -> None:
 
     safe_divider()
     if analytics_enabled():
-        st.caption("说明：本应用只记录匿名访问、开局、完成和分享事件，不记录姓名、IP 或自定义完整榜单内容。")
+        st.caption("说明：本应用只记录匿名访问、开始、完成和分享事件，不记录姓名、IP 或自定义完整名单内容。")
     else:
-        st.caption("说明：未配置 Supabase 时，应用仍可完整使用；公开统计和短入口会自动降级。")
+        st.caption("说明：未配置 Supabase 时，应用仍可完整使用；公开统计和短链接会自动降级。")
 
 
 if __name__ == "__main__":

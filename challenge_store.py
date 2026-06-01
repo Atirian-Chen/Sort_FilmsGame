@@ -44,7 +44,7 @@ def challenge_from_template(template: Dict[str, Any]) -> Challenge:
     return Challenge(
         id=str(template["id"]),
         theme=str(template["theme"]),
-        mode="自定义模式",
+        mode="自备片单",
         items=normalize_items(list(template.get("items", []))),
         top_k=int(template.get("top_k") or 0) or None,
         seed_text=str(template.get("seed_text") or template["id"]),
@@ -69,7 +69,7 @@ def save_challenge(
     challenge_id = make_challenge_id(theme, clean_items, seed_text)
     challenge = Challenge(
         id=challenge_id,
-        theme=theme.strip() or "电影审美片单",
+        theme=theme.strip() or "电影审美名单",
         mode=mode,
         items=clean_items,
         top_k=top_k,
@@ -121,8 +121,8 @@ def fetch_challenge(challenge_id: str) -> Optional[Challenge]:
 
     return Challenge(
         id=str(row.get("id") or challenge_id),
-            theme=str(row.get("theme") or "电影审美片单"),
-        mode=str(row.get("mode") or "自定义模式"),
+        theme=str(row.get("theme") or "电影审美名单"),
+        mode=str(row.get("mode") or "自备片单"),
         items=items,
         top_k=int(row["top_k"]) if row.get("top_k") else None,
         seed_text=str(row.get("seed_text") or challenge_id),
@@ -156,8 +156,8 @@ def decode_fallback_payload(payload: str) -> Optional[Challenge]:
             return None
         return Challenge(
             id=make_challenge_id(str(data.get("theme") or ""), items, str(data.get("seed_text") or "")),
-            theme=str(data.get("theme") or "电影审美片单"),
-            mode=str(data.get("mode") or "自定义模式"),
+            theme=str(data.get("theme") or "电影审美名单"),
+            mode=str(data.get("mode") or "自备片单"),
             items=items,
             top_k=int(data["top_k"]) if data.get("top_k") else None,
             seed_text=str(data.get("seed_text") or ""),
@@ -172,10 +172,10 @@ def build_challenge_url(challenge: Challenge, *, use_payload_fallback: bool = Fa
     prefix = base_url or ""
     if use_payload_fallback:
         return f"{prefix}?payload={quote(encode_fallback_payload(challenge))}"
-    return f"{prefix}?challenge={quote(challenge.id)}"
+    return f"{prefix}?list={quote(challenge.id)}"
 
 
 def build_template_url(template_id: str) -> str:
     base_url = get_public_app_url()
     prefix = base_url or ""
-    return f"{prefix}?challenge={quote(template_id)}"
+    return f"{prefix}?list={quote(template_id)}"

@@ -6,7 +6,7 @@
   <style>
     :root {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: #111827;
+      color: #1f2328;
       background: transparent;
     }
     body {
@@ -16,22 +16,22 @@
     .grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 20px;
+      gap: 14px;
       padding: 2px;
     }
     .card {
-      border: 1px solid #e3e7ef;
+      border: 1px solid #e7e1d8;
       border-radius: 8px;
-      background: #fff;
-      padding: 16px;
+      background: #fffdf9;
+      padding: 14px;
       cursor: pointer;
       min-width: 0;
       transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
     }
     .card:hover,
     .card:focus-visible {
-      border-color: #2b83e6;
-      box-shadow: 0 0 0 3px rgba(43, 131, 230, 0.14);
+      border-color: #9b6a58;
+      box-shadow: 0 0 0 3px rgba(155, 106, 88, 0.12);
       transform: translateY(-1px);
       outline: none;
     }
@@ -43,7 +43,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      color: #475467;
+      color: #6f665d;
       font-size: 13px;
       font-weight: 700;
       margin-bottom: 8px;
@@ -51,16 +51,16 @@
     .title {
       font-size: clamp(18px, 2.2vw, 25px);
       line-height: 1.24;
-      font-weight: 850;
+      font-weight: 820;
       overflow-wrap: anywhere;
       min-height: 36px;
       margin-bottom: 10px;
     }
     .poster-frame {
       height: min(46vh, 440px);
-      border: 1px solid #e6e8ef;
+      border: 1px solid #e7e1d8;
       border-radius: 8px;
-      background: #f8f9fb;
+      background: #fffaf4;
       padding: 8px;
       display: flex;
       align-items: center;
@@ -74,14 +74,14 @@
       display: block;
     }
     .fallback {
-      color: #475467;
+      color: #6f665d;
       font-weight: 700;
       text-align: center;
       padding: 18px;
     }
     .choice {
-      color: #2b83e6;
-      font-weight: 850;
+      color: #8a4f3d;
+      font-weight: 820;
       font-size: 18px;
       margin-top: 8px;
       display: flex;
@@ -90,18 +90,18 @@
       gap: 10px;
     }
     .hotkey {
-      border: 1px solid #d4dbe8;
+      border: 1px solid #d8d1c6;
       border-radius: 6px;
-      color: #475467;
+      color: #6f665d;
       font-size: 12px;
       font-weight: 800;
       padding: 4px 7px;
-      background: #fff;
+      background: #fffdf9;
     }
     @media (max-width: 820px) {
       .grid {
         grid-template-columns: 1fr;
-        gap: 12px;
+        gap: 10px;
       }
       .poster-frame {
         height: min(36vh, 340px);
@@ -145,7 +145,7 @@
       const choice = side === "left" ? "A" : "B";
       return `
         <button class="card" type="button" data-choice="${side}" aria-label="选择 ${label}">
-          <div class="head"><span>${label}</span><span>1v1</span></div>
+          <div class="head"><span>${label}</span><span>取舍</span></div>
           <div class="title">${title}</div>
           <div class="poster-frame">${poster}</div>
           <div class="choice"><span>${choice}</span><span class="hotkey">${hotkey}</span></div>
