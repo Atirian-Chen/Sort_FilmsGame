@@ -9,6 +9,7 @@ import json
 import math
 import random
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -217,6 +218,7 @@ RANKING_STATE_KEYS = [
     "show_poster",
     "poster_map",
     "poster_fetch_failed",
+    "poster_prefetch_scheduled",
     "history",
     "skipped_items",
     "user_name",
@@ -910,6 +912,11 @@ def write_cached_poster(title: str, image_data: Optional[bytes]) -> None:
         return
 
 
+@st.cache_resource(show_spinner=False)
+def get_poster_prefetch_executor() -> ThreadPoolExecutor:
+    return ThreadPoolExecutor(max_workers=3, thread_name_prefix="poster-prefetch")
+
+
 def douban_image_url_candidates(img_url: str) -> List[str]:
     if not img_url:
         return []
@@ -1036,9 +1043,12 @@ def get_best_poster_bytes(title: str, primary_url: str = "") -> Optional[bytes]:
         return cached
 
     poster_bytes = fetch_poster_bytes_from_url(primary_url) if primary_url else None
+
+    if poster_bytes is None and title in CURATED_IMDB_POSTERS:
+        poster_bytes = fetch_imdb_poster_bytes(title)
     if poster_bytes is None:
         poster_bytes = fetch_douban_poster_bytes(title)
-    if poster_bytes is None:
+    if poster_bytes is None and title not in CURATED_IMDB_POSTERS:
         poster_bytes = fetch_imdb_poster_bytes(title)
 
     if poster_bytes:
@@ -1046,6 +1056,41 @@ def get_best_poster_bytes(title: str, primary_url: str = "") -> Optional[bytes]:
         return poster_bytes
 
     return None
+
+
+def prefetch_poster_to_cache(title: str) -> None:
+    try:
+        get_best_poster_bytes(title)
+    except Exception:
+        return
+
+
+def schedule_poster_prefetch(titles: List[str]) -> None:
+    if not titles:
+        return
+
+    poster_map = st.session_state.setdefault(k("poster_map"), {})
+    failed = set(st.session_state.setdefault(k("poster_fetch_failed"), []))
+    scheduled = set(st.session_state.setdefault(k("poster_prefetch_scheduled"), []))
+    executor = get_poster_prefetch_executor()
+    newly_scheduled: List[str] = []
+    seen: set[str] = set()
+
+    for title in titles:
+        clean_title = (title or "").strip()
+        if not clean_title or clean_title in seen:
+            continue
+        seen.add(clean_title)
+        if poster_map.get(clean_title) or clean_title in failed or clean_title in scheduled:
+            continue
+        if read_cached_poster(clean_title):
+            continue
+        executor.submit(prefetch_poster_to_cache, clean_title)
+        scheduled.add(clean_title)
+        newly_scheduled.append(clean_title)
+
+    if newly_scheduled:
+        st.session_state[k("poster_prefetch_scheduled")] = list(scheduled)[-240:]
 
 
 def prepare_douban_candidates_ui(limit: int, warm_posters: bool) -> tuple[List[str], Dict[str, Optional[bytes]]]:
@@ -1134,6 +1179,7 @@ def init_ranking_state(
     st.session_state[k("show_poster")] = show_poster
     st.session_state[k("poster_map")] = poster_map
     st.session_state[k("poster_fetch_failed")] = []
+    st.session_state[k("poster_prefetch_scheduled")] = []
     st.session_state[k("history")] = []
     st.session_state[k("skipped_items")] = []
     st.session_state[k("user_name")] = user_name.strip()
@@ -2303,8 +2349,8 @@ def render_battle_picker(
     show_poster: bool,
     key: str,
 ) -> Optional[str]:
-    left_poster_bytes = get_poster_for_option(left_title, fetch=False) if show_poster else None
-    right_poster_bytes = get_poster_for_option(right_title, fetch=False) if show_poster else None
+    left_poster_bytes = get_poster_for_option(left_title, fetch=True) if show_poster else None
+    right_poster_bytes = get_poster_for_option(right_title, fetch=True) if show_poster else None
     left_poster = poster_preview_data_uri(left_poster_bytes) if left_poster_bytes else None
     right_poster = poster_preview_data_uri(right_poster_bytes) if right_poster_bytes else None
     result = BATTLE_PICKER_COMPONENT(
@@ -2318,6 +2364,31 @@ def render_battle_picker(
         if choice in ("left", "right"):
             return choice
     return None
+
+
+def upcoming_poster_candidates(current: str, opponent: str) -> List[str]:
+    candidates: List[str] = []
+    ranked = st.session_state.get(k("ranked"), [])
+    remaining = st.session_state.get(k("remaining"), [])
+    low = st.session_state.get(k("low"), 0)
+    high = st.session_state.get(k("high"), 0)
+
+    for title in (current, opponent):
+        if title:
+            candidates.append(title)
+
+    if ranked:
+        probe_indices = {
+            get_current_opponent_index(ranked, low, high),
+            max(0, min(len(ranked) - 1, low)),
+            max(0, min(len(ranked) - 1, high - 1)),
+        }
+        for idx in sorted(probe_indices):
+            if 0 <= idx < len(ranked):
+                candidates.append(ranked[idx])
+
+    candidates.extend(remaining[:5])
+    return candidates
 
 
 # =========================
@@ -2628,6 +2699,9 @@ def render_right_panel() -> None:
         prefer_current = (choice == "left" and current_on_left) or (choice == "right" and not current_on_left)
         handle_choice(prefer_left=prefer_current)
         return
+
+    if show_poster:
+        schedule_poster_prefetch(upcoming_poster_candidates(current, opponent))
 
     ranked = st.session_state.get(k("ranked"), [])
     expander_title = "过程名单" if top_k is None else f"当前前 {len(ranked)} 名"
