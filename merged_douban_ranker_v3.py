@@ -3256,7 +3256,7 @@ def render_personalization_controls(prefix: str) -> dict:
             user_name = st.text_input(
                 "署名",
                 key=f"{prefix}_user_name",
-                placeholder="例：Atirian",
+                placeholder="例：某位影迷",
                 help="会出现在导出文件、分享文案和海报里。",
             )
         with c2:
@@ -3537,14 +3537,17 @@ def render_douban_collect_parameter_page(mode: str) -> None:
         "豆瓣 ID 或看过页面链接",
         value=st.session_state.get("ui_douban_collect_user_id", ""),
         key="ui_douban_collect_user_id",
-        placeholder="例：240636756 或 https://movie.douban.com/people/240636756/collect",
-        help="需要这个豆瓣用户的“看过”页面是公开可访问的。",
+        placeholder="例：123456 或 https://movie.douban.com/people/123456/collect",
+        help="打开豆瓣电影“看过”页面，链接里 /people/ 和 /collect 之间的部分就是 ID；需要这个页面公开可访问。",
     )
-    st.caption(f"只读取公开可访问的“看过”页面，最多读取前 {DOUBAN_COLLECT_MAX_ITEMS} 部；片单很长时建议先整理 Top 20 或 Top 50。")
+    st.caption(
+        f"示例：如果链接是 movie.douban.com/people/123456/collect，豆瓣 ID 就是 123456。"
+        f" 只读取公开可访问的“看过”页面，最多读取前 {DOUBAN_COLLECT_MAX_ITEMS} 部。"
+    )
     raw_user_id = st.session_state.get("ui_douban_collect_user_id", "")
     clean_user_id = normalize_douban_user_id(raw_user_id)
     if raw_user_id.strip() and not clean_user_id:
-        st.warning("这个豆瓣 ID/链接看起来不对。可以直接填数字 ID，比如 240636756。")
+        st.warning("这个豆瓣 ID/链接看起来不对。可以直接填数字 ID，比如 123456。")
 
     st.text_input(
         "片单标题",

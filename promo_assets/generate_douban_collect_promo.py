@@ -8,10 +8,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "promo_assets"
-BG = Path(
-    r"C:\Users\Atirian\.codex\generated_images\019e6593-4cfd-7f52-a10d-bea2329e7b52"
-    r"\ig_07ef7c4798bfe5dd016a1e9a28c32881968e20b844dfbfc11c.png"
-)
+BG = OUT / "douban_collect_bg.png"
 URL = "https://sortfilmsgamegit.streamlit.app/"
 
 FONT_REGULAR = r"C:\Windows\Fonts\msyh.ttc"
@@ -151,7 +148,7 @@ def image_one() -> Path:
     d.text((96, 250), "它把“已看电影总榜”拆成很多次二选一", font=F["mid"], fill=INK)
     draw_wrapped(
         d,
-        "输入豆瓣 ID，读取公开的“看过”电影；接下来只问一个很简单的问题：这两部里，你更偏爱哪一部？",
+        "输入豆瓣 ID，读取公开的“看过”电影；个人主页链接中间那串数字就是 ID。接下来只问：这两部里，你更偏爱哪一部？",
         (96, 318),
         F["body"],
         MUTED,
@@ -170,7 +167,7 @@ def image_one() -> Path:
     shadowed_card(base, (96, 760, 1146, 1408), radius=38, fill="#fcfaf6", outline=LINE)
     d = ImageDraw.Draw(base)
     d.text((138, 810), "你更喜欢哪一部？", font=F["mid"], fill=INK)
-    d.text((138, 868), "已看 187 部 · 正在整理 Top 20", font=F["small"], fill=MUTED)
+    d.text((138, 868), "已看 100+ 部 · 正在整理 Top 20", font=F["small"], fill=MUTED)
     d.rounded_rectangle((138, 928, 1094, 944), radius=8, fill="#edf1f6")
     d.rounded_rectangle((138, 928, 512, 944), radius=8, fill="#2e80df")
 
