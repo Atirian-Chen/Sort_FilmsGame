@@ -62,6 +62,9 @@ from launch_copy import (
 # 基础配置
 # =========================
 DOUBAN_TOP250_URL = "https://movie.douban.com/top250"
+DOUBAN_COLLECT_URL_TEMPLATE = "https://movie.douban.com/people/{user_id}/collect"
+DOUBAN_COLLECT_PAGE_SIZE = 15
+DOUBAN_COLLECT_MAX_ITEMS = 1200
 DOUBAN_SUGGEST_URL = "https://movie.douban.com/j/subject_suggest"
 IMDB_SUGGEST_URL = "https://v3.sg.media-imdb.com/suggestion"
 APP_TITLE = "电影审美名单"
@@ -148,6 +151,7 @@ CURATED_IMDB_POSTERS: Dict[str, Dict[str, str]] = {
 
 MODE_CUSTOM = "自备片单"
 MODE_DOUBAN = "豆瓣高分"
+MODE_DOUBAN_COLLECT = "豆瓣已看"
 
 CUSTOM_TEMPLATES = [
     {
@@ -203,6 +207,7 @@ RANKING_STATE_KEYS = [
     "theme",
     "source_options",
     "source_poster_map",
+    "source_poster_url_map",
     "total",
     "remaining",
     "ranked",
@@ -982,6 +987,109 @@ def fetch_douban_top250_poster_index() -> Dict[str, str]:
     return index
 
 
+def normalize_douban_user_id(raw_value: str) -> str:
+    value = (raw_value or "").strip()
+    if not value:
+        return ""
+
+    match = re.search(r"douban\.com/people/([^/?#]+)/?", value)
+    if match:
+        value = match.group(1)
+
+    value = value.strip().strip("/")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{2,64}", value):
+        return ""
+    return value
+
+
+def collect_entry_title(item, seen: Dict[str, int]) -> str:
+    title_el = item.select_one("li.title a")
+    em_el = title_el.select_one("em") if title_el else None
+    img_el = item.select_one("div.pic img")
+
+    raw_title = ""
+    if em_el:
+        raw_title = em_el.get_text(" ", strip=True)
+    elif title_el:
+        raw_title = title_el.get_text(" ", strip=True)
+    elif img_el:
+        raw_title = img_el.get("alt", "").strip()
+
+    primary_title = re.split(r"\s*/\s*", raw_title)[0].strip()
+    title = primary_title or raw_title.strip()
+    if not title:
+        return ""
+
+    intro_text = item.select_one("li.intro")
+    intro = intro_text.get_text(" ", strip=True) if intro_text else ""
+    year_match = re.search(r"(?:19|20)\d{2}", intro)
+    year = year_match.group(0) if year_match else ""
+
+    count = seen.get(title, 0)
+    seen[title] = count + 1
+    if count == 0:
+        return title
+    if year:
+        candidate = f"{title}（{year}）"
+        if candidate not in seen:
+            seen[candidate] = 1
+            return candidate
+    return f"{title} #{count + 1}"
+
+
+@st.cache_data(show_spinner=False)
+def fetch_douban_collect_entries(user_id: str, max_items: int = DOUBAN_COLLECT_MAX_ITEMS) -> List[Dict[str, Optional[str]]]:
+    clean_user_id = normalize_douban_user_id(user_id)
+    if not clean_user_id:
+        raise ValueError("豆瓣 ID 格式不正确。")
+
+    max_items = max(DOUBAN_COLLECT_PAGE_SIZE, min(DOUBAN_COLLECT_MAX_ITEMS, int(max_items)))
+    entries: List[Dict[str, Optional[str]]] = []
+    seen_titles: Dict[str, int] = {}
+
+    for start in range(0, max_items, DOUBAN_COLLECT_PAGE_SIZE):
+        resp = requests.get(
+            DOUBAN_COLLECT_URL_TEMPLATE.format(user_id=clean_user_id),
+            params={
+                "start": start,
+                "sort": "time",
+                "type": "all",
+                "filter": "all",
+                "mode": "grid",
+            },
+            headers=HEADERS,
+            timeout=15,
+        )
+        resp.raise_for_status()
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        items = soup.select("div.item.comment-item, div.item")
+        if not items:
+            break
+
+        before_count = len(entries)
+        for item in items:
+            title = collect_entry_title(item, seen_titles)
+            if not title:
+                continue
+
+            img_el = item.select_one("div.pic img")
+            poster_url = img_el.get("src") or img_el.get("data-src") if img_el else None
+            entries.append({"title": title, "poster_url": poster_url})
+            if len(entries) >= max_items:
+                break
+
+        if len(entries) == before_count:
+            break
+        next_link = soup.select_one("span.next a, .paginator .next a")
+        if not next_link:
+            break
+
+    if not entries:
+        raise ValueError("没有读取到公开的“看过”电影。请确认豆瓣主页公开，且链接是 /people/你的ID/collect。")
+    return entries
+
+
 def normalize_image_bytes(image_bytes: bytes) -> Optional[bytes]:
     if not image_bytes:
         return None
@@ -1186,9 +1294,16 @@ def get_best_poster_bytes(title: str, primary_url: str = "") -> Optional[bytes]:
     return None
 
 
-def prefetch_poster_to_cache(title: str) -> None:
+def get_source_poster_url(title: str) -> str:
+    poster_url_map = st.session_state.get(k("source_poster_url_map"), {})
+    if isinstance(poster_url_map, dict):
+        return str(poster_url_map.get(title) or "")
+    return ""
+
+
+def prefetch_poster_to_cache(title: str, primary_url: str = "") -> None:
     try:
-        get_best_poster_bytes(title)
+        get_best_poster_bytes(title, primary_url)
     except Exception:
         return
 
@@ -1213,7 +1328,7 @@ def schedule_poster_prefetch(titles: List[str]) -> None:
             continue
         if read_cached_poster(clean_title):
             continue
-        executor.submit(prefetch_poster_to_cache, clean_title)
+        executor.submit(prefetch_poster_to_cache, clean_title, get_source_poster_url(clean_title))
         scheduled.add(clean_title)
         newly_scheduled.append(clean_title)
 
@@ -1249,6 +1364,48 @@ def prepare_douban_candidates_ui(limit: int, warm_posters: bool) -> tuple[List[s
     return movies, poster_map
 
 
+def prepare_douban_collect_candidates_ui(
+    user_id: str,
+    warm_posters: bool,
+    max_items: int = DOUBAN_COLLECT_MAX_ITEMS,
+) -> tuple[List[str], Dict[str, Optional[bytes]], Dict[str, str]]:
+    text_holder = st.empty()
+    progress_holder = st.empty()
+    text_holder.caption("正在读取豆瓣看过列表...")
+    bar = progress_holder.progress(8)
+
+    entries = fetch_douban_collect_entries(user_id, max_items)
+    movies = [entry["title"] for entry in entries if entry.get("title")]
+    poster_url_map = {
+        str(entry["title"]): str(entry.get("poster_url") or "")
+        for entry in entries
+        if entry.get("title") and entry.get("poster_url")
+    }
+
+    if not movies:
+        bar.progress(100)
+        return [], {}, {}
+
+    poster_map: Dict[str, Optional[bytes]] = {}
+    if warm_posters:
+        warm_entries = entries[: min(12, len(entries))]
+        total_steps = max(1, len(warm_entries))
+        text_holder.caption("正在预热前几张海报...")
+        for idx, entry in enumerate(warm_entries, 1):
+            title = entry.get("title")
+            if not title:
+                continue
+            poster_bytes = get_best_poster_bytes(title, entry.get("poster_url") or "")
+            poster_map[title] = poster_bytes
+            bar.progress(35 + int(idx / total_steps * 60))
+    else:
+        bar.progress(95)
+
+    bar.progress(100)
+    text_holder.caption(f"已读取 {len(movies)} 部看过的电影。")
+    return movies, poster_map, poster_url_map
+
+
 # =========================
 # 排序逻辑
 # =========================
@@ -1275,6 +1432,7 @@ def init_ranking_state(
     template_id: str = "",
     source_channel: str = "",
     initial_poster_map: Optional[Dict[str, Optional[bytes]]] = None,
+    initial_poster_url_map: Optional[Dict[str, str]] = None,
 ) -> None:
     opts = options[:]
     if len(opts) < 2:
@@ -1287,11 +1445,13 @@ def init_ranking_state(
     else:
         random.shuffle(opts)
     poster_map = dict(initial_poster_map or {})
+    poster_url_map = dict(initial_poster_url_map or {})
 
     st.session_state[k("mode")] = mode
     st.session_state[k("theme")] = theme
     st.session_state[k("source_options")] = options[:]
     st.session_state[k("source_poster_map")] = poster_map.copy()
+    st.session_state[k("source_poster_url_map")] = poster_url_map.copy()
     st.session_state[k("total")] = len(opts)
     st.session_state[k("remaining")] = opts[1:]
     st.session_state[k("ranked")] = [opts[0]]
@@ -1360,6 +1520,7 @@ def reset_same_config() -> None:
     template_id = st.session_state.get(k("template_id"), "")
     source_channel = st.session_state.get(k("source_channel"), "")
     source_poster_map = st.session_state.get(k("source_poster_map"), {})
+    source_poster_url_map = st.session_state.get(k("source_poster_url_map"), {})
 
     if len(options) < 2:
         st.warning("候选项至少需要 2 个才能排序。")
@@ -1379,6 +1540,7 @@ def reset_same_config() -> None:
         template_id=template_id,
         source_channel=source_channel,
         initial_poster_map=source_poster_map,
+        initial_poster_url_map=source_poster_url_map,
     )
     rerun()
 
@@ -2073,7 +2235,7 @@ def get_poster_for_option(name: str, *, fetch: bool = True) -> Optional[bytes]:
     if name in failed:
         return None
 
-    poster_bytes = get_best_poster_bytes(name)
+    poster_bytes = get_best_poster_bytes(name, get_source_poster_url(name))
     poster_map[name] = poster_bytes
     st.session_state[k("poster_map")] = poster_map
     if poster_bytes is None and name not in failed:
@@ -2209,7 +2371,7 @@ def get_result_poster_bytes(title: str) -> Optional[bytes]:
     if cached:
         return cached
 
-    poster_bytes = get_best_poster_bytes(title)
+    poster_bytes = get_best_poster_bytes(title, get_source_poster_url(title))
     if poster_bytes:
         poster_map[title] = poster_bytes
         st.session_state[k("poster_map")] = poster_map
@@ -2898,6 +3060,7 @@ def render_step_header(step: int, title: str, subtitle: str = "", compact: bool 
 
 def render_mode_selection_page() -> None:
     current_mode = get_selected_mode()
+    mode_options = [MODE_CUSTOM, MODE_DOUBAN, MODE_DOUBAN_COLLECT]
     render_step_header(
         1,
         "",
@@ -2948,9 +3111,9 @@ def render_mode_selection_page() -> None:
     st.subheader("写下自己的片单")
     mode = st.radio(
         "片单来源",
-        [MODE_CUSTOM, MODE_DOUBAN],
-        index=0 if current_mode == MODE_CUSTOM else 1,
-        help="自备片单适合私人主题；豆瓣高分会读取豆瓣 Top250。",
+        mode_options,
+        index=mode_options.index(current_mode) if current_mode in mode_options else 0,
+        help="自备片单适合私人主题；豆瓣高分会读取豆瓣 Top250；豆瓣已看会读取公开的看过列表。",
         key="ui_mode_step1",
     )
     set_selected_mode(mode)
@@ -2958,8 +3121,10 @@ def render_mode_selection_page() -> None:
     safe_divider()
     if mode == MODE_CUSTOM:
         st.caption("把想整理的电影粘进来，也可以生成一条片单链接发给朋友。")
-    else:
+    elif mode == MODE_DOUBAN:
         st.caption("设置保留名次和候选范围，从豆瓣高分片里整理自己的顺序。")
+    else:
+        st.caption("输入豆瓣 ID，读取公开的“看过”电影列表，再排出自己的总榜或 Top N。")
 
     spacer, next_col = st.columns([1, 1])
     with spacer:
@@ -3067,6 +3232,20 @@ def reset_douban_parameter_defaults() -> None:
     st.session_state["ui_douban_side_shuffle"] = True
     st.session_state.pop("ui_douban_preview_movies", None)
     st.session_state.pop("ui_douban_preview_pool_n", None)
+
+
+def reset_douban_collect_parameter_defaults() -> None:
+    st.session_state["ui_douban_collect_user_id"] = ""
+    st.session_state["ui_douban_collect_theme"] = "我的豆瓣已看电影总榜"
+    st.session_state["ui_douban_collect_scope"] = "只保留前 N 名"
+    st.session_state["ui_douban_collect_top_k"] = 20
+    st.session_state["ui_douban_collect_show_poster"] = True
+    st.session_state["ui_douban_collect_user_name"] = ""
+    st.session_state["ui_douban_collect_seed_text"] = ""
+    st.session_state["ui_douban_collect_blind_mode"] = False
+    st.session_state["ui_douban_collect_side_shuffle"] = True
+    st.session_state.pop("ui_douban_collect_preview_movies", None)
+    st.session_state.pop("ui_douban_collect_preview_user_id", None)
 
 
 def render_custom_parameter_page(mode: str) -> None:
@@ -3272,6 +3451,123 @@ def render_douban_parameter_page(mode: str) -> None:
                 rerun()
 
 
+def render_douban_collect_parameter_page(mode: str) -> None:
+    if st.session_state.pop("ui_reset_douban_collect_requested", False):
+        reset_douban_collect_parameter_defaults()
+
+    st.text_input(
+        "豆瓣 ID 或看过页面链接",
+        value=st.session_state.get("ui_douban_collect_user_id", ""),
+        key="ui_douban_collect_user_id",
+        placeholder="例：240636756 或 https://movie.douban.com/people/240636756/collect",
+        help="需要这个豆瓣用户的“看过”页面是公开可访问的。",
+    )
+    st.caption(f"只读取公开可访问的“看过”页面，最多读取前 {DOUBAN_COLLECT_MAX_ITEMS} 部；片单很长时建议先整理 Top 20 或 Top 50。")
+    raw_user_id = st.session_state.get("ui_douban_collect_user_id", "")
+    clean_user_id = normalize_douban_user_id(raw_user_id)
+    if raw_user_id.strip() and not clean_user_id:
+        st.warning("这个豆瓣 ID/链接看起来不对。可以直接填数字 ID，比如 240636756。")
+
+    st.text_input(
+        "片单标题",
+        value=st.session_state.get("ui_douban_collect_theme", "我的豆瓣已看电影总榜"),
+        key="ui_douban_collect_theme",
+    )
+
+    scope = st.radio(
+        "输出范围",
+        ["只保留前 N 名", "完整排序"],
+        index=0 if st.session_state.get("ui_douban_collect_scope", "只保留前 N 名") == "只保留前 N 名" else 1,
+        key="ui_douban_collect_scope",
+        horizontal=True,
+    )
+    top_k: Optional[int] = None
+    if scope == "只保留前 N 名":
+        top_k = int(
+            st.number_input(
+                "最终保留前 N 名",
+                min_value=1,
+                max_value=500,
+                value=int(st.session_state.get("ui_douban_collect_top_k", 20)),
+                step=1,
+                key="ui_douban_collect_top_k",
+            )
+        )
+    else:
+        st.info("完整排序会把所有看过的电影排出顺序；如果片单很长，可能需要比较很多次。第一次建议先试 Top 20。")
+
+    show_poster = st.checkbox(
+        "整理时显示电影海报",
+        value=bool(st.session_state.get("ui_douban_collect_show_poster", True)),
+        key="ui_douban_collect_show_poster",
+    )
+    personalization = render_personalization_controls("ui_douban_collect")
+
+    preview_movies = st.session_state.get("ui_douban_collect_preview_movies", [])
+    preview_user_id = st.session_state.get("ui_douban_collect_preview_user_id", "")
+    if preview_user_id != clean_user_id:
+        preview_movies = []
+
+    if preview_movies:
+        effective_top_k = min(top_k, len(preview_movies)) if top_k is not None else None
+        st.caption(f"已读取 {len(preview_movies)} 部看过的电影。预计需要取舍约 {estimated_comparisons(len(preview_movies), effective_top_k)} 次。")
+    else:
+        st.caption("先预览一次，确认能读取公开看过列表，再开始整理。")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if render_button_compat("预览看过列表", key="btn_preview_douban_collect", use_container_width=True):
+            if not clean_user_id:
+                st.warning("请先输入有效的豆瓣 ID 或看过页面链接。")
+            else:
+                try:
+                    movies, _, _ = prepare_douban_collect_candidates_ui(clean_user_id, warm_posters=False)
+                    st.session_state["ui_douban_collect_preview_movies"] = movies
+                    st.session_state["ui_douban_collect_preview_user_id"] = clean_user_id
+                    st.success(f"读取到 {len(movies)} 部看过的电影。")
+                except Exception as e:
+                    st.error(f"读取豆瓣看过列表失败：{e}")
+    with c2:
+        if clean_user_id:
+            st.caption(f"将读取：movie.douban.com/people/{clean_user_id}/collect")
+
+    preview_movies = st.session_state.get("ui_douban_collect_preview_movies", [])
+    if st.session_state.get("ui_douban_collect_preview_user_id") != clean_user_id:
+        preview_movies = []
+    if preview_movies:
+        with st.expander(f"当前看过列表（{len(preview_movies)} 部）", expanded=True):
+            render_searchable_item_preview(preview_movies, "ui_douban_collect_preview_search", empty_text="还没有预览结果。")
+
+    nav1, nav2, nav3 = st.columns(3)
+    with nav1:
+        if render_button_compat("返回", key="btn_douban_collect_back_step1", use_container_width=True):
+            go_to_step(1)
+    with nav2:
+        if render_button_compat("清空", key="btn_clear_douban_collect_step2", use_container_width=True):
+            clear_ranking_state()
+            st.session_state["ui_reset_douban_collect_requested"] = True
+            rerun()
+    with nav3:
+        if render_button_compat("开始整理", key="btn_start_douban_collect_step2", use_container_width=True, button_type="primary"):
+            if not clean_user_id:
+                st.warning("请先输入有效的豆瓣 ID 或看过页面链接。")
+            else:
+                st.session_state["ui_pending_douban"] = {
+                    "source_type": "collect",
+                    "mode": mode,
+                    "theme": (st.session_state.get("ui_douban_collect_theme", "") or "").strip() or "我的豆瓣已看电影总榜",
+                    "top_k": top_k,
+                    "user_id": clean_user_id,
+                    "show_poster": show_poster,
+                    "user_name": personalization["user_name"],
+                    "seed_text": personalization["seed_text"] or f"douban-collect-{clean_user_id}",
+                    "blind_mode": personalization["blind_mode"],
+                    "side_shuffle": personalization["side_shuffle"],
+                }
+                st.session_state["ui_step"] = 4
+                rerun()
+
+
 def render_parameter_page() -> None:
     mode = get_selected_mode()
     render_step_header(
@@ -3282,15 +3578,21 @@ def render_parameter_page() -> None:
 
     if mode == MODE_CUSTOM:
         render_custom_parameter_page(mode)
-    else:
+    elif mode == MODE_DOUBAN:
         render_douban_parameter_page(mode)
+    else:
+        render_douban_collect_parameter_page(mode)
 
 
 def render_douban_prepare_page() -> None:
     pending = st.session_state.get("ui_pending_douban")
     st.progress(0.72)
     st.subheader("正在准备片单")
-    st.caption("正在读取豆瓣电影和海报。准备完成后会自动进入选择页。")
+    source_type = (pending or {}).get("source_type", "top250") if isinstance(pending, dict) else "top250"
+    if source_type == "collect":
+        st.caption("正在读取豆瓣已看列表和海报。准备完成后会自动进入选择页。")
+    else:
+        st.caption("正在读取豆瓣电影和海报。准备完成后会自动进入选择页。")
 
     if not pending:
         st.warning("没有待准备的豆瓣片单。")
@@ -3299,10 +3601,17 @@ def render_douban_prepare_page() -> None:
         return
 
     try:
-        movies, poster_map = prepare_douban_candidates_ui(
-            int(pending["pool_n"]),
-            warm_posters=bool(pending["show_poster"]),
-        )
+        poster_url_map: Dict[str, str] = {}
+        if source_type == "collect":
+            movies, poster_map, poster_url_map = prepare_douban_collect_candidates_ui(
+                str(pending["user_id"]),
+                warm_posters=bool(pending["show_poster"]),
+            )
+        else:
+            movies, poster_map = prepare_douban_candidates_ui(
+                int(pending["pool_n"]),
+                warm_posters=bool(pending["show_poster"]),
+            )
         if len(movies) < 2:
             st.error("获取到的电影数量不足 2，无法开始整理。")
             if render_button_compat("返回设置", key="btn_prepare_failed_back", use_container_width=True):
@@ -3310,20 +3619,25 @@ def render_douban_prepare_page() -> None:
                 go_to_step(2)
             return
 
+        top_k = pending.get("top_k")
+        if top_k is not None:
+            top_k = min(int(top_k), len(movies))
+
         init_ranking_state(
             mode=pending["mode"],
             theme=pending["theme"],
             options=movies,
-            top_k=int(pending["top_k"]),
+            top_k=top_k,
             show_poster=bool(pending["show_poster"]),
             user_name=str(pending.get("user_name", "")),
             seed_text=str(pending.get("seed_text", "")),
             blind_mode=bool(pending.get("blind_mode", False)),
             side_shuffle=bool(pending.get("side_shuffle", True)),
             challenge_id="",
-            template_id="douban-live",
+            template_id="douban-collect" if source_type == "collect" else "douban-live",
             source_channel=get_source_channel(),
             initial_poster_map=poster_map,
+            initial_poster_url_map=poster_url_map,
         )
         st.session_state.pop("ui_pending_douban", None)
         st.session_state["ui_step"] = 3
