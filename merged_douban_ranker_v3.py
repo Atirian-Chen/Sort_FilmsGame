@@ -745,6 +745,49 @@ def render_app_styles() -> None:
             transform: translateY(-1px);
             text-decoration: none !important;
         }
+        .collect-spotlight {
+            border: 1px solid #dccfc2;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #fffdf9 0%, #fff5ec 100%);
+            padding: 16px 18px;
+            margin: 6px 0 10px;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 14px;
+            align-items: center;
+        }
+        .collect-spotlight-kicker {
+            color: #8a4f3d;
+            font-size: 12px;
+            font-weight: 850;
+            line-height: 1.25;
+            margin-bottom: 5px;
+        }
+        .collect-spotlight-title {
+            color: #1f2328;
+            font-size: 24px;
+            font-weight: 900;
+            line-height: 1.18;
+            margin-bottom: 6px;
+        }
+        .collect-spotlight-copy {
+            color: #5f574f;
+            font-size: 14px;
+            line-height: 1.45;
+            max-width: 760px;
+        }
+        .collect-spotlight-note {
+            border: 1px solid #ead9cc;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.72);
+            color: #6f665d;
+            padding: 9px 10px;
+            font-size: 12px;
+            font-weight: 720;
+            line-height: 1.35;
+            min-width: 132px;
+            text-align: center;
+        }
         .challenge-badge {
             display: inline-block;
             width: fit-content;
@@ -902,6 +945,18 @@ def render_app_styles() -> None:
             .launch-hero,
             .challenge-grid {
                 grid-template-columns: 1fr;
+            }
+            .collect-spotlight {
+                grid-template-columns: 1fr;
+                padding: 12px;
+                gap: 8px;
+            }
+            .collect-spotlight-title {
+                font-size: 20px;
+            }
+            .collect-spotlight-note {
+                text-align: left;
+                min-width: 0;
             }
             .challenge-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3023,7 +3078,7 @@ def go_to_step(step: int) -> None:
 
 
 def get_selected_mode() -> str:
-    return st.session_state.get("ui_selected_mode", MODE_CUSTOM)
+    return st.session_state.get("ui_selected_mode", MODE_DOUBAN_COLLECT)
 
 
 def set_selected_mode(mode: str) -> None:
@@ -3060,13 +3115,36 @@ def render_step_header(step: int, title: str, subtitle: str = "", compact: bool 
 
 def render_mode_selection_page() -> None:
     current_mode = get_selected_mode()
-    mode_options = [MODE_CUSTOM, MODE_DOUBAN, MODE_DOUBAN_COLLECT]
+    mode_options = [MODE_DOUBAN_COLLECT, MODE_CUSTOM, MODE_DOUBAN]
     render_step_header(
         1,
         "",
         "不用先想完整顺序，只在两部电影之间作一次取舍。",
         compact=True,
     )
+
+    st.markdown(
+        """
+        <div class="collect-spotlight">
+          <div>
+            <div class="collect-spotlight-kicker">主推功能 · 豆瓣已看</div>
+            <div class="collect-spotlight-title">给你的所有已看排出你的榜单</div>
+            <div class="collect-spotlight-copy">输入豆瓣 ID，读取公开的“看过”电影；接下来只需要一轮轮二选一，就能整理出自己的总榜或 Top N。</div>
+          </div>
+          <div class="collect-spotlight-note">适合认真整理<br>自己的电影坐标</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    action_col, hint_col = st.columns([1, 2.4])
+    with action_col:
+        if render_button_compat("用豆瓣已看整理", key="btn_feature_douban_collect", use_container_width=True, button_type="primary"):
+            set_selected_mode(MODE_DOUBAN_COLLECT)
+            go_to_step(2)
+    with hint_col:
+        st.caption("只读取公开可访问的“看过”页面；可以只排 Top N，也可以整理完整总榜。")
+
+    safe_divider()
 
     card_html = []
     for template in FILM_CHALLENGE_TEMPLATES:
@@ -3108,7 +3186,7 @@ def render_mode_selection_page() -> None:
             )
 
     safe_divider()
-    st.subheader("写下自己的片单")
+    st.subheader("也可以从其他来源开始")
     mode = st.radio(
         "片单来源",
         mode_options,
@@ -3119,12 +3197,12 @@ def render_mode_selection_page() -> None:
     set_selected_mode(mode)
 
     safe_divider()
-    if mode == MODE_CUSTOM:
-        st.caption("把想整理的电影粘进来，也可以生成一条片单链接发给朋友。")
-    elif mode == MODE_DOUBAN:
-        st.caption("设置保留名次和候选范围，从豆瓣高分片里整理自己的顺序。")
-    else:
+    if mode == MODE_DOUBAN_COLLECT:
         st.caption("输入豆瓣 ID，读取公开的“看过”电影列表，再排出自己的总榜或 Top N。")
+    elif mode == MODE_CUSTOM:
+        st.caption("把想整理的电影粘进来，也可以生成一条片单链接发给朋友。")
+    else:
+        st.caption("设置保留名次和候选范围，从豆瓣高分片里整理自己的顺序。")
 
     spacer, next_col = st.columns([1, 1])
     with spacer:
@@ -3692,7 +3770,7 @@ def main() -> None:
         return
 
     if "ui_selected_mode" not in st.session_state:
-        st.session_state["ui_selected_mode"] = MODE_CUSTOM
+        st.session_state["ui_selected_mode"] = MODE_DOUBAN_COLLECT
     if "ui_step" not in st.session_state:
         st.session_state["ui_step"] = 1
 
