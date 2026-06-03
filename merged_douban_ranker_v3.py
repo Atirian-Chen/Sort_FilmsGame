@@ -79,6 +79,13 @@ COPY_BUTTON_COMPONENT = components.declare_component(
     "copy_button",
     path=str(Path(__file__).parent / "components" / "copy_button"),
 )
+LOCAL_DRAFT_COMPONENT = components.declare_component(
+    "local_draft",
+    path=str(Path(__file__).parent / "components" / "local_draft"),
+)
+
+LOCAL_DRAFT_VERSION = 1
+LOCAL_DRAFT_STORAGE_KEY = "film_sort_local_draft_v1"
 
 HEADERS = {
     "User-Agent": (
@@ -237,6 +244,36 @@ RANKING_STATE_KEYS = [
     "completion_event_signature",
     "share_poster_bytes",
     "share_poster_signature",
+]
+
+LOCAL_DRAFT_STATE_KEYS = [
+    "mode",
+    "theme",
+    "source_options",
+    "source_poster_url_map",
+    "total",
+    "remaining",
+    "ranked",
+    "current_item",
+    "low",
+    "high",
+    "comparisons",
+    "processed",
+    "finished",
+    "top_k_boundary_check",
+    "started",
+    "top_k",
+    "show_poster",
+    "skipped_items",
+    "user_name",
+    "seed_text",
+    "blind_mode",
+    "side_shuffle",
+    "defers",
+    "challenge_id",
+    "template_id",
+    "source_channel",
+    "completion_event_signature",
 ]
 
 
@@ -1559,6 +1596,135 @@ def init_ranking_state(
 def clear_ranking_state() -> None:
     for name in RANKING_STATE_KEYS:
         st.session_state.pop(k(name), None)
+    st.session_state["local_draft_clear_requested"] = True
+    st.session_state["local_draft_last_signature"] = ""
+
+
+def has_incoming_ranking_url() -> bool:
+    return bool(
+        get_query_param("challenge")
+        or get_query_param("payload")
+        or get_query_param("list")
+        or get_query_param("template")
+    )
+
+
+def json_safe_copy(value):
+    if isinstance(value, dict):
+        safe = {}
+        for key, item in value.items():
+            if isinstance(key, str):
+                safe[key] = json_safe_copy(item)
+        return safe
+    if isinstance(value, list):
+        return [json_safe_copy(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return None
+
+
+def build_local_draft_payload() -> Optional[dict]:
+    if not st.session_state.get(k("started"), False):
+        return None
+
+    state: dict = {}
+    for name in LOCAL_DRAFT_STATE_KEYS:
+        state[name] = json_safe_copy(st.session_state.get(k(name)))
+
+    if not state.get("source_options") or not state.get("ranked"):
+        return None
+
+    state["source_poster_map"] = {}
+    state["poster_map"] = {}
+    state["poster_fetch_failed"] = []
+    state["poster_prefetch_scheduled"] = []
+    state["history"] = []
+    state["share_poster_bytes"] = ""
+    state["share_poster_signature"] = ""
+
+    return {
+        "version": LOCAL_DRAFT_VERSION,
+        "updated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "state": state,
+        "ui": {"step": 3},
+    }
+
+
+def restore_local_draft_payload(draft: dict) -> bool:
+    if not isinstance(draft, dict) or draft.get("version") != LOCAL_DRAFT_VERSION:
+        return False
+    state = draft.get("state")
+    if not isinstance(state, dict) or not state.get("started"):
+        return False
+    if not isinstance(state.get("source_options"), list) or not isinstance(state.get("ranked"), list):
+        return False
+
+    clear_ranking_state()
+    st.session_state.pop("local_draft_clear_requested", None)
+
+    for name in LOCAL_DRAFT_STATE_KEYS:
+        st.session_state[k(name)] = json_safe_copy(state.get(name))
+
+    st.session_state[k("source_poster_map")] = {}
+    st.session_state[k("poster_map")] = {}
+    st.session_state[k("poster_fetch_failed")] = []
+    st.session_state[k("poster_prefetch_scheduled")] = []
+    st.session_state[k("history")] = []
+    st.session_state[k("share_poster_bytes")] = b""
+    st.session_state[k("share_poster_signature")] = ""
+    st.session_state["ui_step"] = 3
+    st.session_state["local_draft_restored"] = True
+    return True
+
+
+def sync_local_draft() -> None:
+    if st.session_state.pop("local_draft_clear_requested", False):
+        LOCAL_DRAFT_COMPONENT(
+            action="clear",
+            storage_key=LOCAL_DRAFT_STORAGE_KEY,
+            key="local_draft_clear",
+            default=None,
+        )
+        return
+
+    if not st.session_state.get("local_draft_checked", False):
+        result = LOCAL_DRAFT_COMPONENT(
+            action="load",
+            storage_key=LOCAL_DRAFT_STORAGE_KEY,
+            key="local_draft_load",
+            default=None,
+        )
+        if isinstance(result, dict) and result.get("status") == "loaded":
+            st.session_state["local_draft_checked"] = True
+            draft = result.get("draft")
+            if (
+                draft
+                and not st.session_state.get(k("started"), False)
+                and not has_incoming_ranking_url()
+                and restore_local_draft_payload(draft)
+            ):
+                rerun()
+        return
+
+    draft = build_local_draft_payload()
+    if not draft:
+        return
+
+    signature_payload = {"state": draft.get("state"), "ui": draft.get("ui")}
+    signature = hashlib.sha256(
+        json.dumps(signature_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    if st.session_state.get("local_draft_last_signature") == signature:
+        return
+
+    st.session_state["local_draft_last_signature"] = signature
+    LOCAL_DRAFT_COMPONENT(
+        action="save",
+        storage_key=LOCAL_DRAFT_STORAGE_KEY,
+        draft=draft,
+        key=f"local_draft_save_{signature[:16]}",
+        default=None,
+    )
 
 
 def reset_same_config() -> None:
@@ -3788,6 +3954,7 @@ def main() -> None:
         },
     )
     maybe_open_url_challenge()
+    sync_local_draft()
 
     step = get_ui_step()
     if step == 3:
@@ -3797,6 +3964,9 @@ def main() -> None:
     else:
         st.title(APP_TITLE)
         st.markdown(APP_SUBTITLE)
+
+    if st.session_state.pop("local_draft_restored", False):
+        st.success("已接回本机上次未完成的整理进度。")
 
     if step == 1:
         render_mode_selection_page()
