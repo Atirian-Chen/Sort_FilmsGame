@@ -25,18 +25,32 @@ create table if not exists public.analytics_events (
   payload jsonb not null default '{}'::jsonb
 );
 
+create table if not exists public.imported_movie_lists (
+  id text primary key,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null default (now() + interval '7 days'),
+  source text not null default 'douban_bookmarklet',
+  item_count int not null default 0,
+  items jsonb not null,
+  use_count int not null default 0
+);
+
 create index if not exists analytics_events_created_at_idx on public.analytics_events (created_at desc);
 create index if not exists analytics_events_event_name_idx on public.analytics_events (event_name);
 create index if not exists analytics_events_challenge_id_idx on public.analytics_events (challenge_id);
 create index if not exists analytics_events_template_id_idx on public.analytics_events (template_id);
+create index if not exists imported_movie_lists_expires_at_idx on public.imported_movie_lists (expires_at desc);
 
 alter table public.challenge_sets enable row level security;
 alter table public.analytics_events enable row level security;
+alter table public.imported_movie_lists enable row level security;
 
 drop policy if exists "challenge sets are readable" on public.challenge_sets;
 drop policy if exists "challenge sets can be created by anon" on public.challenge_sets;
 drop policy if exists "analytics events can be inserted by anon" on public.analytics_events;
 drop policy if exists "analytics events are readable for app dashboards" on public.analytics_events;
+drop policy if exists "imported movie lists can be created by anon" on public.imported_movie_lists;
+drop policy if exists "imported movie lists are readable before expiry" on public.imported_movie_lists;
 
 create policy "challenge sets are readable"
 on public.challenge_sets for select
@@ -66,3 +80,19 @@ create policy "analytics events are readable for app dashboards"
 on public.analytics_events for select
 to anon
 using (true);
+
+create policy "imported movie lists can be created by anon"
+on public.imported_movie_lists for insert
+to anon
+with check (
+  id ~ '^db-[a-z0-9]{12,32}$'
+  and source in ('douban_bookmarklet')
+  and item_count between 2 and 1500
+  and jsonb_typeof(items) = 'array'
+  and jsonb_array_length(items) between 2 and 1500
+);
+
+create policy "imported movie lists are readable before expiry"
+on public.imported_movie_lists for select
+to anon
+using (expires_at > now());

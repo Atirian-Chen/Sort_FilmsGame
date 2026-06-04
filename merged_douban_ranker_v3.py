@@ -46,6 +46,12 @@ from challenge_store import (
     fetch_challenge,
     save_challenge,
 )
+from import_store import (
+    build_douban_bookmarklet,
+    build_import_url,
+    clean_import_id,
+    fetch_imported_movie_list,
+)
 from launch_copy import (
     FILM_CHALLENGE_TEMPLATES,
     HERO_SUBTITLE,
@@ -426,6 +432,21 @@ def get_query_param(name: str) -> str:
     if isinstance(value, list):
         return str(value[0]) if value else ""
     return str(value or "")
+
+
+def clear_query_param(name: str) -> None:
+    try:
+        if name in st.query_params:
+            del st.query_params[name]
+        return
+    except Exception:
+        pass
+    try:
+        params = st.experimental_get_query_params()
+        params.pop(name, None)
+        st.experimental_set_query_params(**params)
+    except Exception:
+        return
 
 
 def render_copy_button(label: str, text: str, key: str, placeholder: str = "") -> bool:
@@ -824,6 +845,23 @@ def render_app_styles() -> None:
             line-height: 1.35;
             min-width: 132px;
             text-align: center;
+        }
+        .bookmarklet-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 38px;
+            padding: 0 14px;
+            border: 1px solid #9b6a58;
+            border-radius: 8px;
+            background: #fffaf4;
+            color: #8a4f3d !important;
+            font-weight: 850;
+            text-decoration: none !important;
+        }
+        .bookmarklet-link:hover {
+            background: #fff1e4;
+            text-decoration: none !important;
         }
         .challenge-badge {
             display: inline-block;
@@ -1606,6 +1644,7 @@ def has_incoming_ranking_url() -> bool:
         or get_query_param("payload")
         or get_query_param("list")
         or get_query_param("template")
+        or get_query_param("import")
     )
 
 
@@ -2313,6 +2352,47 @@ def start_challenge(challenge: Challenge, *, show_poster: bool = True) -> None:
     st.session_state["ui_selected_mode"] = MODE_CUSTOM
     st.session_state["ui_step"] = 3
     rerun()
+
+
+def open_imported_movie_list(import_id: str) -> bool:
+    clean_id = clean_import_id(import_id)
+    if not clean_id:
+        st.warning("这个片单 ID 看起来不正确。")
+        return False
+
+    imported = fetch_imported_movie_list(clean_id)
+    st.session_state["loaded_import_id"] = clean_id
+    st.session_state["local_draft_checked"] = True
+    if not imported:
+        st.warning("没有找到这份导入片单。可能是片单 ID 不正确、已过期，或 Supabase 表还没有配置。")
+        return False
+
+    if st.session_state.get(k("started"), False):
+        clear_ranking_state()
+
+    st.session_state["ui_selected_mode"] = MODE_CUSTOM
+    st.session_state["ui_step"] = 2
+    st.session_state["ui_custom_theme"] = "我的豆瓣已看电影总榜"
+    st.session_state["ui_custom_options_text"] = "\n".join(imported.items)
+    st.session_state["ui_custom_top_k_enabled"] = True
+    st.session_state["ui_custom_top_k"] = min(20, len(imported.items))
+    st.session_state["ui_import_id"] = imported.id
+    st.session_state["ui_import_item_count"] = len(imported.items)
+    st.session_state["ui_import_poster_url_map"] = imported.poster_url_map
+    st.session_state["ui_import_source"] = imported.source
+    st.session_state["ui_import_loaded_notice"] = True
+    return True
+
+
+def maybe_open_imported_movie_list() -> None:
+    import_id = get_query_param("import")
+    if not import_id or st.session_state.get("loaded_import_id") == import_id:
+        return
+
+    opened = open_imported_movie_list(import_id)
+    clear_query_param("import")
+    if opened:
+        rerun()
 
 
 def resolve_challenge_from_url() -> Optional[Challenge]:
@@ -3463,6 +3543,11 @@ def reset_custom_parameter_defaults() -> None:
     st.session_state.pop("ui_custom_challenge_url", None)
     st.session_state.pop("ui_custom_challenge_caption", None)
     st.session_state.pop("ui_custom_challenge_id", None)
+    st.session_state.pop("ui_import_id", None)
+    st.session_state.pop("ui_import_item_count", None)
+    st.session_state.pop("ui_import_poster_url_map", None)
+    st.session_state.pop("ui_import_source", None)
+    st.session_state.pop("ui_import_loaded_notice", None)
 
 
 def reset_douban_parameter_defaults() -> None:
@@ -3492,9 +3577,52 @@ def reset_douban_collect_parameter_defaults() -> None:
     st.session_state.pop("ui_douban_collect_preview_user_id", None)
 
 
+def render_imported_list_notice() -> None:
+    import_id = clean_import_id(st.session_state.get("ui_import_id", ""))
+    if not import_id:
+        return
+
+    item_count = int(st.session_state.get("ui_import_item_count", 0) or 0)
+    import_url = build_import_url(import_id)
+    st.info(f"已导入豆瓣已看片单：{item_count} 部。片单 ID：{import_id}")
+    c1, c2 = st.columns(2)
+    with c1:
+        render_copy_button("复制手机继续链接", import_url, "copy_import_url", "导入链接")
+    with c2:
+        render_copy_button("复制片单 ID", import_id, "copy_import_id", "片单 ID")
+
+
+def render_douban_bookmarklet_import() -> None:
+    with st.expander("从豆瓣页面导入，适合自动读取被豆瓣拦截时使用", expanded=False):
+        if not analytics_enabled():
+            st.warning("这个导入方式需要先配置 Supabase。配置后才能生成跨设备片单 ID。")
+            return
+
+        bookmarklet = build_douban_bookmarklet()
+        if not bookmarklet:
+            st.warning("还没有读到 Supabase 配置，暂时不能生成导入工具。")
+            return
+
+        st.caption("电脑端推荐：把下面这个按钮拖到浏览器书签栏，然后打开自己的豆瓣电影“看过”页面，点击书签即可导入。")
+        st.markdown(
+            f"""
+            <a class="bookmarklet-link" href="{html.escape(bookmarklet, quote=True)}">
+              导入我的豆瓣已看
+            </a>
+            """,
+            unsafe_allow_html=True,
+        )
+        render_copy_button("复制书签工具代码", bookmarklet, "copy_douban_bookmarklet", "书签工具代码")
+        st.caption("导入完成后会自动回到本站，并显示片单 ID。把这个链接或 ID 发到手机，就可以换设备继续整理。")
+
+
 def render_custom_parameter_page(mode: str) -> None:
     if st.session_state.pop("ui_reset_custom_requested", False):
         reset_custom_parameter_defaults()
+
+    if st.session_state.pop("ui_import_loaded_notice", False):
+        st.success("导入成功。你可以在这里调整标题和 Top N，然后把链接发到手机继续。")
+    render_imported_list_notice()
 
     render_custom_template_gallery()
 
@@ -3508,6 +3636,15 @@ def render_custom_parameter_page(mode: str) -> None:
     )
 
     options = parse_options_text(st.session_state.get("ui_custom_options_text", ""))
+    imported_poster_url_map = st.session_state.get("ui_import_poster_url_map", {})
+    if isinstance(imported_poster_url_map, dict):
+        imported_poster_url_map = {
+            str(title): str(url)
+            for title, url in imported_poster_url_map.items()
+            if str(title) in options and str(url).strip()
+        }
+    else:
+        imported_poster_url_map = {}
     st.caption(f"当前有效电影：{len(options)} 部（已自动去重、去空行）。")
     st.caption("支持每行一个，也支持用逗号、顿号、分号或竖线一次性粘贴。")
 
@@ -3601,6 +3738,7 @@ def render_custom_parameter_page(mode: str) -> None:
                     template_id="",
                     source_channel=get_source_channel(),
                     initial_poster_map=None,
+                    initial_poster_url_map=imported_poster_url_map,
                 )
                 st.session_state["ui_step"] = 3
                 rerun()
@@ -3710,6 +3848,8 @@ def render_douban_collect_parameter_page(mode: str) -> None:
         f"示例：如果链接是 movie.douban.com/people/123456/collect，豆瓣 ID 就是 123456。"
         f" 只读取公开可访问的“看过”页面，最多读取前 {DOUBAN_COLLECT_MAX_ITEMS} 部。"
     )
+    render_douban_bookmarklet_import()
+
     raw_user_id = st.session_state.get("ui_douban_collect_user_id", "")
     clean_user_id = normalize_douban_user_id(raw_user_id)
     if raw_user_id.strip() and not clean_user_id:
@@ -3953,6 +4093,7 @@ def main() -> None:
             "session_hint": get_session_id()[-8:],
         },
     )
+    maybe_open_imported_movie_list()
     maybe_open_url_challenge()
     sync_local_draft()
 
