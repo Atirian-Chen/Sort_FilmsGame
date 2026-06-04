@@ -74,7 +74,8 @@
     }
 
     function render(args) {
-      const label = escapeHtml(args.label || "Import");
+      const rawLabel = String(args.label || "Import");
+      const label = escapeHtml(rawLabel);
       const href = String(args.href || "");
       root.innerHTML = `
         <div class="wrap">
@@ -84,15 +85,20 @@
       `;
       const link = root.querySelector("a.bookmarklet");
       link.setAttribute("href", href);
+      link.setAttribute("title", rawLabel);
+      link.setAttribute("aria-label", rawLabel);
       link.addEventListener("click", (event) => {
         event.preventDefault();
         setValue({ clicked: true, nonce: Date.now() });
       });
       link.addEventListener("dragstart", (event) => {
+        const html = `<a href="${escapeHtml(href)}" title="${label}">${label}</a>`;
         event.dataTransfer.effectAllowed = "copyLink";
         event.dataTransfer.setData("text/uri-list", href);
         event.dataTransfer.setData("text/plain", href);
-        event.dataTransfer.setData("text/html", `<a href="${escapeHtml(href)}">${label}</a>`);
+        event.dataTransfer.setData("text/html", html);
+        event.dataTransfer.setData("text/x-moz-url", `${href}\n${rawLabel}`);
+        event.dataTransfer.setData("URL", href);
       });
       requestAnimationFrame(setFrameHeight);
     }
