@@ -3711,11 +3711,16 @@ def render_douban_bookmarklet_import(clean_user_id: str = "") -> None:
             )
             if clean_user_id:
                 st.markdown(f"[打开我的豆瓣已看页](https://movie.douban.com/people/{clean_user_id}/collect)")
-            render_bookmarklet_link("导入我的豆瓣已看", bookmarklet, "douban_bookmarklet_link")
-            st.caption("保存后可以在 Chrome 书签管理器里确认：网址应以 javascript: 开头。")
+            bookmarklet_name = "导入我的豆瓣已看"
+            render_bookmarklet_link(bookmarklet_name, bookmarklet, "douban_bookmarklet_link")
+            st.caption("保存后可以在 Chrome 书签管理器里确认：名称是「导入我的豆瓣已看」，网址以 javascript: 开头。")
             with st.expander("拖不动？手动复制导入按钮代码", expanded=False):
-                st.caption("新建一个浏览器书签，把下面复制出的内容粘到书签的网址/URL 里。")
-                render_copy_button("复制导入按钮代码", bookmarklet, "copy_douban_bookmarklet", "导入按钮代码")
+                st.caption("新建一个浏览器书签，名称填「导入我的豆瓣已看」，网址/URL 粘贴导入按钮代码。")
+                name_col, code_col = st.columns(2)
+                with name_col:
+                    render_copy_button("复制书签名称", bookmarklet_name, "copy_douban_bookmarklet_name", "书签名称")
+                with code_col:
+                    render_copy_button("复制导入按钮代码", bookmarklet, "copy_douban_bookmarklet", "导入按钮代码")
 
         with resume_tab:
             st.caption("电脑导入完成后，页面会显示一个 db- 开头的片单 ID。手机上输入它，就能打开同一份片单。")
