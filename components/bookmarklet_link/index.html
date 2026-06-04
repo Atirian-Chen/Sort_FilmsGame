@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #1f2328;
+      background: transparent;
+    }
+    body {
+      margin: 0;
+      background: transparent;
+    }
+    .wrap {
+      display: grid;
+      gap: 6px;
+      align-items: start;
+    }
+    a.bookmarklet {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      width: fit-content;
+      padding: 0 14px;
+      border: 1px solid #9b6a58;
+      border-radius: 8px;
+      background: #fffaf4;
+      color: #8a4f3d;
+      font-weight: 850;
+      text-decoration: none;
+      cursor: grab;
+      user-select: none;
+    }
+    a.bookmarklet:hover,
+    a.bookmarklet:focus-visible {
+      background: #fff1e4;
+      outline: 3px solid rgba(155, 106, 88, 0.14);
+      text-decoration: none;
+    }
+    .hint {
+      color: #6f665d;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+    const root = document.getElementById("root");
+
+    function send(type, payload) {
+      window.parent.postMessage({ isStreamlitMessage: true, type, ...payload }, "*");
+    }
+
+    function setFrameHeight() {
+      send("streamlit:setFrameHeight", { height: document.body.scrollHeight });
+    }
+
+    function setValue(value) {
+      send("streamlit:setComponentValue", { value, dataType: "json" });
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function render(args) {
+      const label = escapeHtml(args.label || "Import");
+      const href = String(args.href || "");
+      root.innerHTML = `
+        <div class="wrap">
+          <a class="bookmarklet" href="#" draggable="true">${label}</a>
+          <div class="hint">拖到浏览器书签栏；保存后网址应以 javascript: 开头。</div>
+        </div>
+      `;
+      const link = root.querySelector("a.bookmarklet");
+      link.setAttribute("href", href);
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        setValue({ clicked: true, nonce: Date.now() });
+      });
+      link.addEventListener("dragstart", (event) => {
+        event.dataTransfer.effectAllowed = "copyLink";
+        event.dataTransfer.setData("text/uri-list", href);
+        event.dataTransfer.setData("text/plain", href);
+        event.dataTransfer.setData("text/html", `<a href="${escapeHtml(href)}">${label}</a>`);
+      });
+      requestAnimationFrame(setFrameHeight);
+    }
+
+    window.addEventListener("message", (event) => {
+      const data = event.data || {};
+      if (data.type !== "streamlit:render") return;
+      render(data.args || {});
+    });
+
+    send("streamlit:componentReady", { apiVersion: 1 });
+    setFrameHeight();
+  </script>
+</body>
+</html>

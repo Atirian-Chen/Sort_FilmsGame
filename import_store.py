@@ -123,23 +123,41 @@ def build_douban_bookmarklet() -> str:
         "table": IMPORT_TABLE,
         "maxItems": 1500,
         "pageSize": 15,
+        "messages": {
+            "preparing": "正在准备导入……",
+            "openCollectFirst": "请先打开豆瓣电影的“看过”页面，再点击这个导入工具。",
+            "readingPage": "正在读取第",
+            "pageSuffix": "页，已找到",
+            "movieSuffix": "部……",
+            "fetchFailed": "豆瓣页面读取失败：",
+            "notEnough": "没有读到足够的已看电影，请确认当前页面是公开可访问的“看过”页。",
+            "creatingId": "已读取",
+            "creatingIdSuffix": "部，正在生成片单 ID：",
+            "saveFailed": "片单保存失败：",
+            "success": "导入成功：",
+            "opening": "正在打开电影审美名单……",
+            "successAlert": "导入成功。片单 ID：",
+            "mobileHint": "可以把下一页链接发到手机继续。",
+            "failed": "导入失败：",
+        },
     }
-    config_json = json.dumps(config, ensure_ascii=False, separators=(",", ":"))
+    config_json = json.dumps(config, ensure_ascii=True, separators=(",", ":"))
     script = f"""
 (() => {{
   const cfg = {config_json};
+  const msg = cfg.messages;
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const makeId = () => {{
     const bytes = new Uint8Array(8);
     crypto.getRandomValues(bytes);
     return "db-" + Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
   }};
-  const cleanTitle = (value) => String(value || "").replace(/\\s+/g, " ").replace(/^看过\\s*/, "").trim();
+  const cleanTitle = (value) => String(value || "").replace(/\\s+/g, " ").replace(/^\\u770b\\u8fc7\\s*/, "").trim();
   const collectPath = () => /\\/people\\/[^/]+\\/collect/.test(location.pathname);
   const escapeHtml = (value) => String(value || "").replace(/[&<>"']/g, (ch) => ({{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}}[ch]));
   const overlay = document.createElement("div");
   overlay.style.cssText = "position:fixed;z-index:2147483647;left:16px;right:16px;bottom:16px;padding:14px 16px;border-radius:10px;background:#1f2328;color:#fff;font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 12px 32px rgba(0,0,0,.28)";
-  overlay.textContent = "正在准备导入……";
+  overlay.textContent = msg.preparing;
   document.body.appendChild(overlay);
   const update = (text) => {{ overlay.textContent = text; }};
   const parsePage = (doc, seen) => {{
@@ -153,7 +171,7 @@ def build_douban_bookmarklet() -> str:
       if (seen.has(title)) {{
         const intro = (item.querySelector("li.intro") || {{ textContent: "" }}).textContent || "";
         const year = (intro.match(/(?:19|20)\\d{{2}}/) || [""])[0];
-        if (year && !seen.has(`${{title}}（${{year}}）`)) title = `${{title}}（${{year}}）`;
+        if (year && !seen.has(`${{title}} (${{year}})`)) title = `${{title}} (${{year}})`;
       }}
       if (seen.has(title)) continue;
       seen.add(title);
@@ -168,16 +186,16 @@ def build_douban_bookmarklet() -> str:
   (async () => {{
     try {{
       if (!/douban\\.com$/.test(location.hostname) || !collectPath()) {{
-        alert("请先打开豆瓣电影的“看过”页面，再点击这个导入工具。");
+        alert(msg.openCollectFirst);
         overlay.remove();
         return;
       }}
       const seen = new Set();
       const entries = [];
       for (let start = 0; start < cfg.maxItems; start += cfg.pageSize) {{
-        update(`正在读取第 ${{Math.floor(start / cfg.pageSize) + 1}} 页，已找到 ${{entries.length}} 部……`);
+        update(`${{msg.readingPage}} ${{Math.floor(start / cfg.pageSize) + 1}} ${{msg.pageSuffix}} ${{entries.length}} ${{msg.movieSuffix}}`);
         const response = await fetch(pageUrl(start), {{ credentials: "include" }});
-        if (!response.ok) throw new Error(`豆瓣页面读取失败：${{response.status}}`);
+        if (!response.ok) throw new Error(`${{msg.fetchFailed}}${{response.status}}`);
         const text = await response.text();
         const doc = new DOMParser().parseFromString(text, "text/html");
         const current = parsePage(doc, seen);
@@ -187,9 +205,9 @@ def build_douban_bookmarklet() -> str:
         if (!doc.querySelector("span.next a, .paginator .next a")) break;
         await sleep(420 + Math.floor(Math.random() * 360));
       }}
-      if (entries.length < 2) throw new Error("没有读到足够的已看电影，请确认当前页面是公开可访问的“看过”页。");
+      if (entries.length < 2) throw new Error(msg.notEnough);
       const importId = makeId();
-      update(`已读取 ${{entries.length}} 部，正在生成片单 ID：${{importId}}`);
+      update(`${{msg.creatingId}} ${{entries.length}} ${{msg.creatingIdSuffix}}${{importId}}`);
       const saveResponse = await fetch(`${{cfg.supabaseUrl}}/rest/v1/${{cfg.table}}`, {{
         method: "POST",
         headers: {{
@@ -205,14 +223,14 @@ def build_douban_bookmarklet() -> str:
           items: entries
         }})
       }});
-      if (!saveResponse.ok) throw new Error(`片单保存失败：${{saveResponse.status}}`);
+      if (!saveResponse.ok) throw new Error(`${{msg.saveFailed}}${{saveResponse.status}}`);
       const target = `${{cfg.appUrl}}?import=${{encodeURIComponent(importId)}}`;
-      overlay.innerHTML = `导入成功：<strong>${{escapeHtml(importId)}}</strong><br>正在打开电影审美名单……`;
-      alert(`导入成功。片单 ID：${{importId}}\\n可以把下一页链接发到手机继续。`);
+      overlay.innerHTML = `${{msg.success}}<strong>${{escapeHtml(importId)}}</strong><br>${{msg.opening}}`;
+      alert(`${{msg.successAlert}}${{importId}}\\n${{msg.mobileHint}}`);
       location.href = target;
     }} catch (error) {{
-      update(`导入失败：${{error.message || error}}`);
-      alert(`导入失败：${{error.message || error}}`);
+      update(`${{msg.failed}}${{error.message || error}}`);
+      alert(`${{msg.failed}}${{error.message || error}}`);
     }}
   }})();
 }})();

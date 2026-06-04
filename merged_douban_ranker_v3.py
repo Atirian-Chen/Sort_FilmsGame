@@ -89,6 +89,10 @@ LOCAL_DRAFT_COMPONENT = components.declare_component(
     "local_draft",
     path=str(Path(__file__).parent / "components" / "local_draft"),
 )
+BOOKMARKLET_LINK_COMPONENT = components.declare_component(
+    "bookmarklet_link",
+    path=str(Path(__file__).parent / "components" / "bookmarklet_link"),
+)
 
 LOCAL_DRAFT_VERSION = 1
 LOCAL_DRAFT_STORAGE_KEY = "film_sort_local_draft_v1"
@@ -454,6 +458,10 @@ def render_copy_button(label: str, text: str, key: str, placeholder: str = "") -
     if isinstance(result, dict):
         return bool(result.get("copied"))
     return False
+
+
+def render_bookmarklet_link(label: str, href: str, key: str) -> None:
+    BOOKMARKLET_LINK_COMPONENT(label=label, href=href, key=key, default=None)
 
 
 def get_source_channel() -> str:
@@ -2382,16 +2390,25 @@ def start_challenge(challenge: Challenge, *, show_poster: bool = True) -> None:
 def open_imported_movie_list(import_id: str) -> bool:
     clean_id = clean_import_id(import_id)
     if not clean_id:
-        st.warning("这个片单 ID 看起来不正确。")
+        st.session_state["ui_selected_mode"] = MODE_DOUBAN_COLLECT
+        st.session_state["ui_step"] = 2
+        st.session_state["ui_import_fetch_failed_id"] = str(import_id or "").strip()
+        st.session_state["ui_import_fetch_failed_message"] = "这个片单 ID 看起来不正确。"
         return False
 
     imported = fetch_imported_movie_list(clean_id)
-    st.session_state["loaded_import_id"] = clean_id
     st.session_state["local_draft_checked"] = True
     if not imported:
-        st.warning("没有找到这份导入片单。可能是片单 ID 不正确、已过期，或 Supabase 表还没有配置。")
+        st.session_state["ui_selected_mode"] = MODE_DOUBAN_COLLECT
+        st.session_state["ui_step"] = 2
+        st.session_state["ui_import_lookup_id"] = clean_id
+        st.session_state["ui_import_fetch_failed_id"] = clean_id
+        st.session_state["ui_import_fetch_failed_message"] = "收到片单 ID，但还没有从云端读到片单。可能是 Supabase 表/权限没有更新，或刚保存完还需要几秒。"
         return False
 
+    st.session_state["loaded_import_id"] = clean_id
+    st.session_state.pop("ui_import_fetch_failed_id", None)
+    st.session_state.pop("ui_import_fetch_failed_message", None)
     if st.session_state.get(k("started"), False):
         clear_ranking_state()
 
@@ -2415,9 +2432,11 @@ def maybe_open_imported_movie_list() -> None:
         return
 
     opened = open_imported_movie_list(import_id)
-    clear_query_param("import")
     if opened:
+        clear_query_param("import")
         rerun()
+    else:
+        clear_query_param("import")
 
 
 def resolve_challenge_from_url() -> Optional[Challenge]:
@@ -3618,6 +3637,11 @@ def render_imported_list_notice() -> None:
 
 
 def render_import_id_loader() -> None:
+    failed_id = clean_import_id(st.session_state.get("ui_import_fetch_failed_id", ""))
+    failed_message = st.session_state.get("ui_import_fetch_failed_message", "")
+    if failed_id:
+        st.warning(f"{failed_message} 当前片单 ID：{failed_id}")
+
     st.text_input(
         "已有片单 ID",
         key="ui_import_lookup_id",
@@ -3639,6 +3663,18 @@ def render_import_id_loader() -> None:
 
 def render_douban_bookmarklet_import(clean_user_id: str = "") -> None:
     with st.expander("电脑导入助手：自动读取失败时用这个", expanded=True):
+        failed_id = clean_import_id(st.session_state.get("ui_import_fetch_failed_id", ""))
+        failed_message = st.session_state.get("ui_import_fetch_failed_message", "")
+        if failed_id:
+            st.warning(f"{failed_message} 当前片单 ID：{failed_id}")
+            retry_col, copy_col = st.columns(2)
+            with retry_col:
+                if render_button_compat("重新读取这份片单", key="btn_retry_failed_import", use_container_width=True):
+                    if open_imported_movie_list(failed_id):
+                        rerun()
+            with copy_col:
+                render_copy_button("复制片单 ID", failed_id, "copy_failed_import_id", "片单 ID")
+
         if not analytics_enabled():
             st.warning("这个导入方式需要先配置 Supabase。配置后才能生成跨设备片单 ID。")
             return
@@ -3675,14 +3711,8 @@ def render_douban_bookmarklet_import(clean_user_id: str = "") -> None:
             )
             if clean_user_id:
                 st.markdown(f"[打开我的豆瓣已看页](https://movie.douban.com/people/{clean_user_id}/collect)")
-            st.markdown(
-                f"""
-                <a class="bookmarklet-link" href="{html.escape(bookmarklet, quote=True)}">
-                  导入我的豆瓣已看
-                </a>
-                """,
-                unsafe_allow_html=True,
-            )
+            render_bookmarklet_link("导入我的豆瓣已看", bookmarklet, "douban_bookmarklet_link")
+            st.caption("保存后可以在 Chrome 书签管理器里确认：网址应以 javascript: 开头。")
             with st.expander("拖不动？手动复制导入按钮代码", expanded=False):
                 st.caption("新建一个浏览器书签，把下面复制出的内容粘到书签的网址/URL 里。")
                 render_copy_button("复制导入按钮代码", bookmarklet, "copy_douban_bookmarklet", "导入按钮代码")
