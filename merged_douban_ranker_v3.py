@@ -863,6 +863,31 @@ def render_app_styles() -> None:
             background: #fff1e4;
             text-decoration: none !important;
         }
+        .import-helper {
+            border: 1px solid #e7e1d8;
+            border-radius: 8px;
+            background: #fffdf9;
+            padding: 12px;
+            margin: 6px 0 10px;
+        }
+        .import-helper-title {
+            color: #1f2328;
+            font-size: 15px;
+            font-weight: 850;
+            margin-bottom: 4px;
+        }
+        .import-helper-copy {
+            color: #6f665d;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+        .import-step-list {
+            margin: 8px 0;
+            padding-left: 18px;
+            color: #3c3935;
+            font-size: 13px;
+            line-height: 1.55;
+        }
         .challenge-badge {
             display: inline-block;
             width: fit-content;
@@ -3592,8 +3617,28 @@ def render_imported_list_notice() -> None:
         render_copy_button("复制片单 ID", import_id, "copy_import_id", "片单 ID")
 
 
-def render_douban_bookmarklet_import() -> None:
-    with st.expander("从豆瓣页面导入，适合自动读取被豆瓣拦截时使用", expanded=False):
+def render_import_id_loader() -> None:
+    st.text_input(
+        "已有片单 ID",
+        key="ui_import_lookup_id",
+        placeholder="例：db-0123456789abcdef",
+        help="电脑导入后会生成片单 ID。手机或另一台电脑输入这个 ID，就能打开同一份片单。",
+    )
+    import_id = clean_import_id(st.session_state.get("ui_import_lookup_id", ""))
+    c1, c2 = st.columns(2)
+    with c1:
+        if render_button_compat("打开这份片单", key="btn_open_import_id", use_container_width=True):
+            if not import_id:
+                st.warning("请先输入完整的片单 ID，格式类似 db-0123456789abcdef。")
+            elif open_imported_movie_list(import_id):
+                rerun()
+    with c2:
+        if import_id:
+            render_copy_button("复制片单链接", build_import_url(import_id), "copy_lookup_import_url", "片单链接")
+
+
+def render_douban_bookmarklet_import(clean_user_id: str = "") -> None:
+    with st.expander("电脑导入助手：自动读取失败时用这个", expanded=True):
         if not analytics_enabled():
             st.warning("这个导入方式需要先配置 Supabase。配置后才能生成跨设备片单 ID。")
             return
@@ -3603,17 +3648,48 @@ def render_douban_bookmarklet_import() -> None:
             st.warning("还没有读到 Supabase 配置，暂时不能生成导入工具。")
             return
 
-        st.caption("电脑端推荐：把下面这个按钮拖到浏览器书签栏，然后打开自己的豆瓣电影“看过”页面，点击书签即可导入。")
-        st.markdown(
-            f"""
-            <a class="bookmarklet-link" href="{html.escape(bookmarklet, quote=True)}">
-              导入我的豆瓣已看
-            </a>
-            """,
-            unsafe_allow_html=True,
-        )
-        render_copy_button("复制书签工具代码", bookmarklet, "copy_douban_bookmarklet", "书签工具代码")
-        st.caption("导入完成后会自动回到本站，并显示片单 ID。把这个链接或 ID 发到手机，就可以换设备继续整理。")
+        try:
+            first_tab, resume_tab = st.tabs(["第一次导入", "已有片单 ID"])
+        except Exception:
+            first_tab, resume_tab = st.container(), st.container()
+
+        with first_tab:
+            st.markdown(
+                """
+                <div class="import-helper">
+                  <div class="import-helper-title">只需要在电脑上做一次</div>
+                  <div class="import-helper-copy">把导入按钮放进书签栏，然后在豆瓣“看过”页面点它。导入成功后，会生成一个片单 ID，可以发到手机继续。</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                """
+                <ol class="import-step-list">
+                  <li>按 <strong>Ctrl + Shift + B</strong> 显示浏览器书签栏。</li>
+                  <li>把下面的按钮拖到书签栏。</li>
+                  <li>打开豆瓣“看过”页面，在豆瓣页面点击书签栏里的导入按钮。</li>
+                </ol>
+                """,
+                unsafe_allow_html=True,
+            )
+            if clean_user_id:
+                st.markdown(f"[打开我的豆瓣已看页](https://movie.douban.com/people/{clean_user_id}/collect)")
+            st.markdown(
+                f"""
+                <a class="bookmarklet-link" href="{html.escape(bookmarklet, quote=True)}">
+                  导入我的豆瓣已看
+                </a>
+                """,
+                unsafe_allow_html=True,
+            )
+            with st.expander("拖不动？手动复制导入按钮代码", expanded=False):
+                st.caption("新建一个浏览器书签，把下面复制出的内容粘到书签的网址/URL 里。")
+                render_copy_button("复制导入按钮代码", bookmarklet, "copy_douban_bookmarklet", "导入按钮代码")
+
+        with resume_tab:
+            st.caption("电脑导入完成后，页面会显示一个 db- 开头的片单 ID。手机上输入它，就能打开同一份片单。")
+            render_import_id_loader()
 
 
 def render_custom_parameter_page(mode: str) -> None:
@@ -3848,12 +3924,12 @@ def render_douban_collect_parameter_page(mode: str) -> None:
         f"示例：如果链接是 movie.douban.com/people/123456/collect，豆瓣 ID 就是 123456。"
         f" 只读取公开可访问的“看过”页面，最多读取前 {DOUBAN_COLLECT_MAX_ITEMS} 部。"
     )
-    render_douban_bookmarklet_import()
 
     raw_user_id = st.session_state.get("ui_douban_collect_user_id", "")
     clean_user_id = normalize_douban_user_id(raw_user_id)
     if raw_user_id.strip() and not clean_user_id:
         st.warning("这个豆瓣 ID/链接看起来不对。可以直接填数字 ID，比如 123456。")
+    render_douban_bookmarklet_import(clean_user_id)
 
     st.text_input(
         "片单标题",
