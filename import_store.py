@@ -17,8 +17,11 @@ IMPORT_ID_RE = re.compile(r"^db-[a-z0-9]{12,32}$")
 @dataclass
 class ImportedMovieList:
     id: str
+    entries: List[Dict[str, Any]]
     items: List[str]
     poster_url_map: Dict[str, str]
+    rating_map: Dict[str, int]
+    has_rating_data: bool = False
     source: str = "douban_bookmarklet"
 
 
@@ -31,22 +34,39 @@ def clean_import_id(import_id: str) -> str:
     return value if IMPORT_ID_RE.match(value) else ""
 
 
-def normalize_import_entries(entries: List[Any]) -> List[Dict[str, str]]:
-    normalized: List[Dict[str, str]] = []
+def clean_rating(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        rating = int(value)
+    except (TypeError, ValueError):
+        return None
+    return rating if 1 <= rating <= 5 else None
+
+
+def normalize_import_entries(entries: List[Any]) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
     seen = set()
     for entry in entries:
         title = ""
         poster_url = ""
+        rating: Optional[int] = None
+        has_rating_key = False
         if isinstance(entry, dict):
             title = str(entry.get("title") or "").strip()
             poster_url = str(entry.get("poster_url") or entry.get("poster") or "").strip()
+            has_rating_key = "rating" in entry
+            rating = clean_rating(entry.get("rating"))
         else:
             title = str(entry or "").strip()
         title = re.sub(r"\s+", " ", title)
         if not title or title in seen:
             continue
         seen.add(title)
-        normalized.append({"title": title, "poster_url": poster_url})
+        item: Dict[str, Any] = {"title": title, "poster_url": poster_url}
+        if has_rating_key:
+            item["rating"] = rating
+        normalized.append(item)
     return normalized[:1500]
 
 
@@ -70,8 +90,11 @@ def save_imported_movie_list(entries: List[Any], *, source: str = "douban_bookma
     )
     return ImportedMovieList(
         id=import_id,
+        entries=clean_entries,
         items=[entry["title"] for entry in clean_entries],
         poster_url_map={entry["title"]: entry["poster_url"] for entry in clean_entries if entry.get("poster_url")},
+        rating_map={entry["title"]: int(entry["rating"]) for entry in clean_entries if entry.get("rating") is not None},
+        has_rating_data=any("rating" in entry for entry in clean_entries),
         source=source,
     )
 
@@ -94,14 +117,19 @@ def fetch_imported_movie_list(import_id: str) -> Optional[ImportedMovieList]:
         return None
 
     row = result[0]
-    entries = normalize_import_entries(row.get("items") or [])
+    raw_entries = row.get("items") or []
+    has_rating_data = any(isinstance(entry, dict) and "rating" in entry for entry in raw_entries)
+    entries = normalize_import_entries(raw_entries)
     if len(entries) < 2:
         return None
 
     return ImportedMovieList(
         id=str(row.get("id") or clean_id),
+        entries=entries,
         items=[entry["title"] for entry in entries],
         poster_url_map={entry["title"]: entry["poster_url"] for entry in entries if entry.get("poster_url")},
+        rating_map={entry["title"]: int(entry["rating"]) for entry in entries if entry.get("rating") is not None},
+        has_rating_data=has_rating_data,
         source=str(row.get("source") or "douban_bookmarklet"),
     )
 
@@ -166,6 +194,10 @@ def build_douban_bookmarklet() -> str:
     for (const item of rows) {{
       const titleEl = item.querySelector(".title a em") || item.querySelector(".title a") || item.querySelector("a.nbgnbg");
       const imgEl = item.querySelector("div.pic img") || item.querySelector("img");
+      const ratingEl = item.querySelector('span[class*="rating"]');
+      const ratingClass = ratingEl ? Array.from(ratingEl.classList).join(" ") : "";
+      const ratingMatch = ratingClass.match(/rating([1-5])-t/);
+      const rating = ratingMatch ? Number(ratingMatch[1]) : null;
       let title = cleanTitle((titleEl && (titleEl.getAttribute("title") || titleEl.textContent)) || (imgEl && imgEl.getAttribute("alt")) || "");
       if (!title) continue;
       if (seen.has(title)) {{
@@ -177,7 +209,8 @@ def build_douban_bookmarklet() -> str:
       seen.add(title);
       entries.push({{
         title,
-        poster_url: (imgEl && (imgEl.getAttribute("src") || imgEl.getAttribute("data-src"))) || ""
+        poster_url: (imgEl && (imgEl.getAttribute("src") || imgEl.getAttribute("data-src"))) || "",
+        rating
       }});
     }}
     return entries;
