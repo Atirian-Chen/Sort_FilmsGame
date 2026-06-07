@@ -10,10 +10,11 @@ import math
 import random
 import re
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import pandas as pd
 import qrcode
 import requests
 import streamlit as st
@@ -22,15 +23,30 @@ from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 
 from analytics import (
+    EVENT_LABELS,
     EVENT_CHALLENGE_OPENED,
     EVENT_PAGE_VIEW,
     EVENT_POSTER_DOWNLOADED,
     EVENT_RANKING_COMPLETED,
     EVENT_RANKING_STARTED,
     EVENT_SHARE_LINK_COPIED,
+    MAIN_FUNNEL_STEPS,
+    SHARED_FUNNEL_STEPS,
+    available_event_date_range,
     analytics_enabled,
-    fetch_admin_metrics,
+    build_admin_insights,
+    build_admin_summary,
+    build_daily_metrics,
+    build_event_table_rows,
+    build_funnel_rows,
+    build_group_metrics,
+    build_numeric_payload_histogram,
+    build_payload_value_counts,
+    build_setting_rows,
+    build_top_k_distribution,
+    fetch_all_events,
     fetch_public_metrics,
+    filter_events_by_date,
     get_admin_token,
     get_public_app_url,
     get_session_id,
@@ -2597,6 +2613,246 @@ def render_public_metrics() -> None:
     )
 
 
+def admin_int(value: Any) -> str:
+    try:
+        return f"{int(value):,}"
+    except (TypeError, ValueError):
+        return "0"
+
+
+def admin_float(value: Any) -> str:
+    try:
+        return f"{float(value):.1f}"
+    except (TypeError, ValueError):
+        return "0.0"
+
+
+def admin_percent(value: Any) -> str:
+    try:
+        return f"{float(value):.1%}"
+    except (TypeError, ValueError):
+        return "0.0%"
+
+
+def admin_short_time(value: Any) -> str:
+    text = str(value or "")
+    return text.replace("T", " ")[:19]
+
+
+def render_admin_dataframe(frame: pd.DataFrame) -> None:
+    try:
+        st.dataframe(frame, use_container_width=True, hide_index=True)
+    except TypeError:
+        st.dataframe(frame)
+
+
+def render_admin_metric_grid(summary: Dict[str, Any]) -> None:
+    first_row = [
+        ("访问", admin_int(summary.get("page_views"))),
+        ("独立 session", admin_int(summary.get("unique_sessions"))),
+        ("开始整理", admin_int(summary.get("started"))),
+        ("完成名单", admin_int(summary.get("completed"))),
+        ("复制分享", admin_int(summary.get("copied"))),
+        ("下载海报", admin_int(summary.get("posters"))),
+    ]
+    second_row = [
+        ("开始率", admin_percent(summary.get("start_rate"))),
+        ("完成率", admin_percent(summary.get("completion_rate"))),
+        ("复制/完成", admin_percent(summary.get("share_rate"))),
+        ("海报/完成", admin_percent(summary.get("poster_rate"))),
+        ("平均取舍", admin_float(summary.get("avg_comparisons"))),
+        ("平均规模", admin_float(summary.get("avg_total"))),
+    ]
+    for row in (first_row, second_row):
+        columns = st.columns(len(row))
+        for column, (label, value) in zip(columns, row):
+            with column:
+                st.metric(label, value)
+    st.caption("复制/完成、海报/完成按动作次数除以完成名单数计算；同一用户多次复制或下载时可能超过 100%。")
+
+
+def render_admin_insights(insights: List[str]) -> None:
+    st.subheader("自动洞察")
+    if not insights:
+        st.info("当前筛选范围内还没有足够数据生成洞察。")
+        return
+    st.markdown("\n".join(f"- {html.escape(insight)}" for insight in insights))
+
+
+def admin_funnel_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    frame = pd.DataFrame(rows)
+    return pd.DataFrame(
+        {
+            "步骤": frame["step"],
+            "事件": frame["event_name"].map(lambda name: EVENT_LABELS.get(str(name), str(name))),
+            "数量": frame["count"],
+            "上一步转化": frame["step_rate"].map(admin_percent),
+            "总转化": frame["overall_rate"].map(admin_percent),
+        }
+    )
+
+
+def render_admin_funnel(title: str, rows: List[Dict[str, Any]], caption: str) -> None:
+    st.markdown(f"**{title}**")
+    if not rows:
+        st.info("当前筛选范围内没有漏斗数据。")
+        return
+    frame = pd.DataFrame(rows)
+    chart = frame[["step", "count"]].rename(columns={"step": "步骤", "count": "数量"}).set_index("步骤")
+    chart_col, table_col = st.columns([1, 1])
+    with chart_col:
+        st.bar_chart(chart)
+    with table_col:
+        render_admin_dataframe(admin_funnel_df(rows))
+    st.caption(caption)
+
+
+def admin_group_df(rows: List[Dict[str, Any]], label_key: str, label_name: str, include_winners: bool = False) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    display_rows: List[Dict[str, Any]] = []
+    for row in rows:
+        item = {
+            label_name: row.get(label_key, ""),
+            "事件": int(row.get("total_events", 0)),
+            "访问": int(row.get("page_views", 0)),
+            "打开": int(row.get("challenge_opened", 0)),
+            "开始": int(row.get("started", 0)),
+            "完成": int(row.get("completed", 0)),
+            "复制": int(row.get("copied", 0)),
+            "海报": int(row.get("posters", 0)),
+            "完成率": admin_percent(row.get("completion_rate")),
+            "复制/完成": admin_percent(row.get("share_rate")),
+            "海报/完成": admin_percent(row.get("poster_rate")),
+            "平均取舍": round(float(row.get("avg_comparisons", 0.0)), 1),
+            "平均规模": round(float(row.get("avg_total", 0.0)), 1),
+            "最近活跃": admin_short_time(row.get("last_seen")),
+        }
+        if include_winners:
+            item["冠军 Top3"] = row.get("top_winners", "")
+        display_rows.append(item)
+    return pd.DataFrame(display_rows)
+
+
+def render_admin_group_section(
+    title: str,
+    rows: List[Dict[str, Any]],
+    label_key: str,
+    label_name: str,
+    *,
+    include_winners: bool = False,
+) -> None:
+    st.markdown(f"**{title}**")
+    if not rows:
+        st.info("当前筛选范围内没有数据。")
+        return
+    display = admin_group_df(rows, label_key, label_name, include_winners=include_winners)
+    chart_source = display[[label_name, "完成", "开始"]].head(12).set_index(label_name)
+    chart_col, table_col = st.columns([1, 1.6])
+    with chart_col:
+        st.bar_chart(chart_source)
+    with table_col:
+        render_admin_dataframe(display)
+
+
+def render_admin_count_chart(rows: List[Dict[str, Any]], label_key: str, title: str) -> None:
+    st.markdown(f"**{title}**")
+    if not rows:
+        st.info("当前筛选范围内没有数据。")
+        return
+    frame = pd.DataFrame(rows)
+    st.bar_chart(frame[[label_key, "count"]].set_index(label_key))
+    render_admin_dataframe(frame)
+
+
+def render_admin_trends(events: List[Dict[str, Any]]) -> None:
+    daily_rows = build_daily_metrics(events)
+    if not daily_rows:
+        st.info("当前筛选范围内没有趋势数据。")
+        return
+    daily = pd.DataFrame(daily_rows).set_index("date")
+    event_cols = [
+        EVENT_PAGE_VIEW,
+        EVENT_RANKING_STARTED,
+        EVENT_RANKING_COMPLETED,
+        EVENT_SHARE_LINK_COPIED,
+        EVENT_POSTER_DOWNLOADED,
+    ]
+    rate_cols = ["start_rate", "completion_rate", "share_rate", "poster_rate"]
+    event_chart = daily[event_cols].rename(columns=EVENT_LABELS)
+    rate_chart = (daily[rate_cols] * 100).rename(
+        columns={
+            "start_rate": "开始率",
+            "completion_rate": "完成率",
+            "share_rate": "复制/完成",
+            "poster_rate": "海报/完成",
+        }
+    )
+    event_tab, rate_tab, data_tab = st.tabs(["事件趋势", "转化趋势", "趋势数据"])
+    with event_tab:
+        st.line_chart(event_chart)
+    with rate_tab:
+        st.line_chart(rate_chart)
+        st.caption("转化趋势以百分比数值展示。")
+    with data_tab:
+        display = daily.reset_index().rename(columns={"date": "日期", **EVENT_LABELS})
+        render_admin_dataframe(display)
+        render_download_button_compat(
+            "下载每日趋势 CSV",
+            display.to_csv(index=False).encode("utf-8-sig"),
+            "admin_daily_metrics.csv",
+            "text/csv",
+            "admin_download_daily_metrics",
+        )
+
+
+def render_admin_recent_events(events: List[Dict[str, Any]]) -> None:
+    label_to_name = {label: name for name, label in EVENT_LABELS.items()}
+    event_labels = list(label_to_name.keys())
+    selected_labels = st.multiselect("事件类型", event_labels, default=event_labels, key="admin_recent_event_labels")
+    selected_names = {label_to_name[label] for label in selected_labels}
+    search_col1, search_col2, search_col3, search_col4 = st.columns([1, 1, 1, 1])
+    with search_col1:
+        session_query = st.text_input("Session 后 8 位", key="admin_recent_session_query").strip().lower()
+    with search_col2:
+        template_query = st.text_input("模板 ID", key="admin_recent_template_query").strip().lower()
+    with search_col3:
+        challenge_query = st.text_input("片单 ID", key="admin_recent_challenge_query").strip().lower()
+    with search_col4:
+        limit = st.number_input("展示条数", min_value=20, max_value=1000, value=200, step=20, key="admin_recent_limit")
+
+    filtered: List[Dict[str, Any]] = []
+    for event in events:
+        if event.get("event_name") not in selected_names:
+            continue
+        session_id = str(event.get("session_id") or "").lower()
+        template_id = str(event.get("template_id") or "").lower()
+        challenge_id = str(event.get("challenge_id") or "").lower()
+        if session_query and session_query not in session_id[-8:]:
+            continue
+        if template_query and template_query not in template_id:
+            continue
+        if challenge_query and challenge_query not in challenge_id:
+            continue
+        filtered.append(event)
+
+    rows = build_event_table_rows(filtered, int(limit))
+    if not rows:
+        st.info("当前筛选条件下没有事件。")
+        return
+    frame = pd.DataFrame(rows)
+    render_admin_dataframe(frame)
+    render_download_button_compat(
+        "下载当前事件 CSV",
+        frame.to_csv(index=False).encode("utf-8-sig"),
+        "admin_events.csv",
+        "text/csv",
+        "admin_download_events",
+    )
+
+
 def render_admin_dashboard() -> None:
     token = get_query_param("admin")
     expected = get_admin_token()
@@ -2604,35 +2860,202 @@ def render_admin_dashboard() -> None:
         st.error("后台口令无效或未配置。")
         return
 
-    st.title("电影审美名单 · 匿名数据看板")
-    metrics = fetch_admin_metrics()
-    if not metrics.get("enabled"):
+    st.title("电影审美名单 · Admin Analytics v1")
+    if not analytics_enabled():
         st.warning("Supabase 还没有配置，暂时没有可展示的数据。")
         return
 
-    counts = metrics.get("counts", {})
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.metric("访问", counts.get(EVENT_PAGE_VIEW, 0))
-    with c2:
-        st.metric("开始整理", counts.get(EVENT_RANKING_STARTED, 0))
-    with c3:
-        st.metric("完成", counts.get(EVENT_RANKING_COMPLETED, 0), f"{metrics.get('completion_rate', 0):.1%}")
-    with c4:
-        st.metric("复制链接", counts.get(EVENT_SHARE_LINK_COPIED, 0), f"{metrics.get('share_rate', 0):.1%}")
+    if render_button_compat("刷新数据缓存", key="admin_refresh_cache", use_container_width=False):
+        try:
+            fetch_all_events.clear()
+        except Exception:
+            pass
+        rerun()
 
-    left, right = st.columns(2)
-    with left:
-        st.subheader("热门模板")
-        for template_id, count in metrics.get("top_templates", []):
-            st.write(f"{template_id}: {count}")
-    with right:
-        st.subheader("热门片单")
-        for challenge_id, count in metrics.get("top_challenges", []):
-            st.write(f"{challenge_id}: {count}")
+    all_events = fetch_all_events()
+    min_event_date, max_event_date = available_event_date_range(all_events)
+    if not all_events or min_event_date is None or max_event_date is None:
+        st.info("Supabase 已配置，但 analytics_events 里还没有可展示的事件。")
+        return
 
-    with st.expander("最近事件", expanded=False):
-        st.json(metrics.get("recent_events", [])[:50])
+    st.caption(f"已读取历史事件 {len(all_events):,} 条。统计基于匿名事件，不包含姓名、IP 或联系方式。")
+    filter_col1, filter_col2, filter_col3 = st.columns([1, 1, 1])
+    with filter_col1:
+        range_option = st.selectbox(
+            "时间范围",
+            ["近 7 天", "近 30 天", "近 90 天", "全部历史", "自定义"],
+            index=1,
+            key="admin_range_option",
+        )
+
+    if range_option == "近 7 天":
+        start_date = max(min_event_date, max_event_date - timedelta(days=6))
+        end_date = max_event_date
+    elif range_option == "近 30 天":
+        start_date = max(min_event_date, max_event_date - timedelta(days=29))
+        end_date = max_event_date
+    elif range_option == "近 90 天":
+        start_date = max(min_event_date, max_event_date - timedelta(days=89))
+        end_date = max_event_date
+    elif range_option == "全部历史":
+        start_date = min_event_date
+        end_date = max_event_date
+    else:
+        default_start = max(min_event_date, max_event_date - timedelta(days=29))
+        with filter_col2:
+            start_date = st.date_input(
+                "开始日期",
+                value=default_start,
+                min_value=min_event_date,
+                max_value=max_event_date,
+                key="admin_custom_start_date",
+            )
+        with filter_col3:
+            end_date = st.date_input(
+                "结束日期",
+                value=max_event_date,
+                min_value=min_event_date,
+                max_value=max_event_date,
+                key="admin_custom_end_date",
+            )
+    if range_option != "自定义":
+        with filter_col2:
+            st.metric("开始日期", start_date.isoformat())
+        with filter_col3:
+            st.metric("结束日期", end_date.isoformat())
+
+    if isinstance(start_date, tuple):
+        start_date = start_date[0]
+    if isinstance(end_date, tuple):
+        end_date = end_date[-1]
+    if start_date > end_date:
+        st.warning("开始日期晚于结束日期，已自动交换。")
+        start_date, end_date = end_date, start_date
+
+    events = filter_events_by_date(all_events, start_date, end_date)
+    st.caption(f"当前筛选：{start_date.isoformat()} 至 {end_date.isoformat()}，共 {len(events):,} 条事件。")
+    if not events:
+        st.info("当前时间范围内没有事件。")
+        return
+
+    summary = build_admin_summary(events)
+    render_admin_metric_grid(summary)
+    safe_divider()
+    render_admin_insights(build_admin_insights(events))
+    safe_divider()
+
+    funnel_tab, trend_tab, source_tab, content_tab, behavior_tab, share_tab, event_tab = st.tabs(
+        ["转化漏斗", "每日趋势", "渠道与模式", "内容表现", "行为质量", "分享与素材", "最近事件"]
+    )
+
+    with funnel_tab:
+        render_admin_funnel(
+            "主漏斗",
+            build_funnel_rows(events, MAIN_FUNNEL_STEPS),
+            "主漏斗按事件总量计算，不做同一 session 的严格路径归因。",
+        )
+        safe_divider()
+        render_admin_funnel(
+            "共享片单漏斗",
+            build_funnel_rows(events, SHARED_FUNNEL_STEPS),
+            "共享片单漏斗用于观察片单传播链路；开始、完成和分享仍是筛选范围内的总事件数。",
+        )
+
+    with trend_tab:
+        render_admin_trends(events)
+
+    with source_tab:
+        source_rows = build_group_metrics(events, "source_channel", label_key="source_channel", include_unknown=True, top_n=30)
+        mode_rows = build_group_metrics(events, "mode", label_key="mode", include_unknown=True, top_n=30)
+        render_admin_group_section("来源渠道表现", source_rows, "source_channel", "来源")
+        safe_divider()
+        render_admin_group_section("模式表现", mode_rows, "mode", "模式")
+
+    with content_tab:
+        template_rows = build_group_metrics(events, "template_id", label_key="template_id", include_winners=True, top_n=30)
+        challenge_rows = build_group_metrics(events, "challenge_id", label_key="challenge_id", top_n=30)
+        render_admin_group_section("模板表现排行榜", template_rows, "template_id", "模板", include_winners=True)
+        safe_divider()
+        render_admin_group_section("热门片单传播榜", challenge_rows, "challenge_id", "片单 ID")
+        safe_divider()
+        render_admin_count_chart(
+            build_payload_value_counts(events, EVENT_RANKING_COMPLETED, "winner", label_key="冠军", top_n=20),
+            "冠军",
+            "冠军电影分布",
+        )
+
+    with behavior_tab:
+        q1, q2, q3, q4 = st.columns(4)
+        with q1:
+            st.metric("取舍中位数", admin_float(summary.get("median_comparisons")))
+        with q2:
+            st.metric("取舍 P75", admin_float(summary.get("p75_comparisons")))
+        with q3:
+            st.metric("取舍 P90", admin_float(summary.get("p90_comparisons")))
+        with q4:
+            st.metric("平均暂放", admin_float(summary.get("avg_defers")))
+        h1, h2 = st.columns(2)
+        with h1:
+            render_admin_count_chart(
+                build_numeric_payload_histogram(
+                    events,
+                    EVENT_RANKING_COMPLETED,
+                    "comparisons",
+                    [10, 20, 40, 80, 120, 200],
+                    label_key="取舍次数",
+                ),
+                "取舍次数",
+                "取舍次数分布",
+            )
+        with h2:
+            render_admin_count_chart(
+                build_numeric_payload_histogram(
+                    events,
+                    EVENT_RANKING_COMPLETED,
+                    "total",
+                    [10, 20, 50, 100, 250, 500, 1000],
+                    label_key="片单规模",
+                ),
+                "片单规模",
+                "片单规模分布",
+            )
+        safe_divider()
+        k1, k2 = st.columns(2)
+        with k1:
+            render_admin_count_chart(build_top_k_distribution(events), "top_k", "Top K 设置分布")
+        with k2:
+            setting_rows = build_setting_rows(events)
+            if setting_rows:
+                settings_display = pd.DataFrame(
+                    {
+                        "设置": [row["setting"] for row in setting_rows],
+                        "次数": [row["count"] for row in setting_rows],
+                        "占开始比例": [admin_percent(row["rate"]) for row in setting_rows],
+                    }
+                )
+                st.markdown("**交互设置使用率**")
+                st.bar_chart(pd.DataFrame(setting_rows).set_index("setting")[["count"]])
+                render_admin_dataframe(settings_display)
+            else:
+                st.info("当前筛选范围内没有设置数据。")
+
+    with share_tab:
+        c1, c2 = st.columns(2)
+        with c1:
+            render_admin_count_chart(
+                build_payload_value_counts(events, EVENT_SHARE_LINK_COPIED, "surface", label_key="分享入口", include_empty=True),
+                "分享入口",
+                "分享动作拆分",
+            )
+        with c2:
+            render_admin_count_chart(
+                build_payload_value_counts(events, EVENT_POSTER_DOWNLOADED, "poster_type", label_key="海报类型", include_empty=True),
+                "海报类型",
+                "海报下载拆分",
+            )
+
+    with event_tab:
+        render_admin_recent_events(events)
 
 
 def render_cover_header() -> None:
