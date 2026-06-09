@@ -4,6 +4,7 @@ import json
 import re
 import secrets
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
@@ -21,7 +22,9 @@ class ImportedMovieList:
     items: List[str]
     poster_url_map: Dict[str, str]
     rating_map: Dict[str, int]
+    rated_at_map: Dict[str, str]
     has_rating_data: bool = False
+    has_rated_at_data: bool = False
     source: str = "douban_bookmarklet"
 
 
@@ -44,6 +47,19 @@ def clean_rating(value: Any) -> Optional[int]:
     return rating if 1 <= rating <= 5 else None
 
 
+def clean_collect_date(value: Any) -> Optional[str]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    match = re.search(r"((?:19|20)\d{2})[-./年](\d{1,2})[-./月](\d{1,2})(?:日)?", text)
+    if not match:
+        return None
+    try:
+        return date(int(match.group(1)), int(match.group(2)), int(match.group(3))).isoformat()
+    except ValueError:
+        return None
+
+
 def normalize_import_entries(entries: List[Any]) -> List[Dict[str, Any]]:
     normalized: List[Dict[str, Any]] = []
     seen = set()
@@ -51,12 +67,16 @@ def normalize_import_entries(entries: List[Any]) -> List[Dict[str, Any]]:
         title = ""
         poster_url = ""
         rating: Optional[int] = None
+        rated_at: Optional[str] = None
         has_rating_key = False
+        has_rated_at_key = False
         if isinstance(entry, dict):
             title = str(entry.get("title") or "").strip()
             poster_url = str(entry.get("poster_url") or entry.get("poster") or "").strip()
             has_rating_key = "rating" in entry
             rating = clean_rating(entry.get("rating"))
+            has_rated_at_key = "rated_at" in entry or "collect_date" in entry or "date" in entry
+            rated_at = clean_collect_date(entry.get("rated_at") or entry.get("collect_date") or entry.get("date"))
         else:
             title = str(entry or "").strip()
         title = re.sub(r"\s+", " ", title)
@@ -66,6 +86,8 @@ def normalize_import_entries(entries: List[Any]) -> List[Dict[str, Any]]:
         item: Dict[str, Any] = {"title": title, "poster_url": poster_url}
         if has_rating_key:
             item["rating"] = rating
+        if has_rated_at_key:
+            item["rated_at"] = rated_at
         normalized.append(item)
     return normalized[:1500]
 
@@ -94,7 +116,9 @@ def save_imported_movie_list(entries: List[Any], *, source: str = "douban_bookma
         items=[entry["title"] for entry in clean_entries],
         poster_url_map={entry["title"]: entry["poster_url"] for entry in clean_entries if entry.get("poster_url")},
         rating_map={entry["title"]: int(entry["rating"]) for entry in clean_entries if entry.get("rating") is not None},
+        rated_at_map={entry["title"]: str(entry["rated_at"]) for entry in clean_entries if entry.get("rated_at")},
         has_rating_data=any("rating" in entry for entry in clean_entries),
+        has_rated_at_data=any("rated_at" in entry for entry in clean_entries),
         source=source,
     )
 
@@ -119,6 +143,7 @@ def fetch_imported_movie_list(import_id: str) -> Optional[ImportedMovieList]:
     row = result[0]
     raw_entries = row.get("items") or []
     has_rating_data = any(isinstance(entry, dict) and "rating" in entry for entry in raw_entries)
+    has_rated_at_data = any(isinstance(entry, dict) and "rated_at" in entry for entry in raw_entries)
     entries = normalize_import_entries(raw_entries)
     if len(entries) < 2:
         return None
@@ -129,7 +154,9 @@ def fetch_imported_movie_list(import_id: str) -> Optional[ImportedMovieList]:
         items=[entry["title"] for entry in entries],
         poster_url_map={entry["title"]: entry["poster_url"] for entry in entries if entry.get("poster_url")},
         rating_map={entry["title"]: int(entry["rating"]) for entry in entries if entry.get("rating") is not None},
+        rated_at_map={entry["title"]: str(entry["rated_at"]) for entry in entries if entry.get("rated_at")},
         has_rating_data=has_rating_data,
+        has_rated_at_data=has_rated_at_data,
         source=str(row.get("source") or "douban_bookmarklet"),
     )
 
@@ -181,6 +208,16 @@ def build_douban_bookmarklet() -> str:
     return "db-" + Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
   }};
   const cleanTitle = (value) => String(value || "").replace(/\\s+/g, " ").replace(/^\\u770b\\u8fc7\\s*/, "").trim();
+  const normalizeDate = (value) => {{
+    const match = String(value || "").match(/((?:19|20)\\d{{2}})[-./\\u5e74](\\d{{1,2}})[-./\\u6708](\\d{{1,2}})(?:\\u65e5)?/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) return null;
+    return String(year).padStart(4, "0") + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+  }};
   const collectPath = () => /\\/people\\/[^/]+\\/collect/.test(location.pathname);
   const escapeHtml = (value) => String(value || "").replace(/[&<>"']/g, (ch) => ({{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}}[ch]));
   const overlay = document.createElement("div");
@@ -198,6 +235,8 @@ def build_douban_bookmarklet() -> str:
       const ratingClass = ratingEl ? Array.from(ratingEl.classList).join(" ") : "";
       const ratingMatch = ratingClass.match(/rating([1-5])-t/);
       const rating = ratingMatch ? Number(ratingMatch[1]) : null;
+      const dateEl = item.querySelector(".date");
+      const rated_at = normalizeDate((dateEl && dateEl.textContent) || item.textContent || "");
       let title = cleanTitle((titleEl && (titleEl.getAttribute("title") || titleEl.textContent)) || (imgEl && imgEl.getAttribute("alt")) || "");
       if (!title) continue;
       if (seen.has(title)) {{
@@ -210,7 +249,8 @@ def build_douban_bookmarklet() -> str:
       entries.push({{
         title,
         poster_url: (imgEl && (imgEl.getAttribute("src") || imgEl.getAttribute("data-src"))) || "",
-        rating
+        rating,
+        rated_at
       }});
     }}
     return entries;
