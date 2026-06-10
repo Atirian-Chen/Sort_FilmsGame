@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    function send(type, payload) {
+      window.parent.postMessage({ isStreamlitMessage: true, type, ...payload }, "*");
+    }
+
+    function setFrameHeight() {
+      send("streamlit:setFrameHeight", { height: 0 });
+    }
+
+    function setValue(value) {
+      send("streamlit:setComponentValue", { value, dataType: "json" });
+    }
+
+    function parseDraft(raw) {
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw);
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function render(args) {
+      const action = String(args.action || "");
+      const storageKey = String(args.storage_key || "film_sort_local_draft_v1");
+
+      try {
+        if (action === "load") {
+          const draft = parseDraft(window.localStorage.getItem(storageKey));
+          setValue({ status: "loaded", draft, nonce: Date.now() });
+        } else if (action === "save") {
+          window.localStorage.setItem(storageKey, JSON.stringify(args.draft || null));
+        } else if (action === "clear") {
+          window.localStorage.removeItem(storageKey);
+        }
+      } catch (error) {
+        if (action === "load") {
+          setValue({ status: "error", message: String(error), nonce: Date.now() });
+        }
+      }
+
+      setFrameHeight();
+    }
+
+    window.addEventListener("message", (event) => {
+      const data = event.data || {};
+      if (data.type !== "streamlit:render") return;
+      render(data.args || {});
+    });
+
+    send("streamlit:componentReady", { apiVersion: 1 });
+    setFrameHeight();
+  </script>
+</body>
+</html>

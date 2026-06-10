@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #111827;
+      background: transparent;
+    }
+    body {
+      margin: 0;
+      background: transparent;
+    }
+    .wrap {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: stretch;
+    }
+    input {
+      min-width: 0;
+      border: 1px solid #d0d5dd;
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #111827;
+      background: #fff;
+      font-size: 14px;
+    }
+    button {
+      border: 1px solid #214ed3;
+      border-radius: 8px;
+      background: #315efb;
+      color: #fff;
+      font-weight: 800;
+      padding: 0 14px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button:focus-visible {
+      outline: 3px solid rgba(49, 94, 251, 0.2);
+    }
+    .status {
+      grid-column: 1 / -1;
+      color: #667085;
+      font-size: 12px;
+      min-height: 18px;
+    }
+    @media (max-width: 520px) {
+      .wrap {
+        grid-template-columns: 1fr;
+      }
+      button {
+        height: 42px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+    const root = document.getElementById("root");
+
+    function send(type, payload) {
+      window.parent.postMessage({ isStreamlitMessage: true, type, ...payload }, "*");
+    }
+
+    function setFrameHeight() {
+      send("streamlit:setFrameHeight", { height: document.body.scrollHeight });
+    }
+
+    function setValue(value) {
+      send("streamlit:setComponentValue", { value, dataType: "json" });
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function render(args) {
+      const text = String(args.text ?? "");
+      const label = escapeHtml(args.label || "复制");
+      const placeholder = escapeHtml(args.placeholder || "");
+      root.innerHTML = `
+        <div class="wrap">
+          <input aria-label="${placeholder || label}" value="${escapeHtml(text)}" readonly>
+          <button type="button">${label}</button>
+          <div class="status"></div>
+        </div>
+      `;
+      const input = root.querySelector("input");
+      const button = root.querySelector("button");
+      const status = root.querySelector(".status");
+      button.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          status.textContent = "已复制";
+          setValue({ copied: true, nonce: Date.now() });
+        } catch (error) {
+          input.select();
+          document.execCommand("copy");
+          status.textContent = "已复制，请确认剪贴板权限";
+          setValue({ copied: true, nonce: Date.now() });
+        }
+      });
+      requestAnimationFrame(setFrameHeight);
+    }
+
+    window.addEventListener("message", (event) => {
+      const data = event.data || {};
+      if (data.type !== "streamlit:render") return;
+      render(data.args || {});
+    });
+
+    send("streamlit:componentReady", { apiVersion: 1 });
+    setFrameHeight();
+  </script>
+</body>
+</html>
