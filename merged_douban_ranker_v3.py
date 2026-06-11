@@ -432,6 +432,22 @@ def make_qr_image(url: str, size: int = 164) -> Image.Image:
     return img.resize((size, size), Image.Resampling.NEAREST)
 
 
+def draw_medal_icon(draw: ImageDraw.ImageDraw, x: int, y: int, rank: int, font: ImageFont.ImageFont) -> None:
+    colors = {
+        1: ((236, 183, 73), (174, 116, 24)),
+        2: ((190, 198, 210), (118, 130, 148)),
+        3: ((203, 132, 76), (141, 78, 40)),
+    }
+    fill, outline = colors.get(rank, ((73, 93, 241), (46, 58, 180)))
+    cx, cy, radius = x + 22, y + 22, 21
+    draw.polygon([(cx - 14, cy + 14), (cx - 3, cy + 42), (cx + 3, cy + 14)], fill=outline)
+    draw.polygon([(cx + 14, cy + 14), (cx + 3, cy + 42), (cx - 3, cy + 14)], fill=outline)
+    draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), fill=fill, outline=outline, width=3)
+    label = str(rank)
+    bbox = draw.textbbox((0, 0), label, font=font)
+    draw.text((cx - (bbox[2] - bbox[0]) / 2, cy - (bbox[3] - bbox[1]) / 2 - 1), label, font=font, fill=(255, 255, 255))
+
+
 def image_file_data_uri(path: Path) -> Optional[str]:
     if not path.exists():
         return None
@@ -2464,15 +2480,6 @@ def get_most_contested_pair() -> dict:
             "note": "冠军和第二名之间，就是这份名单最有性格的一道分界线。",
         }
 
-    skipped_items = st.session_state.get(k("skipped_items"), [])
-    if ranked and skipped_items:
-        return {
-            "left": ranked[0],
-            "right": skipped_items[0],
-            "label": "最后留下的分岔",
-            "note": "一个留在榜首，一个被你放下；这也构成了这份名单的性格。",
-        }
-
     return {"left": ranked[0] if ranked else "", "right": "", "label": "最纠结的一组选择", "note": "完成一次整理后，这里会记录你的关键取舍。"}
 
 
@@ -2887,17 +2894,6 @@ def render_result_peak(total: int, comparisons: int, top_k: Optional[int]) -> No
         """,
         unsafe_allow_html=True,
     )
-
-
-def cycle_share_poster_style() -> None:
-    current = st.session_state.get(k("share_poster_style"), SHARE_POSTER_STYLES[0])
-    try:
-        idx = SHARE_POSTER_STYLES.index(current)
-    except ValueError:
-        idx = 0
-    st.session_state[k("share_poster_style")] = SHARE_POSTER_STYLES[(idx + 1) % len(SHARE_POSTER_STYLES)]
-    st.session_state[k("share_poster_signature")] = ""
-    st.session_state[k("share_poster_bytes")] = b""
 
 
 def render_poster_preview_html(poster_bytes: bytes) -> None:
@@ -3875,10 +3871,7 @@ def generate_share_poster_bytes(
 
     title_lines = wrap_text(measure_draw, theme, title_font, width - padding * 2)
     title_height = len(title_lines) * 60
-    champion = ranked[0] if ranked else ""
-    champion_lines = wrap_text(measure_draw, champion, item_font, width - padding * 2 - 170)[:2] if champion else []
-    champion_height = 106 + max(0, len(champion_lines) - 1) * 36 if champion else 0
-    header_height = title_height + 54 + (34 if user_name else 0) + champion_height + 34
+    header_height = title_height + 54 + (34 if user_name else 0) + 34
     qr_block_height = 184 if include_qr else 0
     bottom_margin = 48
 
@@ -3895,18 +3888,9 @@ def generate_share_poster_bytes(
         wrapped = wrap_text(measure_draw, item, item_font, max_text_width)
         ranked_layout.append((item, wrapped))
 
-    skipped_lines: List[str] = []
-    if skipped_items:
-        joined = "、".join(skipped_items[:12])
-        if len(skipped_items) > 12:
-            joined += "……"
-        skipped_lines = wrap_text(measure_draw, joined, small_font, width - padding * 2)
-
     content_height = padding + header_height + len(ranked_layout) * (row_height + row_gap)
     if len(display_ranked) < len(ranked):
         content_height += 38
-    if skipped_items:
-        content_height += 12 + 2 + 24 + 36 + len(skipped_lines) * 28
     content_height += (qr_block_height + 20 if include_qr else 0) + bottom_margin
     height = fixed_height or max(900, content_height)
 
@@ -3932,24 +3916,6 @@ def generate_share_poster_bytes(
         draw.text((padding, y), f"by {user_name}", font=small_font, fill=palette["muted"])
         y += 34
 
-    if champion:
-        champion_top = y + 8
-        champion_bottom = champion_top + champion_height - 16
-        champion_fill = (255, 252, 246) if poster_style != "夜场蓝" else (33, 40, 61)
-        draw.rounded_rectangle(
-            (padding, champion_top, width - padding, champion_bottom),
-            radius=22,
-            fill=champion_fill,
-            outline=palette["outline"],
-            width=2,
-        )
-        draw.text((padding + 28, champion_top + 22), "冠军电影", font=small_font, fill=palette["accent"])
-        text_y = champion_top + 54
-        for line in champion_lines:
-            draw.text((padding + 28, text_y), line, font=item_font, fill=palette["title"])
-            text_y += 38
-        y = champion_bottom + 28
-
     draw.line((padding, y, width - padding, y), fill=palette["outline"], width=2)
     y += 28
 
@@ -3957,8 +3923,11 @@ def generate_share_poster_bytes(
     for idx, (item, wrapped) in enumerate(ranked_layout, 1):
         row_bottom = y + row_height
         draw.rounded_rectangle((padding, y, width - padding, row_bottom), radius=20, fill=palette.get("row", palette["card"]))
-        rank_text = f"{idx:02d}"
-        draw.text((padding + 2, y + 44), rank_text, font=item_font, fill=palette["accent"])
+        if idx <= 3:
+            draw_medal_icon(draw, padding + 4, y + 42, idx, small_font)
+        else:
+            rank_text = f"{idx:02d}"
+            draw.text((padding + 2, y + 44), rank_text, font=item_font, fill=palette["accent"])
 
         thumb_x = padding + 58
         thumb_y = y + 10
@@ -3983,18 +3952,6 @@ def generate_share_poster_bytes(
     if len(display_ranked) < len(ranked):
         draw.text((text_x, y), f"还有 {len(ranked) - len(display_ranked)} 项完整名单", font=small_font, fill=palette["muted"])
         y += 38
-
-    if skipped_items:
-        y += 12
-        draw.line((padding, y, width - padding, y), fill=palette["outline"], width=2)
-        y += 24
-        skipped_text = f"已略过暂不判断的电影：{len(skipped_items)} 部"
-        draw.text((padding, y), skipped_text, font=small_font, fill=palette["muted"])
-        y += 36
-
-        for line in skipped_lines:
-            draw.text((padding, y), line, font=small_font, fill=palette["muted"])
-            y += 28
 
     if include_qr:
         qr_y = min(max(y + 12, height - padding - qr_block_height), height - padding - qr_block_height)
@@ -4066,6 +4023,191 @@ def generate_challenge_poster_bytes(theme: str, challenge_url: str, item_count: 
     return out.getvalue()
 
 
+def normalize_contested_pair(contested: dict, ranked: List[str]) -> dict:
+    left = str(contested.get("left") or "").strip()
+    right = str(contested.get("right") or "").strip()
+    for item in ranked:
+        if not left:
+            left = item
+        elif not right and item != left:
+            right = item
+            break
+    if not right:
+        right = "另一部电影"
+    return {
+        "left": left,
+        "right": right,
+        "label": str(contested.get("label") or "最纠结的一组选择"),
+        "note": str(contested.get("note") or "这组选择参与决定了你的榜单气质。"),
+    }
+
+
+def build_contested_poster_signature(theme: str, contested: dict, share_url: str) -> str:
+    return "|".join(
+        [
+            theme,
+            str(contested.get("left") or ""),
+            str(contested.get("right") or ""),
+            str(contested.get("label") or ""),
+            str(contested.get("note") or ""),
+            share_url,
+        ]
+    )
+
+
+def draw_choice_movie_card(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    *,
+    box: Tuple[int, int, int, int],
+    title: str,
+    poster_bytes: Optional[bytes],
+    hotkey: str,
+    title_font: ImageFont.ImageFont,
+    body_font: ImageFont.ImageFont,
+    tiny_font: ImageFont.ImageFont,
+) -> None:
+    x1, y1, x2, y2 = box
+    draw.rounded_rectangle(box, radius=22, fill=(255, 253, 249), outline=(224, 206, 188), width=2)
+    poster_size = (112, 164)
+    poster_x = x1 + 34
+    poster_y = y1 + 54
+    poster_thumb = render_poster_thumb(poster_bytes, poster_size, (239, 236, 230))
+    poster_mask = make_rounded_rect_mask(poster_size, 14)
+    if poster_bytes:
+        img.paste(poster_thumb, (poster_x, poster_y), poster_mask)
+    else:
+        draw.rounded_rectangle(
+            (poster_x, poster_y, poster_x + poster_size[0], poster_y + poster_size[1]),
+            radius=14,
+            fill=(239, 236, 230),
+            outline=(224, 206, 188),
+            width=1,
+        )
+        draw.text((poster_x + 34, poster_y + 82), "暂无\n海报", font=tiny_font, fill=(126, 118, 108), spacing=6)
+
+    text_x = poster_x + poster_size[0] + 28
+    text_width = x2 - text_x - 28
+    title_lines = wrap_text(draw, title, title_font, text_width)[:2]
+    text_y = y1 + 58
+    for line in title_lines:
+        draw.text((text_x, text_y), line, font=title_font, fill=(31, 35, 40))
+        text_y += 42
+    note_lines = wrap_text(draw, "更喜欢它", body_font, text_width)[:1]
+    text_y += 10
+    for line in note_lines:
+        draw.text((text_x, text_y), line, font=body_font, fill=(112, 105, 96))
+        text_y += 34
+
+    chip_w, chip_h = 126, 48
+    chip_x = x2 - chip_w - 28
+    chip_y = y2 - chip_h - 26
+    draw.rounded_rectangle((chip_x, chip_y, chip_x + chip_w, chip_y + chip_h), radius=16, fill=(248, 243, 236), outline=(224, 206, 188), width=1)
+    bbox = draw.textbbox((0, 0), hotkey, font=body_font)
+    draw.text(
+        (chip_x + (chip_w - (bbox[2] - bbox[0])) / 2, chip_y + (chip_h - (bbox[3] - bbox[1])) / 2 - 2),
+        hotkey,
+        font=body_font,
+        fill=(157, 91, 73),
+    )
+
+
+def generate_contested_poster_bytes(
+    theme: str,
+    contested: dict,
+    share_url: str,
+    poster_bytes_map: Optional[Dict[str, Optional[bytes]]] = None,
+) -> bytes:
+    width, height = 1080, 1350
+    poster_bytes_map = poster_bytes_map or {}
+    left = str(contested.get("left") or "")
+    right = str(contested.get("right") or "")
+    label = str(contested.get("label") or "最纠结的一组选择")
+    note = str(contested.get("note") or "这组选择参与决定了你的榜单气质。")
+    share_url = share_url or get_public_app_url()
+    scan_url = get_public_app_url()
+
+    img = Image.new("RGB", (width, height), (218, 212, 203))
+    draw = ImageDraw.Draw(img)
+    draw.polygon([(0, 0), (width, 0), (width, 270), (0, 430)], fill=(233, 224, 214))
+    draw.polygon([(0, height), (width, height), (width, 1040), (0, 1160)], fill=(202, 198, 191))
+    draw.rounded_rectangle((52, 52, width - 52, height - 52), radius=36, fill=(255, 252, 246), outline=(224, 206, 188), width=2)
+
+    kicker_font = load_font(28, bold=True)
+    title_font = load_font(58, bold=True)
+    subtitle_font = load_font(34, bold=True)
+    body_font = load_font(28)
+    small_font = load_font(23)
+    tiny_font = load_font(20)
+
+    y = 104
+    draw.text((86, y), "电影审美名单 · 最纠结取舍", font=kicker_font, fill=(157, 91, 73))
+    y += 68
+    for line in wrap_text(draw, "这两部里，你更偏爱哪一部？", title_font, width - 172)[:2]:
+        draw.text((86, y), line, font=title_font, fill=(31, 35, 40))
+        y += 68
+
+    intro_lines = wrap_text(draw, f"在「{theme}」里，{note}", body_font, width - 172)[:3]
+    for line in intro_lines:
+        draw.text((86, y), line, font=body_font, fill=(112, 105, 96))
+        y += 38
+
+    y += 34
+    draw.rounded_rectangle((86, y, width - 86, y + 164), radius=24, fill=(255, 253, 249), outline=(224, 206, 188), width=2)
+    draw.text((122, y + 34), f"这组选择 · {label}", font=small_font, fill=(157, 91, 73))
+    pair_title = f"{left}  VS  {right}"
+    for idx, line in enumerate(wrap_text(draw, pair_title, subtitle_font, width - 300)[:2]):
+        draw.text((122, y + 76 + idx * 42), line, font=subtitle_font, fill=(31, 35, 40))
+    y += 224
+
+    battle_box = (86, y, width - 86, y + 438)
+    draw.rounded_rectangle(battle_box, radius=26, fill=(255, 253, 249), outline=(224, 206, 188), width=2)
+    draw.text((122, y + 44), "如果重新遇到这一题，你会怎么选？", font=subtitle_font, fill=(31, 35, 40))
+    draw.line((122, y + 104, width - 122, y + 104), fill=(226, 214, 201), width=4)
+
+    card_y = y + 150
+    card_h = 248
+    gap = 24
+    card_w = (width - 244 - gap) // 2
+    draw_choice_movie_card(
+        img,
+        draw,
+        box=(122, card_y, 122 + card_w, card_y + card_h),
+        title=left,
+        poster_bytes=poster_bytes_map.get(left),
+        hotkey="A / ←",
+        title_font=subtitle_font,
+        body_font=body_font,
+        tiny_font=tiny_font,
+    )
+    draw_choice_movie_card(
+        img,
+        draw,
+        box=(122 + card_w + gap, card_y, 122 + card_w * 2 + gap, card_y + card_h),
+        title=right,
+        poster_bytes=poster_bytes_map.get(right),
+        hotkey="D / →",
+        title_font=subtitle_font,
+        body_font=body_font,
+        tiny_font=tiny_font,
+    )
+
+    qr_y = height - 234
+    qr_img = make_qr_image(scan_url, 150)
+    img.paste(qr_img, (110, qr_y))
+    qr_text_x = 300
+    draw.text((qr_text_x, qr_y + 18), "扫码试试：把自己的已看电影排出来", font=subtitle_font, fill=(31, 35, 40))
+    for idx, line in enumerate(wrap_text(draw, scan_url, body_font, width - qr_text_x - 100)[:2]):
+        draw.text((qr_text_x, qr_y + 74 + idx * 36), line, font=body_font, fill=(112, 105, 96))
+
+    footer = f"{APP_TITLE} · {datetime.now().strftime('%Y-%m-%d')}"
+    draw.text((86, height - 88), footer, font=small_font, fill=(112, 105, 96))
+
+    out = io.BytesIO()
+    img.save(out, format="PNG")
+    return out.getvalue()
+
+
 def ensure_share_poster_generated(share_url: str = "") -> None:
     ranked = st.session_state.get(k("ranked"), [])
     if not ranked:
@@ -4107,6 +4249,29 @@ def ensure_share_poster_generated(share_url: str = "") -> None:
     )
     st.session_state[k("share_poster_bytes")] = poster_bytes
     st.session_state[k("share_poster_signature")] = signature
+
+
+def ensure_contested_poster_generated(share_url: str = "") -> None:
+    ranked = st.session_state.get(k("ranked"), [])
+    if not ranked:
+        return
+    share_url = share_url or get_public_app_url()
+    theme = st.session_state.get(k("theme"), "我的电影审美名单")
+    contested = normalize_contested_pair(get_most_contested_pair(), ranked)
+    signature = build_contested_poster_signature(theme, contested, share_url)
+    if st.session_state.get(k("contested_poster_signature")) == signature and st.session_state.get(k("contested_poster_bytes")):
+        return
+
+    titles = [title for title in [contested.get("left"), contested.get("right")] if title and title != "另一部电影"]
+    poster_bytes_map = {title: get_result_poster_bytes(str(title)) for title in titles}
+    poster_bytes = generate_contested_poster_bytes(
+        theme,
+        contested,
+        share_url,
+        poster_bytes_map=poster_bytes_map,
+    )
+    st.session_state[k("contested_poster_bytes")] = poster_bytes
+    st.session_state[k("contested_poster_signature")] = signature
 
 
 def get_current_opponent_index(ranked: List[str], low: int, high: int) -> int:
@@ -4249,7 +4414,7 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
     if st.session_state.get(k("share_poster_qr_option")) not in SHARE_POSTER_QR_OPTIONS:
         st.session_state[k("share_poster_qr_option")] = SHARE_POSTER_QR_OPTIONS[0]
 
-    control_col1, control_col2, control_col3, control_col4 = st.columns([1, 1, 1, 1])
+    control_col1, control_col2, control_col3 = st.columns(3)
     with control_col1:
         st.selectbox(
             "海报风格",
@@ -4268,26 +4433,32 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
             SHARE_POSTER_QR_OPTIONS,
             key=k("share_poster_qr_option"),
         )
-    with control_col4:
-        st.caption("换一种气质")
-        if render_button_compat("再生成一种风格", key="btn_cycle_poster_style", use_container_width=True):
-            cycle_share_poster_style()
     ensure_share_poster_generated(challenge_url)
+    ensure_contested_poster_generated(challenge_url)
 
     poster_bytes = st.session_state.get(k("share_poster_bytes"), b"")
+    contested_poster_bytes = st.session_state.get(k("contested_poster_bytes"), b"")
     if poster_bytes:
-        file_name = f"{slugify_filename(st.session_state.get(k('theme'), 'ranking'))}_share.png"
+        file_name = f"{slugify_filename(st.session_state.get(k('theme'), 'ranking'))}_ranking.png"
+        contested_file_name = f"{slugify_filename(st.session_state.get(k('theme'), 'ranking'))}_choice.png"
         preview_col, action_col = st.columns([0.95, 1.05])
         with preview_col:
-            render_poster_preview_html(poster_bytes)
+            if contested_poster_bytes:
+                ranking_tab, choice_tab = st.tabs(["名单海报", "最纠结取舍海报"])
+                with ranking_tab:
+                    render_poster_preview_html(poster_bytes)
+                with choice_tab:
+                    render_poster_preview_html(contested_poster_bytes)
+            else:
+                render_poster_preview_html(poster_bytes)
         with action_col:
             has_qr = st.session_state.get(k("share_poster_qr_option")) == SHARE_POSTER_QR_OPTIONS[0]
             qr_copy = "、项目名称和二维码" if has_qr else "和项目名称"
             st.markdown(
                 f"""
                 <div class="poster-side-panel">
-                  <div class="poster-panel-title">晒出你的冠军电影</div>
-                  <div class="poster-panel-copy">海报已经包含你的冠军电影、前列名单{qr_copy}。发出去时，朋友一眼就能看到你的电影审美。</div>
+                  <div class="poster-panel-title">两张图晒出你的电影审美</div>
+                  <div class="poster-panel-copy">名单海报展示前三名奖牌和前列名单{qr_copy}；取舍海报展示你最纠结的一组选择，更适合发出去让朋友参与讨论。</div>
                   <div class="challenge-invite">
                     <div class="challenge-invite-title">发给朋友，让 TA 猜你的冠军</div>
                     <div class="challenge-invite-copy">复制同题挑战链接，朋友排完后可以拿 JSON 和你对比差异。</div>
@@ -4299,7 +4470,7 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
             a1, a2 = st.columns(2)
             with a1:
                 render_download_button_compat(
-                    "下载海报",
+                    "下载名单海报",
                     data=poster_bytes,
                     file_name=file_name,
                     mime="image/png",
@@ -4314,21 +4485,22 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                     ),
                 )
             with a2:
-                render_download_button_compat(
-                    "保存图片",
-                    data=poster_bytes,
-                    file_name=f"{slugify_filename(theme)}_image.png",
-                    mime="image/png",
-                    key="btn_save_share_image",
-                    on_click=lambda: track_event(
-                        EVENT_POSTER_DOWNLOADED,
-                        challenge_id=challenge_id,
-                        mode=st.session_state.get(k("mode"), MODE_CUSTOM),
-                        template_id=template_id,
-                        source_channel=source_channel,
-                        payload={"poster_type": "saved_image"},
-                    ),
-                )
+                if contested_poster_bytes:
+                    render_download_button_compat(
+                        "下载取舍海报",
+                        data=contested_poster_bytes,
+                        file_name=contested_file_name,
+                        mime="image/png",
+                        key="btn_download_contested_poster",
+                        on_click=lambda: track_event(
+                            EVENT_POSTER_DOWNLOADED,
+                            challenge_id=challenge_id,
+                            mode=st.session_state.get(k("mode"), MODE_CUSTOM),
+                            template_id=template_id,
+                            source_channel=source_channel,
+                            payload={"poster_type": "contested_choice"},
+                        ),
+                    )
             if render_copy_button("复制链接", challenge_url, "copy_result_challenge_link", "片单链接"):
                 track_event(
                     EVENT_SHARE_LINK_COPIED,
@@ -4364,29 +4536,6 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
     safe_divider()
     st.subheader("完整名单")
     render_ranked_list(ranked)
-
-    with st.expander("同一份片单邀请海报", expanded=False):
-        challenge_poster = generate_challenge_poster_bytes(
-            st.session_state.get(k("theme"), "电影审美名单"),
-            challenge_url,
-            len(st.session_state.get(k("source_options"), [])),
-        )
-        show_image_compat(challenge_poster)
-        render_download_button_compat(
-            "下载邀请海报",
-            data=challenge_poster,
-            file_name=f"{slugify_filename(st.session_state.get(k('theme'), 'challenge'))}_challenge.png",
-            mime="image/png",
-            key="btn_download_challenge_poster",
-            on_click=lambda: track_event(
-                EVENT_POSTER_DOWNLOADED,
-                challenge_id=challenge_id,
-                mode=st.session_state.get(k("mode"), MODE_CUSTOM),
-                template_id=template_id,
-                source_channel=source_channel,
-                payload={"poster_type": "challenge"},
-            ),
-        )
 
     txt_bytes, csv_bytes, json_bytes, md_bytes = build_export_payloads(
         theme=theme,
