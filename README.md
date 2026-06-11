@@ -1,4 +1,93 @@
-# 电影审美名单 / Film Sort Ranker
+# Sort_FilmsGame / 电影审美名单
+
+## 产品概览
+
+Sort_FilmsGame 是一个影视偏好排序 Web App。它把“手动给几十部电影排出完整顺序”这件高成本任务，拆成连续的 1v1 二选一取舍；用户每次只需要在两部电影之间做选择，最后生成个人电影审美榜单、结果海报、二维码和可追踪的分享链接。
+
+## 线上体验
+
+[https://sortfilmsgamegit.streamlit.app](https://sortfilmsgamegit.streamlit.app)
+
+## 核心功能
+
+- 1v1 电影偏好排序，支持 Top N 和完整排序。
+- 内置豆瓣高分、导演作品、华语高分、主题片单等多种起始片单。
+- 支持自定义电影片单，并生成可分享的同题挑战链接。
+- 支持豆瓣已看导入，适合整理自己的已看电影总榜。
+- 支持结果海报、二维码分享、复制分享文案和移动端优先交互。
+- 支持匿名行为埋点和私密后台数据看板。
+
+## 数据分析与事件埋点
+
+数据分析 v2 使用 Supabase `analytics_events` 保存匿名 session 事件。标准事件包括：
+
+- `visit`
+- `list_opened`
+- `list_selected`
+- `sorting_started`
+- `comparison_made`
+- `ranking_completed`
+- `poster_downloaded`
+- `share_copied`
+- `result_viewed`
+- `qr_viewed`
+
+历史事件名会自动映射到新口径，因此旧数据仍然可以在后台看板中继续使用。事件 payload 会记录必要的产品上下文，例如页面路径、片单 ID、模式、渠道 / UTM 参数、片单规模、取舍次数、设备类型、实验 ID 和版本 ID。
+
+## 后台数据看板 v2
+
+使用下面的 URL 参数打开私密后台：
+
+```text
+?admin=<ADMIN_DASHBOARD_TOKEN>
+```
+
+后台数据看板 v2 包含：
+
+- 总览指标：访问数、独立 session、开始整理、完成名单、复制分享、下载海报、开始率、完成率、复制/完成、海报/完成、平均取舍次数、平均整理规模。
+- 漏斗分析：`visit -> list_opened/list_selected -> sorting_started -> ranking_completed -> share_copied/poster_downloaded`。
+- 自动识别最大流失环节，并生成产品洞察文案。
+- 按 `list_id / template_id / mode` 查看片单维度表现。
+- 按 `source / utm_source / utm_medium / utm_campaign` 查看渠道归因。
+- 按 `experiment_id / variant_id` 查看 A/B 实验表现。
+- 支持最近 7 天、最近 30 天、全部历史和自定义时间范围筛选。
+
+## A/B 实验框架
+
+实验配置位于 [experiments.py](experiments.py)。当前运行中的实验是 `home_layout_order_v1`，用于测试“快速开始片单前置”是否比“豆瓣已看主推前置”更能提升开始整理率。`homepage_cta_v1` 已暂停，避免首页文案实验和布局实验互相干扰。匿名 session 会通过稳定哈希分桶，因此同一个 session 会持续命中同一个实验版本。
+
+以后新增实验时，一般不需要改后台看板或埋点聚合逻辑。常规流程是：
+
+1. 在 [experiments.py](experiments.py) 里新增一个实验配置块，设置 `experiment_id`、`status`、`traffic_allocation` 和 `variants`。
+2. 如果实验只需要被记录和分析，保持 `status = "active"` 即可，事件会自动带上当前 session 命中的实验版本。
+3. 如果实验要改变页面或功能表现，在对应业务代码里调用 `get_experiment_config(session_id, experiment_id)` 读取配置，并把配置应用到文案、按钮、默认片单或展示模块。
+4. 打开后台数据看板 v2 的 “A/B 实验表现” tab，按 `experiment_id / variant_id` 查看开始率、完成率、分享和海报下载表现。
+
+## 产品案例与复盘
+
+- [产品案例复盘](docs/product_case_study.md)
+- [数据分析 v2 埋点与看板说明](docs/analytics_v2.md)
+
+## 本地运行
+
+```bash
+pip install -r requirements.txt
+streamlit run merged_douban_ranker_v3.py
+```
+
+语法检查：
+
+```bash
+python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py
+```
+
+## 隐私说明
+
+本产品只使用匿名行为数据，不采集姓名、联系方式或 IP 等敏感信息。后台数据看板 v2 不展示原始 user_agent，也不会把完整自定义片单或完整排名写入事件 payload。
+
+---
+
+## 详细说明
 
 一个面向影视爱好者的公开网页应用。它把“从一堆电影里排出第一、第二、第三”这件很费脑的事，拆成多次简单的 1v1 取舍：每次只问你两部电影更偏爱哪一部，最后生成一份属于自己的电影审美名单。
 
@@ -73,7 +162,7 @@
 ### 5. 数据与隐私
 
 - 只使用随机 session id，不要求登录。
-- 匿名事件包括：`page_view`、`challenge_opened`、`ranking_started`、`ranking_completed`、`poster_downloaded`、`share_link_copied`。
+- 匿名事件包括：`visit`、`list_opened`、`list_selected`、`sorting_started`、`comparison_made`、`ranking_completed`、`poster_downloaded`、`share_copied`、`result_viewed`、`qr_viewed`；历史事件名会在后台分析时自动兼容映射。
 - 默认不记录姓名、IP、联系方式。
 - 事件 payload 会过滤完整候选项、完整排名、自定义完整榜单等敏感字段。
 - 自定义片单只有在用户主动生成片单链接时才会保存。
@@ -103,7 +192,7 @@ flowchart LR
   K --> L["片单链接和二维码传播"]
   L --> M["好友打开同一片单"]
   B --> N["Supabase analytics_events"]
-  N --> Q["Admin Analytics 看板"]
+  N --> Q["后台数据看板"]
   D --> O["Supabase challenge_sets"]
   M --> O
 ```
@@ -143,7 +232,7 @@ streamlit run merged_douban_ranker_v3.py
 常用检查：
 
 ```bash
-python -m py_compile merged_douban_ranker_v3.py analytics.py challenge_store.py import_store.py launch_copy.py
+python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py
 ```
 
 没有配置 Supabase 时，应用仍然可以运行；公开统计、短片单链接、豆瓣已看跨设备导入会自动降级或隐藏。
@@ -170,7 +259,7 @@ ADMIN_DASHBOARD_TOKEN = "change-this-token"
 ### Supabase 表
 
 - `challenge_sets`：保存用户主动生成的片单链接。
-- `analytics_events`：保存匿名事件漏斗，供公开指标和 Admin Analytics 使用。
+- `analytics_events`：保存匿名事件漏斗，供公开指标和后台数据看板使用。
 - `imported_movie_lists`：保存浏览器书签导入的豆瓣已看片单、评分和标记日期，默认 7 天过期。
 
 ---
@@ -373,12 +462,12 @@ https://movie.douban.com/people/123456/collect
 - 支持包含或排除未评分 / 未识别评分电影，并在当前筛选不足 2 部时阻止开始排序。
 - 旧导入片单没有评分信息时给出提示，引导用户重新读取或继续整理全部电影。
 
-### v1.7 Admin Analytics v1
+### v1.7 后台数据看板 v1
 
 覆盖提交：`1aa917b`，2026-06-08
 
 - `analytics.py` 从简单近期指标扩展为分页读取历史事件、日期过滤、漏斗计算、分组统计、直方图和事件表导出。
-- 新增 Admin Analytics 看板页，支持近 7 天、近 30 天、近 90 天、全部历史和自定义时间范围。
+- 新增后台数据看板页，支持近 7 天、近 30 天、近 90 天、全部历史和自定义时间范围。
 - 后台指标增加访问、开始、完成、复制分享、下载海报、唯一 session、开始率、完成率、分享率、海报下载率等核心口径。
 - 新增主漏斗和共享片单漏斗，方便区分自然访问链路与片单传播链路。
 - 新增每日趋势、来源渠道、模式表现、模板表现、热门片单、冠军电影分布等分析视图。

@@ -1,0 +1,57 @@
+name: AI Review
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  review:
+    if: github.event_name == 'pull_request' || !startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out target repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install AI review agent
+        run: python -m pip install "git+https://github.com/Atirian-Chen/ai-pr-review-agent.git@v1.1.0"
+
+      - name: Run AI review and publish summary
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: https://api.deepseek.com
+          OPENAI_MODEL: deepseek-v4-pro
+          OPENAI_TIMEOUT_SECONDS: "500"
+          VERIFIER_OPENAI_API_KEY: ${{ secrets.VERIFIER_OPENAI_API_KEY }}
+          VERIFIER_OPENAI_BASE_URL: https://api.deepseek.com
+          VERIFIER_OPENAI_MODEL: deepseek-v4-flash
+          VERIFIER_OPENAI_TIMEOUT_SECONDS: "120"
+        run: pr-agent review-action --out outputs/github-action
+
+      - name: Upload review artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-review-${{ github.run_id }}
+          path: outputs/github-action
+          if-no-files-found: ignore

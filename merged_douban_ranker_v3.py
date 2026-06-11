@@ -25,10 +25,14 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 from analytics import (
     EVENT_LABELS,
     EVENT_CHALLENGE_OPENED,
+    EVENT_COMPARISON_MADE,
+    EVENT_LIST_SELECTED,
     EVENT_PAGE_VIEW,
     EVENT_POSTER_DOWNLOADED,
+    EVENT_QR_VIEWED,
     EVENT_RANKING_COMPLETED,
     EVENT_RANKING_STARTED,
+    EVENT_RESULT_VIEWED,
     EVENT_SHARE_LINK_COPIED,
     MAIN_FUNNEL_STEPS,
     SHARED_FUNNEL_STEPS,
@@ -36,10 +40,14 @@ from analytics import (
     analytics_enabled,
     build_admin_insights,
     build_admin_summary,
+    build_channel_metrics,
     build_daily_metrics,
     build_event_table_rows,
+    build_experiment_metrics,
+    build_funnel_insight,
     build_funnel_rows,
     build_group_metrics,
+    build_list_metrics,
     build_numeric_payload_histogram,
     build_payload_value_counts,
     build_setting_rows,
@@ -53,6 +61,7 @@ from analytics import (
     track_event,
     track_once,
 )
+from experiments import get_experiment_config, get_experiment_event_context
 from challenge_store import (
     Challenge,
     build_challenge_url,
@@ -273,6 +282,8 @@ RANKING_STATE_KEYS = [
     "template_id",
     "source_channel",
     "completion_event_signature",
+    "result_view_event_signature",
+    "qr_view_event_signature",
     "share_poster_bytes",
     "share_poster_signature",
 ]
@@ -306,6 +317,8 @@ LOCAL_DRAFT_STATE_KEYS = [
     "template_id",
     "source_channel",
     "completion_event_signature",
+    "result_view_event_signature",
+    "qr_view_event_signature",
 ]
 
 
@@ -503,8 +516,35 @@ def render_bookmarklet_link(label: str, href: str, key: str) -> None:
 
 
 def get_source_channel() -> str:
-    channel = get_query_param("src") or get_query_param("utm_source") or "direct"
-    return channel[:60]
+    channel = get_query_param("source") or get_query_param("utm_source") or get_query_param("src") or "direct / unknown"
+    return channel[:80]
+
+
+def get_attribution_params() -> Dict[str, str]:
+    source = get_source_channel()
+    return {
+        "source": source,
+        "utm_source": (get_query_param("utm_source") or source)[:80],
+        "utm_medium": (get_query_param("utm_medium") or "unknown")[:80],
+        "utm_campaign": (get_query_param("utm_campaign") or "unknown")[:120],
+    }
+
+
+def current_experiment_assignment() -> Dict[str, Any]:
+    return get_experiment_event_context(get_session_id())
+
+
+def build_event_payload(**payload: Any) -> Dict[str, Any]:
+    merged: Dict[str, Any] = {
+        "page": payload.pop("page", "app"),
+        "route": payload.pop("route", f"step_{st.session_state.get('ui_step', 1)}"),
+    }
+    merged.update(get_attribution_params())
+    experiment_context = current_experiment_assignment()
+    if experiment_context:
+        merged.update(experiment_context)
+    merged.update({key: value for key, value in payload.items() if value is not None})
+    return merged
 
 
 def bordered_container():
@@ -2135,6 +2175,8 @@ def init_ranking_state(
     st.session_state[k("template_id")] = template_id
     st.session_state[k("source_channel")] = source_channel or get_source_channel()
     st.session_state[k("completion_event_signature")] = ""
+    st.session_state[k("result_view_event_signature")] = ""
+    st.session_state[k("qr_view_event_signature")] = ""
     st.session_state[k("share_poster_bytes")] = b""
     st.session_state[k("share_poster_signature")] = ""
 
@@ -2145,15 +2187,18 @@ def init_ranking_state(
         mode=mode,
         template_id=template_id,
         source_channel=source_channel or get_source_channel(),
-        payload={
-            "total": len(opts),
-            "top_k": top_k,
-            "has_seed": bool(clean_seed),
-            "blind_mode": blind_mode,
-            "side_shuffle": side_shuffle,
-            "source": safe_source,
-            "session_hint": get_session_id()[-8:],
-        },
+        payload=build_event_payload(
+            route="sorting",
+            list_id=challenge_id or template_id or mode,
+            list_size=len(opts),
+            total=len(opts),
+            top_k=top_k,
+            has_seed=bool(clean_seed),
+            blind_mode=blind_mode,
+            side_shuffle=side_shuffle,
+            list_source=safe_source,
+            session_hint=get_session_id()[-8:],
+        ),
     )
 
 
@@ -2494,6 +2539,20 @@ def handle_choice(prefer_left: bool) -> None:
     append_decision_log("choice", current_item, opponent_item, winner)
 
     st.session_state[k("comparisons")] += 1
+    track_event(
+        EVENT_COMPARISON_MADE,
+        challenge_id=st.session_state.get(k("challenge_id"), ""),
+        mode=st.session_state.get(k("mode"), MODE_CUSTOM),
+        template_id=st.session_state.get(k("template_id"), ""),
+        source_channel=st.session_state.get(k("source_channel"), get_source_channel()),
+        payload=build_event_payload(
+            route="sorting",
+            list_id=st.session_state.get(k("challenge_id"), "") or st.session_state.get(k("template_id"), "") or st.session_state.get(k("mode"), MODE_CUSTOM),
+            list_size=st.session_state.get(k("total"), 0),
+            comparison_count=st.session_state.get(k("comparisons"), 0),
+            top_k=st.session_state.get(k("top_k")),
+        ),
+    )
     ranked = st.session_state[k("ranked")]
 
     if st.session_state.get(k("top_k_boundary_check"), False):
@@ -3112,6 +3171,18 @@ def maybe_open_imported_movie_list() -> None:
 
     opened = open_imported_movie_list(import_id)
     if opened:
+        track_once(
+            f"import_list_opened_{clean_import_id(import_id)}",
+            EVENT_CHALLENGE_OPENED,
+            challenge_id=clean_import_id(import_id),
+            mode=MODE_DOUBAN_COLLECT,
+            source_channel=get_source_channel(),
+            payload=build_event_payload(
+                route="import_open",
+                list_id=clean_import_id(import_id),
+                mode=MODE_DOUBAN_COLLECT,
+            ),
+        )
         clear_query_param("import")
         rerun()
     else:
@@ -3154,7 +3225,13 @@ def maybe_open_url_challenge() -> None:
         mode=challenge.mode,
         template_id=challenge.template_id,
         source_channel=get_source_channel(),
-        payload={"item_count": len(challenge.items), "top_k": challenge.top_k},
+        payload=build_event_payload(
+            route="list_open",
+            list_id=challenge.id,
+            list_size=len(challenge.items),
+            item_count=len(challenge.items),
+            top_k=challenge.top_k,
+        ),
     )
     start_challenge(challenge)
 
@@ -3623,9 +3700,401 @@ def render_admin_dashboard() -> None:
         render_admin_recent_events(events)
 
 
+# Admin Analytics v2 overrides the legacy v1 dashboard helpers above.
+def render_admin_metric_grid(summary: Dict[str, Any]) -> None:
+    first_row = [
+        ("访问数", admin_int(summary.get("visits"))),
+        ("独立 session", admin_int(summary.get("unique_sessions"))),
+        ("打开/选择片单", admin_int(summary.get("open_or_select_list"))),
+        ("开始整理", admin_int(summary.get("started"))),
+        ("完成名单", admin_int(summary.get("completed"))),
+        ("复制分享", admin_int(summary.get("copied"))),
+        ("下载海报", admin_int(summary.get("posters"))),
+    ]
+    second_row = [
+        ("开始率", admin_percent(summary.get("start_rate"))),
+        ("完成率", admin_percent(summary.get("completion_rate"))),
+        ("复制/完成", admin_percent(summary.get("share_rate"))),
+        ("海报/完成", admin_percent(summary.get("poster_rate"))),
+        ("平均取舍次数", admin_float(summary.get("avg_comparisons"))),
+        ("平均整理规模", admin_float(summary.get("avg_list_size"))),
+    ]
+    for row in (first_row, second_row):
+        columns = st.columns(len(row))
+        for column, (label, value) in zip(columns, row):
+            with column:
+                st.metric(label, value)
+    st.caption("复制/完成、海报/完成按动作次数除以完成名单数计算；同一匿名 session 多次复制或下载时可能超过 100%。")
+
+
+def admin_funnel_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    frame = pd.DataFrame(rows)
+    return pd.DataFrame(
+        {
+            "步骤": frame["step"],
+            "事件": frame["event_name"],
+            "事件数": frame["count"],
+            "单步转化率": frame["step_rate"].map(admin_percent),
+            "总体转化率": frame["overall_rate"].map(admin_percent),
+            "相邻流失数": frame["dropoff"],
+        }
+    )
+
+
+def render_admin_funnel(title: str, rows: List[Dict[str, Any]], caption: str) -> None:
+    st.markdown(f"**{title}**")
+    if not rows:
+        st.info("当前筛选范围内没有漏斗数据。")
+        return
+    frame = pd.DataFrame(rows)
+    chart = frame[["step", "count"]].rename(columns={"step": "步骤", "count": "事件数"}).set_index("步骤")
+    chart_col, table_col = st.columns([1, 1.25])
+    with chart_col:
+        st.bar_chart(chart)
+    with table_col:
+        render_admin_dataframe(admin_funnel_df(rows))
+    st.info(build_funnel_insight(rows))
+    st.caption(caption)
+
+
+def admin_group_df(rows: List[Dict[str, Any]], label_key: str, label_name: str, include_winners: bool = False) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    display_rows: List[Dict[str, Any]] = []
+    for row in rows:
+        item = {
+            label_name: row.get(label_key, ""),
+            "访问": int(row.get("visits", row.get("page_views", 0))),
+            "打开": int(row.get("list_opened", row.get("challenge_opened", 0))),
+            "选择": int(row.get("list_selected", 0)),
+            "开始": int(row.get("started", 0)),
+            "完成": int(row.get("completed", 0)),
+            "复制分享": int(row.get("copied", 0)),
+            "下载海报": int(row.get("posters", 0)),
+            "开始率": admin_percent(row.get("start_rate")),
+            "完成率": admin_percent(row.get("completion_rate")),
+            "分享率": admin_percent(row.get("share_rate")),
+            "海报下载率": admin_percent(row.get("poster_rate")),
+            "平均取舍": round(float(row.get("avg_comparisons", 0.0)), 1),
+            "平均规模": round(float(row.get("avg_list_size", row.get("avg_total", 0.0))), 1),
+            "最近活跃": admin_short_time(row.get("last_seen")),
+        }
+        for optional_key, display_name in [
+            ("template_id", "template_id"),
+            ("mode", "mode"),
+            ("utm_source", "utm_source"),
+            ("utm_medium", "utm_medium"),
+            ("utm_campaign", "utm_campaign"),
+            ("experiment_id", "experiment_id"),
+            ("variant_id", "variant_id"),
+        ]:
+            if optional_key in row:
+                item[display_name] = row.get(optional_key, "")
+        if include_winners:
+            item["冠军 Top3"] = row.get("top_winners", "")
+        display_rows.append(item)
+    return pd.DataFrame(display_rows)
+
+
+def render_admin_group_section(
+    title: str,
+    rows: List[Dict[str, Any]],
+    label_key: str,
+    label_name: str,
+    *,
+    include_winners: bool = False,
+) -> None:
+    st.markdown(f"**{title}**")
+    if not rows:
+        st.info("当前筛选范围内没有数据。")
+        return
+    display = admin_group_df(rows, label_key, label_name, include_winners=include_winners)
+    chart_columns = [label_name, "完成", "开始"]
+    chart_source = display[chart_columns].head(12).set_index(label_name)
+    chart_col, table_col = st.columns([1, 1.8])
+    with chart_col:
+        st.bar_chart(chart_source)
+    with table_col:
+        render_admin_dataframe(display)
+
+
+def render_admin_trends(events: List[Dict[str, Any]]) -> None:
+    daily_rows = build_daily_metrics(events)
+    if not daily_rows:
+        st.info("当前筛选范围内没有趋势数据。")
+        return
+    daily = pd.DataFrame(daily_rows).set_index("date")
+    event_cols = [
+        EVENT_PAGE_VIEW,
+        EVENT_CHALLENGE_OPENED,
+        EVENT_LIST_SELECTED,
+        EVENT_RANKING_STARTED,
+        EVENT_RANKING_COMPLETED,
+        EVENT_SHARE_LINK_COPIED,
+        EVENT_POSTER_DOWNLOADED,
+    ]
+    event_chart = daily[[column for column in event_cols if column in daily.columns]].rename(columns=EVENT_LABELS)
+    rate_chart = (daily[["start_rate", "completion_rate", "share_rate", "poster_rate"]] * 100).rename(
+        columns={
+            "start_rate": "开始率",
+            "completion_rate": "完成率",
+            "share_rate": "复制/完成",
+            "poster_rate": "海报/完成",
+        }
+    )
+    event_tab, rate_tab, data_tab = st.tabs(["事件趋势", "转化趋势", "趋势数据"])
+    with event_tab:
+        st.line_chart(event_chart)
+    with rate_tab:
+        st.line_chart(rate_chart)
+        st.caption("转化趋势以百分比数值展示。")
+    with data_tab:
+        display = daily.reset_index().rename(columns={"date": "日期", **EVENT_LABELS})
+        render_admin_dataframe(display)
+        render_download_button_compat(
+            "下载每日趋势 CSV",
+            display.to_csv(index=False).encode("utf-8-sig"),
+            "admin_daily_metrics_v2.csv",
+            "text/csv",
+            "admin_download_daily_metrics_v2",
+        )
+
+
+def render_admin_recent_events(events: List[Dict[str, Any]]) -> None:
+    canonical_names = [
+        EVENT_PAGE_VIEW,
+        EVENT_CHALLENGE_OPENED,
+        EVENT_LIST_SELECTED,
+        EVENT_RANKING_STARTED,
+        EVENT_COMPARISON_MADE,
+        EVENT_RANKING_COMPLETED,
+        EVENT_RESULT_VIEWED,
+        EVENT_QR_VIEWED,
+        EVENT_SHARE_LINK_COPIED,
+        EVENT_POSTER_DOWNLOADED,
+    ]
+    label_to_name = {EVENT_LABELS.get(name, name): name for name in canonical_names}
+    selected_labels = st.multiselect("事件类型", list(label_to_name.keys()), default=list(label_to_name.keys()), key="admin_recent_event_labels_v2")
+    selected_names = {label_to_name[label] for label in selected_labels}
+    search_col1, search_col2, search_col3, search_col4 = st.columns([1, 1, 1, 1])
+    with search_col1:
+        session_query = st.text_input("Session 后 8 位", key="admin_recent_session_query_v2").strip().lower()
+    with search_col2:
+        template_query = st.text_input("Template ID", key="admin_recent_template_query_v2").strip().lower()
+    with search_col3:
+        list_query = st.text_input("List ID", key="admin_recent_list_query_v2").strip().lower()
+    with search_col4:
+        limit = st.number_input("展示条数", min_value=20, max_value=1000, value=200, step=20, key="admin_recent_limit_v2")
+
+    filtered: List[Dict[str, Any]] = []
+    for event in events:
+        if event.get("event_name") not in selected_names:
+            continue
+        session_id = str(event.get("session_id") or "").lower()
+        template_id = str(event.get("template_id") or event.get("payload", {}).get("template_id") or "").lower()
+        list_id = str(event.get("payload", {}).get("list_id") or event.get("challenge_id") or "").lower()
+        if session_query and session_query not in session_id[-8:]:
+            continue
+        if template_query and template_query not in template_id:
+            continue
+        if list_query and list_query not in list_id:
+            continue
+        filtered.append(event)
+
+    rows = build_event_table_rows(filtered, int(limit))
+    if not rows:
+        st.info("当前筛选条件下没有事件。")
+        return
+    frame = pd.DataFrame(rows)
+    render_admin_dataframe(frame)
+    render_download_button_compat(
+        "下载当前事件 CSV",
+        frame.to_csv(index=False).encode("utf-8-sig"),
+        "admin_events_v2.csv",
+        "text/csv",
+        "admin_download_events_v2",
+    )
+
+
+def render_admin_dashboard() -> None:
+    token = get_query_param("admin")
+    expected = get_admin_token()
+    if not expected or token != expected:
+        st.error("后台口令无效或未配置。")
+        return
+
+    st.title("电影审美名单 · Admin Analytics v2")
+    if not analytics_enabled():
+        st.warning("Supabase 还没有配置，暂时没有可展示的数据。")
+        return
+
+    if render_button_compat("刷新数据缓存", key="admin_refresh_cache_v2", use_container_width=False):
+        try:
+            fetch_all_events.clear()
+        except Exception:
+            pass
+        rerun()
+
+    all_events = fetch_all_events()
+    min_event_date, max_event_date = available_event_date_range(all_events)
+    if not all_events or min_event_date is None or max_event_date is None:
+        st.info("Supabase 已配置，但 analytics_events 里还没有可展示的事件。")
+        return
+
+    st.caption(f"已读取历史事件 {len(all_events):,} 条。统计基于匿名事件，不包含姓名、IP、联系方式或原始 user_agent。")
+    filter_col1, filter_col2, filter_col3 = st.columns([1, 1, 1])
+    with filter_col1:
+        range_option = st.selectbox(
+            "时间范围",
+            ["最近 7 天", "最近 30 天", "全部历史", "自定义"],
+            index=1,
+            key="admin_range_option_v2",
+        )
+
+    if range_option == "最近 7 天":
+        start_date = max(min_event_date, max_event_date - timedelta(days=6))
+        end_date = max_event_date
+    elif range_option == "最近 30 天":
+        start_date = max(min_event_date, max_event_date - timedelta(days=29))
+        end_date = max_event_date
+    elif range_option == "全部历史":
+        start_date = min_event_date
+        end_date = max_event_date
+    else:
+        default_start = max(min_event_date, max_event_date - timedelta(days=29))
+        with filter_col2:
+            start_date = st.date_input("开始日期", value=default_start, min_value=min_event_date, max_value=max_event_date, key="admin_custom_start_date_v2")
+        with filter_col3:
+            end_date = st.date_input("结束日期", value=max_event_date, min_value=min_event_date, max_value=max_event_date, key="admin_custom_end_date_v2")
+
+    if range_option != "自定义":
+        with filter_col2:
+            st.metric("开始日期", start_date.isoformat())
+        with filter_col3:
+            st.metric("结束日期", end_date.isoformat())
+
+    if isinstance(start_date, tuple):
+        start_date = start_date[0]
+    if isinstance(end_date, tuple):
+        end_date = end_date[-1]
+    if start_date > end_date:
+        st.warning("开始日期晚于结束日期，已自动交换。")
+        start_date, end_date = end_date, start_date
+
+    events = filter_events_by_date(all_events, start_date, end_date)
+    st.caption(f"当前筛选：{start_date.isoformat()} 至 {end_date.isoformat()}，共 {len(events):,} 条事件。")
+    if not events:
+        st.info("当前时间范围内没有事件。")
+        return
+
+    summary = build_admin_summary(events)
+    render_admin_metric_grid(summary)
+    safe_divider()
+    render_admin_insights(build_admin_insights(events))
+    safe_divider()
+
+    funnel_tab, trend_tab, list_tab, channel_tab, experiment_tab, behavior_tab, share_tab, event_tab = st.tabs(
+        ["漏斗分析", "每日趋势", "片单分析", "渠道归因", "实验分析", "行为质量", "分享素材", "最近事件"]
+    )
+
+    with funnel_tab:
+        render_admin_funnel(
+            "完整转化漏斗",
+            build_funnel_rows(events, MAIN_FUNNEL_STEPS),
+            "漏斗按事件总量计算，并兼容旧事件名；分享和下载海报作为完成后的传播动作合并展示。",
+        )
+        safe_divider()
+        render_admin_funnel(
+            "片单传播漏斗",
+            build_funnel_rows(events, SHARED_FUNNEL_STEPS),
+            "用于观察从片单链接进入后的打开、开始、完成和传播表现。",
+        )
+
+    with trend_tab:
+        render_admin_trends(events)
+
+    with list_tab:
+        sort_label = st.selectbox("片单排序", ["完成数", "完成率", "开始数", "访问数"], key="admin_list_sort_v2")
+        sort_map = {"完成数": "completed", "完成率": "completion_rate", "开始数": "started", "访问数": "visits"}
+        render_admin_group_section("片单维度表现", build_list_metrics(events, sort_by=sort_map[sort_label], top_n=100), "list_id", "list_id")
+        safe_divider()
+        render_admin_group_section("模式维度表现", build_group_metrics(events, "mode", label_key="mode", include_unknown=True, top_n=30), "mode", "mode")
+
+    with channel_tab:
+        render_admin_group_section("渠道归因表现", build_channel_metrics(events, top_n=100), "source", "source")
+
+    with experiment_tab:
+        render_admin_group_section("A/B 实验表现", build_experiment_metrics(events, top_n=100), "experiment_variant", "experiment_variant")
+
+    with behavior_tab:
+        q1, q2, q3, q4 = st.columns(4)
+        with q1:
+            st.metric("取舍中位数", admin_float(summary.get("median_comparisons")))
+        with q2:
+            st.metric("取舍 P75", admin_float(summary.get("p75_comparisons")))
+        with q3:
+            st.metric("取舍 P90", admin_float(summary.get("p90_comparisons")))
+        with q4:
+            st.metric("平均暂放", admin_float(summary.get("avg_defers")))
+        h1, h2 = st.columns(2)
+        with h1:
+            render_admin_count_chart(
+                build_numeric_payload_histogram(events, EVENT_RANKING_COMPLETED, "comparisons", [10, 20, 40, 80, 120, 200], label_key="取舍次数"),
+                "取舍次数",
+                "取舍次数分布",
+            )
+        with h2:
+            render_admin_count_chart(
+                build_numeric_payload_histogram(events, EVENT_RANKING_COMPLETED, "total", [10, 20, 50, 100, 250, 500, 1000], label_key="片单规模"),
+                "片单规模",
+                "片单规模分布",
+            )
+        safe_divider()
+        k1, k2 = st.columns(2)
+        with k1:
+            render_admin_count_chart(build_top_k_distribution(events), "top_k", "Top K 设置分布")
+        with k2:
+            setting_rows = build_setting_rows(events)
+            if setting_rows:
+                settings_display = pd.DataFrame(
+                    {
+                        "设置": [row["setting"] for row in setting_rows],
+                        "次数": [row["count"] for row in setting_rows],
+                        "占开始比例": [admin_percent(row["rate"]) for row in setting_rows],
+                    }
+                )
+                st.markdown("**交互设置使用率**")
+                st.bar_chart(pd.DataFrame(setting_rows).set_index("setting")[["count"]])
+                render_admin_dataframe(settings_display)
+            else:
+                st.info("当前筛选范围内没有设置数据。")
+
+    with share_tab:
+        c1, c2 = st.columns(2)
+        with c1:
+            render_admin_count_chart(
+                build_payload_value_counts(events, EVENT_SHARE_LINK_COPIED, "surface", label_key="分享入口", include_empty=True),
+                "分享入口",
+                "分享动作拆分",
+            )
+        with c2:
+            render_admin_count_chart(
+                build_payload_value_counts(events, EVENT_POSTER_DOWNLOADED, "poster_type", label_key="海报类型", include_empty=True),
+                "海报类型",
+                "海报下载拆分",
+            )
+
+    with event_tab:
+        render_admin_recent_events(events)
+
+
 def render_cover_header() -> None:
+    experiment_config = get_experiment_config(get_session_id(), "homepage_cta_v1", {"hero_title": HERO_TITLE})
+    hero_title = str(experiment_config.get("hero_title") or HERO_TITLE)
     cover_src = image_file_data_uri(COVER_IMAGE_PATH)
-    hero_title_html = html.escape(HERO_TITLE).replace("你的电影审美名单", "你的<br>电影审美名单")
+    hero_title_html = html.escape(hero_title).replace("你的电影审美名单", "你的<br>电影审美名单").replace("你的电影审美榜单", "你的<br>电影审美榜单")
     cover_style = (
         ' style="background-image: linear-gradient(90deg, rgba(23, 27, 34, 0.92) 0%, '
         'rgba(23, 27, 34, 0.70) 46%, rgba(23, 27, 34, 0.26) 100%), '
@@ -4356,15 +4825,19 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
         "event",
     )
     if st.session_state.get(k("completion_event_signature")) != completion_signature:
-        payload = {
-            "total": total,
-            "ranked_count": len(ranked),
-            "skipped_count": len(skipped_items),
-            "comparisons": comparisons,
-            "top_k": top_k,
-            "defers": defers,
-            "session_hint": get_session_id()[-8:],
-        }
+        payload = build_event_payload(
+            route="result",
+            list_id=challenge_id or template_id or st.session_state.get(k("mode"), MODE_CUSTOM),
+            list_size=total,
+            total=total,
+            ranked_count=len(ranked),
+            skipped_count=len(skipped_items),
+            comparison_count=comparisons,
+            comparisons=comparisons,
+            top_k=top_k,
+            defers=defers,
+            session_hint=get_session_id()[-8:],
+        )
         if template_id and ranked:
             payload["winner"] = ranked[0]
         track_event(
@@ -4376,6 +4849,23 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
             payload=payload,
         )
         st.session_state[k("completion_event_signature")] = completion_signature
+
+    if st.session_state.get(k("result_view_event_signature")) != completion_signature:
+        track_event(
+            EVENT_RESULT_VIEWED,
+            challenge_id=challenge_id,
+            mode=st.session_state.get(k("mode"), MODE_CUSTOM),
+            template_id=template_id,
+            source_channel=source_channel,
+            payload=build_event_payload(
+                route="result",
+                list_id=challenge_id or template_id or st.session_state.get(k("mode"), MODE_CUSTOM),
+                list_size=total,
+                comparison_count=comparisons,
+                top_k=top_k,
+            ),
+        )
+        st.session_state[k("result_view_event_signature")] = completion_signature
 
     render_result_peak(total=total, comparisons=comparisons, top_k=top_k)
     render_result_insights(total=total, comparisons=comparisons, top_k=top_k)
@@ -4453,6 +4943,22 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                 render_poster_preview_html(poster_bytes)
         with action_col:
             has_qr = st.session_state.get(k("share_poster_qr_option")) == SHARE_POSTER_QR_OPTIONS[0]
+            if has_qr and st.session_state.get(k("qr_view_event_signature")) != completion_signature:
+                track_event(
+                    EVENT_QR_VIEWED,
+                    challenge_id=challenge_id,
+                    mode=mode,
+                    template_id=template_id,
+                    source_channel=source_channel,
+                    payload=build_event_payload(
+                        route="result",
+                        list_id=challenge_id or template_id or mode,
+                        list_size=total,
+                        comparison_count=comparisons,
+                        poster_type="result",
+                    ),
+                )
+                st.session_state[k("qr_view_event_signature")] = completion_signature
             qr_copy = "、项目名称和二维码" if has_qr else "和项目名称"
             st.markdown(
                 f"""
@@ -4481,7 +4987,13 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                         mode=st.session_state.get(k("mode"), MODE_CUSTOM),
                         template_id=template_id,
                         source_channel=source_channel,
-                        payload={"poster_type": "result"},
+                        payload=build_event_payload(
+                            route="result",
+                            list_id=challenge_id or template_id or mode,
+                            list_size=total,
+                            comparison_count=comparisons,
+                            poster_type="result",
+                        ),
                     ),
                 )
             with a2:
@@ -4498,7 +5010,13 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                             mode=st.session_state.get(k("mode"), MODE_CUSTOM),
                             template_id=template_id,
                             source_channel=source_channel,
-                            payload={"poster_type": "contested_choice"},
+                            payload=build_event_payload(
+                                route="result",
+                                list_id=challenge_id or template_id or mode,
+                                list_size=total,
+                                comparison_count=comparisons,
+                                poster_type="contested_choice",
+                            ),
                         ),
                     )
             if render_copy_button("复制链接", challenge_url, "copy_result_challenge_link", "片单链接"):
@@ -4508,7 +5026,13 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                     mode=mode,
                     template_id=template_id,
                     source_channel=source_channel,
-                    payload={"surface": "result_link"},
+                    payload=build_event_payload(
+                        route="result",
+                        list_id=challenge_id or template_id or mode,
+                        list_size=total,
+                        comparison_count=comparisons,
+                        surface="result_link",
+                    ),
                 )
             if render_copy_button("复制猜冠军文案", challenge_invite_text, "copy_guess_champion_caption", "猜冠军文案"):
                 track_event(
@@ -4517,7 +5041,13 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                     mode=mode,
                     template_id=template_id,
                     source_channel=source_channel,
-                    payload={"surface": "guess_champion"},
+                    payload=build_event_payload(
+                        route="result",
+                        list_id=challenge_id or template_id or mode,
+                        list_size=total,
+                        comparison_count=comparisons,
+                        surface="guess_champion",
+                    ),
                 )
 
     with st.expander("发布文案", expanded=False):
@@ -4530,7 +5060,13 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                 mode=mode,
                 template_id=template_id,
                 source_channel=source_channel,
-                payload={"surface": "caption"},
+                payload=build_event_payload(
+                    route="result",
+                    list_id=challenge_id or template_id or mode,
+                    list_size=total,
+                    comparison_count=comparisons,
+                    surface="caption",
+                ),
             )
 
     safe_divider()
@@ -4756,16 +5292,7 @@ def render_step_header(step: int, title: str, subtitle: str = "", compact: bool 
         safe_divider()
 
 
-def render_mode_selection_page() -> None:
-    current_mode = get_selected_mode()
-    mode_options = [MODE_DOUBAN_COLLECT, MODE_CUSTOM, MODE_DOUBAN]
-    render_step_header(
-        1,
-        "",
-        "不用先想完整顺序，只在两部电影之间作一次取舍。",
-        compact=True,
-    )
-
+def render_douban_collect_spotlight(homepage_cta_text: str = "开始整理") -> None:
     st.markdown(
         """
         <div class="collect-spotlight">
@@ -4781,14 +5308,20 @@ def render_mode_selection_page() -> None:
     )
     action_col, hint_col = st.columns([1, 2.4])
     with action_col:
-        if render_button_compat("用豆瓣已看整理", key="btn_feature_douban_collect", use_container_width=True, button_type="primary"):
+        if render_button_compat(homepage_cta_text, key="btn_feature_douban_collect", use_container_width=True, button_type="primary"):
             set_selected_mode(MODE_DOUBAN_COLLECT)
+            track_event(
+                EVENT_LIST_SELECTED,
+                mode=MODE_DOUBAN_COLLECT,
+                source_channel=get_source_channel(),
+                payload=build_event_payload(route="home", mode=MODE_DOUBAN_COLLECT, list_id=MODE_DOUBAN_COLLECT),
+            )
             go_to_step(2)
     with hint_col:
         st.caption("只读取公开可访问的“看过”页面；可以只排 Top N，也可以整理完整总榜。")
 
-    safe_divider()
 
+def render_builtin_quick_start_lists() -> None:
     card_html = []
     for template in FILM_CHALLENGE_TEMPLATES:
         template_id = html.escape(str(template["id"]), quote=True)
@@ -4827,8 +5360,42 @@ def render_mode_selection_page() -> None:
                 mode=MODE_CUSTOM,
                 template_id=template_id,
                 source_channel=get_source_channel(),
-                payload={"surface": "home_template"},
+                payload=build_event_payload(
+                    route="home",
+                    list_id=template_id,
+                    list_size=len(selected_template.get("items", [])),
+                    top_k=selected_template.get("top_k"),
+                    surface="home_template",
+                ),
             )
+
+
+def render_mode_selection_page() -> None:
+    current_mode = get_selected_mode()
+    mode_options = [MODE_DOUBAN_COLLECT, MODE_CUSTOM, MODE_DOUBAN]
+    cta_config = get_experiment_config(get_session_id(), "homepage_cta_v1", {"cta_text": "开始整理"})
+    homepage_cta_text = str(cta_config.get("cta_text") or "开始整理")
+    layout_config = get_experiment_config(
+        get_session_id(),
+        "home_layout_order_v1",
+        {"home_layout_order": "current"},
+    )
+    home_layout_order = str(layout_config.get("home_layout_order") or "current")
+    render_step_header(
+        1,
+        "",
+        "不用先想完整顺序，只在两部电影之间作一次取舍。",
+        compact=True,
+    )
+
+    if home_layout_order == "builtin_first":
+        render_builtin_quick_start_lists()
+        safe_divider()
+        render_douban_collect_spotlight(homepage_cta_text)
+    else:
+        render_douban_collect_spotlight(homepage_cta_text)
+        safe_divider()
+        render_builtin_quick_start_lists()
 
     safe_divider()
     st.subheader("也可以从其他来源开始")
@@ -4854,6 +5421,12 @@ def render_mode_selection_page() -> None:
         st.empty()
     with next_col:
         if render_button_compat("继续整理", key="btn_to_step2", use_container_width=True, button_type="primary"):
+            track_event(
+                EVENT_LIST_SELECTED,
+                mode=mode,
+                source_channel=get_source_channel(),
+                payload=build_event_payload(route="home", mode=mode, list_id=mode),
+            )
             go_to_step(2)
 
     safe_divider()
@@ -5308,7 +5881,12 @@ def render_custom_parameter_page(mode: str) -> None:
                     challenge_id=st.session_state.get("ui_custom_challenge_id", ""),
                     mode=mode,
                     source_channel=get_source_channel(),
-                    payload={"surface": "custom_setup"},
+                    payload=build_event_payload(
+                        route="custom_setup",
+                        list_id=st.session_state.get("ui_custom_challenge_id", ""),
+                        list_size=len(options),
+                        surface="custom_setup",
+                    ),
                 )
             st.text_area("分享文案", value=st.session_state.get("ui_custom_challenge_caption", ""), height=120)
 
@@ -5780,11 +6358,12 @@ def main() -> None:
         f"page_view_{get_source_channel()}",
         EVENT_PAGE_VIEW,
         source_channel=get_source_channel(),
-        payload={
-            "has_list": bool(get_query_param("list") or get_query_param("challenge")),
-            "has_payload": bool(get_query_param("payload")),
-            "session_hint": get_session_id()[-8:],
-        },
+        payload=build_event_payload(
+            route="home",
+            has_list=bool(get_query_param("list") or get_query_param("challenge")),
+            has_payload=bool(get_query_param("payload")),
+            session_hint=get_session_id()[-8:],
+        ),
     )
     maybe_open_imported_movie_list()
     maybe_open_url_challenge()

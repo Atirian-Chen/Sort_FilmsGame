@@ -72,7 +72,15 @@ with check (
     'ranking_started',
     'ranking_completed',
     'poster_downloaded',
-    'share_link_copied'
+    'share_link_copied',
+    'visit',
+    'list_opened',
+    'list_selected',
+    'sorting_started',
+    'comparison_made',
+    'share_copied',
+    'result_viewed',
+    'qr_viewed'
   )
 );
 
