@@ -218,6 +218,7 @@ DOUBAN_PRESETS = [
 
 SHARE_POSTER_STYLES = ["留白卡片", "银幕红", "夜场蓝"]
 SHARE_POSTER_FORMATS = ["自适应长图", "长图 9:16", "方图 1:1"]
+SHARE_POSTER_QR_OPTIONS = ["带二维码", "不带二维码"]
 DOUBAN_RATING_VALUES = [5, 4, 3, 2, 1]
 
 HISTORY_KEYS = [
@@ -232,6 +233,7 @@ HISTORY_KEYS = [
     "skipped_items",
     "top_k_boundary_check",
     "defers",
+    "decision_log",
     "challenge_id",
     "template_id",
     "source_channel",
@@ -266,6 +268,7 @@ RANKING_STATE_KEYS = [
     "blind_mode",
     "side_shuffle",
     "defers",
+    "decision_log",
     "challenge_id",
     "template_id",
     "source_channel",
@@ -298,6 +301,7 @@ LOCAL_DRAFT_STATE_KEYS = [
     "blind_mode",
     "side_shuffle",
     "defers",
+    "decision_log",
     "challenge_id",
     "template_id",
     "source_channel",
@@ -722,36 +726,65 @@ def render_app_styles() -> None:
         }
         .launch-hero {
             display: grid;
-            grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
-            gap: 18px;
-            align-items: center;
-            margin-bottom: 8px;
-            padding: 4px 0 2px;
+            grid-template-columns: minmax(0, 1fr) minmax(310px, 0.72fr);
+            gap: 22px;
+            align-items: stretch;
+            margin-bottom: 10px;
+            padding: 28px;
+            min-height: 330px;
+            border: 1px solid #2f3540;
+            border-radius: 8px;
+            background-color: #232832;
+            background-position: center;
+            background-size: cover;
+            overflow: hidden;
         }
         .hero-copy {
             min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
-        .hero-kicker {
-            color: #8a4f3d;
+        .launch-hero .hero-kicker {
+            color: #ffd19a;
             font-size: 12px;
             font-weight: 850;
             letter-spacing: 0;
             margin-bottom: 6px;
         }
-        .hero-title {
-            color: #1f2328;
+        .launch-hero .hero-title {
+            color: #fffaf4;
             font-size: clamp(32px, 4vw, 50px);
             font-weight: 880;
             letter-spacing: 0;
             line-height: 1.02;
             margin: 0 0 8px;
+            text-shadow: 0 1px 18px rgba(0, 0, 0, 0.28);
         }
-        .hero-subtitle {
-            color: #5f574f;
-            font-size: 15px;
+        .launch-hero .hero-subtitle {
+            color: #f5e9dd;
+            font-size: 16px;
             line-height: 1.5;
             margin: 0;
             max-width: 620px;
+        }
+        .hero-outcomes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 18px;
+            max-width: 660px;
+        }
+        .hero-outcome {
+            border: 1px solid rgba(255, 250, 244, 0.28);
+            border-radius: 999px;
+            background: rgba(255, 250, 244, 0.13);
+            color: #fffaf4;
+            padding: 7px 10px;
+            font-size: 12px;
+            font-weight: 780;
+            line-height: 1.2;
+            backdrop-filter: blur(5px);
         }
         .hero-proof {
             display: grid;
@@ -778,16 +811,47 @@ def render_app_styles() -> None:
             margin-top: 2px;
         }
         .example-card {
-            border: 1px solid #e7e1d8;
+            border: 1px solid rgba(255, 250, 244, 0.45);
             border-radius: 8px;
-            background: #fffdf9;
-            padding: 12px;
+            background: rgba(255, 253, 249, 0.88);
+            padding: 14px;
+            box-shadow: 0 18px 50px rgba(20, 24, 30, 0.18);
+            backdrop-filter: blur(8px);
+            align-self: center;
         }
         .example-title {
             color: #1f2328;
-            font-size: 15px;
+            font-size: 18px;
             font-weight: 900;
-            margin-bottom: 6px;
+            line-height: 1.25;
+            margin-bottom: 8px;
+        }
+        .example-eyebrow {
+            color: #1f6f6a;
+            font-size: 12px;
+            font-weight: 850;
+            line-height: 1.2;
+            margin-bottom: 5px;
+        }
+        .example-champion {
+            border: 1px solid #dcebe6;
+            border-radius: 8px;
+            background: #f6fffb;
+            padding: 9px 10px;
+            margin-bottom: 8px;
+        }
+        .example-champion-label {
+            color: #52706c;
+            font-size: 11px;
+            font-weight: 780;
+            line-height: 1.2;
+        }
+        .example-champion-name {
+            color: #163f3c;
+            font-size: 20px;
+            font-weight: 900;
+            line-height: 1.25;
+            margin-top: 2px;
         }
         .example-rank {
             display: flex;
@@ -804,18 +868,35 @@ def render_app_styles() -> None:
             color: #8a4f3d;
             font-weight: 900;
         }
+        .example-footer {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 7px;
+            margin-top: 10px;
+        }
+        .example-result-chip {
+            border: 1px solid #e7e1d8;
+            border-radius: 8px;
+            color: #4b4640;
+            background: #fffaf4;
+            padding: 7px 8px;
+            font-size: 12px;
+            font-weight: 760;
+            line-height: 1.25;
+            text-align: center;
+        }
         .challenge-grid {
             display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-            gap: 8px;
-            margin: 8px 0 8px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin: 10px 0 8px;
         }
         .challenge-card {
             border: 1px solid #e7e1d8;
             border-radius: 8px;
             background: #fffdf9;
-            padding: 11px;
-            min-height: 112px;
+            padding: 13px;
+            min-height: 188px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -938,6 +1019,23 @@ def render_app_styles() -> None:
             font-size: 12px;
             line-height: 1.38;
         }
+        .challenge-reason {
+            border-left: 3px solid #1f6f6a;
+            color: #334340;
+            background: #f6fffb;
+            padding: 8px 9px;
+            margin-top: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.42;
+        }
+        .challenge-reason-label {
+            color: #1f6f6a;
+            font-size: 11px;
+            font-weight: 850;
+            line-height: 1.2;
+            margin-bottom: 2px;
+        }
         .challenge-foot {
             display: flex;
             flex-direction: column;
@@ -1019,6 +1117,184 @@ def render_app_styles() -> None:
             color: #4b352d;
             margin: 8px 0 12px;
         }
+        .result-peak {
+            border: 1px solid #d8d1c6;
+            border-radius: 8px;
+            background:
+                linear-gradient(135deg, rgba(31, 35, 40, 0.94) 0%, rgba(72, 54, 45, 0.90) 54%, rgba(31, 111, 106, 0.84) 100%);
+            padding: 20px;
+            color: #fffaf4;
+            margin: 4px 0 14px;
+        }
+        .result-peak-kicker {
+            color: #ffd19a;
+            font-size: 12px;
+            font-weight: 850;
+            line-height: 1.2;
+            margin-bottom: 8px;
+        }
+        .result-peak-title {
+            color: #fffaf4;
+            font-size: clamp(28px, 3.6vw, 48px);
+            font-weight: 900;
+            line-height: 1.04;
+            letter-spacing: 0;
+            margin-bottom: 16px;
+            overflow-wrap: anywhere;
+        }
+        .result-peak-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.05fr) minmax(260px, 0.95fr);
+            gap: 12px;
+        }
+        .result-peak-panel {
+            border: 1px solid rgba(255, 250, 244, 0.22);
+            border-radius: 8px;
+            background: rgba(255, 250, 244, 0.10);
+            padding: 13px;
+            min-width: 0;
+        }
+        .result-peak-label {
+            color: rgba(255, 250, 244, 0.76);
+            font-size: 12px;
+            font-weight: 780;
+            line-height: 1.25;
+            margin-bottom: 5px;
+        }
+        .result-peak-value {
+            color: #fffaf4;
+            font-size: 24px;
+            font-weight: 900;
+            line-height: 1.2;
+            overflow-wrap: anywhere;
+        }
+        .contest-pair {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+            gap: 8px;
+            align-items: center;
+            margin-top: 6px;
+        }
+        .contest-item {
+            border: 1px solid rgba(255, 250, 244, 0.24);
+            border-radius: 8px;
+            background: rgba(255, 250, 244, 0.12);
+            padding: 9px;
+            color: #fffaf4;
+            font-weight: 820;
+            line-height: 1.25;
+            text-align: center;
+            overflow-wrap: anywhere;
+        }
+        .contest-versus {
+            color: #ffd19a;
+            font-size: 12px;
+            font-weight: 900;
+        }
+        .result-peak-note {
+            color: rgba(255, 250, 244, 0.78);
+            font-size: 12px;
+            line-height: 1.42;
+            margin-top: 8px;
+        }
+        .poster-stage {
+            display: grid;
+            grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+            gap: 16px;
+            align-items: start;
+            margin: 12px 0 14px;
+        }
+        .poster-preview-shell {
+            border: 1px solid #e7e1d8;
+            border-radius: 8px;
+            background: #fffdf9;
+            padding: 10px;
+        }
+        .poster-side-panel {
+            border: 1px solid #e7e1d8;
+            border-radius: 8px;
+            background: #fffdf9;
+            padding: 14px;
+        }
+        .poster-panel-title {
+            color: #1f2328;
+            font-size: 18px;
+            font-weight: 900;
+            line-height: 1.25;
+            margin-bottom: 6px;
+        }
+        .poster-panel-copy {
+            color: #6f665d;
+            font-size: 13px;
+            line-height: 1.45;
+            margin-bottom: 12px;
+        }
+        .share-action-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin: 10px 0 12px;
+        }
+        .challenge-invite {
+            border-left: 3px solid #1f6f6a;
+            background: transparent;
+            color: #163f3c;
+            padding: 4px 0 4px 12px;
+            margin-top: 10px;
+        }
+        .challenge-invite-title {
+            font-size: 15px;
+            font-weight: 900;
+            line-height: 1.25;
+            margin-bottom: 4px;
+        }
+        .challenge-invite-copy {
+            color: #52706c;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+        .next-template-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin: 10px 0 12px;
+        }
+        .next-template-card {
+            border: 1px solid #e7e1d8;
+            border-radius: 8px;
+            background: #fffdf9;
+            color: inherit;
+            display: block;
+            min-height: 132px;
+            padding: 12px;
+            text-decoration: none !important;
+            transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+        }
+        .next-template-card:hover {
+            border-color: #1f6f6a;
+            box-shadow: 0 0 0 3px rgba(31, 111, 106, 0.10);
+            transform: translateY(-1px);
+            text-decoration: none !important;
+        }
+        .next-template-label {
+            color: #1f6f6a;
+            font-size: 11px;
+            font-weight: 850;
+            line-height: 1.2;
+            margin-bottom: 6px;
+        }
+        .next-template-title {
+            color: #1f2328;
+            font-size: 15px;
+            font-weight: 860;
+            line-height: 1.25;
+            margin-bottom: 5px;
+        }
+        .next-template-copy {
+            color: #6f665d;
+            font-size: 12px;
+            line-height: 1.4;
+        }
         .mini-note {
             color: #7a746c;
             font-size: 13px;
@@ -1068,9 +1344,18 @@ def render_app_styles() -> None:
             .insight-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
-            .launch-hero,
-            .challenge-grid {
+            .result-peak-grid,
+            .poster-stage,
+            .next-template-grid {
                 grid-template-columns: 1fr;
+            }
+            .share-action-grid {
+                grid-template-columns: 1fr;
+            }
+            .launch-hero {
+                grid-template-columns: 1fr;
+                min-height: 0;
+                padding: 18px;
             }
             .collect-spotlight {
                 grid-template-columns: 1fr;
@@ -1085,10 +1370,17 @@ def render_app_styles() -> None:
                 min-width: 0;
             }
             .challenge-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
+                grid-template-columns: 1fr;
             }
             .hero-proof {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+            .hero-outcomes {
+                display: grid;
+                grid-template-columns: 1fr;
+            }
+            .example-footer {
+                grid-template-columns: 1fr;
             }
             .battle-title {
                 font-size: 22px;
@@ -1822,6 +2114,7 @@ def init_ranking_state(
     st.session_state[k("blind_mode")] = blind_mode
     st.session_state[k("side_shuffle")] = side_shuffle
     st.session_state[k("defers")] = 0
+    st.session_state[k("decision_log")] = []
     st.session_state[k("challenge_id")] = challenge_id
     st.session_state[k("template_id")] = template_id
     st.session_state[k("source_channel")] = source_channel or get_source_channel()
@@ -2091,11 +2384,107 @@ def add_skipped_item(item: Optional[str]) -> None:
     st.session_state[k("skipped_items")] = skipped_items
 
 
+def current_pair_for_log() -> tuple[str, str]:
+    current_item = st.session_state.get(k("current_item")) or ""
+    ranked = st.session_state.get(k("ranked"), [])
+    if not current_item or not ranked:
+        return current_item, ""
+    low = st.session_state.get(k("low"), 0)
+    high = st.session_state.get(k("high"), 0)
+    idx = get_current_opponent_index(ranked, low, high)
+    opponent = ranked[idx] if 0 <= idx < len(ranked) else ""
+    return current_item, opponent
+
+
+def append_decision_log(event_type: str, left_item: str, right_item: str, winner: str = "") -> None:
+    if not left_item and not right_item:
+        return
+    log = st.session_state.get(k("decision_log"), [])
+    if not isinstance(log, list):
+        log = []
+    log.append(
+        {
+            "type": event_type,
+            "left": left_item,
+            "right": right_item,
+            "winner": winner,
+            "comparison": int(st.session_state.get(k("comparisons"), 0)),
+        }
+    )
+    st.session_state[k("decision_log")] = log[-200:]
+
+
+def get_most_contested_pair() -> dict:
+    log = st.session_state.get(k("decision_log"), [])
+    if not isinstance(log, list):
+        log = []
+    ranked = st.session_state.get(k("ranked"), [])
+
+    deferred = [
+        row
+        for row in log
+        if isinstance(row, dict) and row.get("type") == "defer" and (row.get("left") or row.get("right"))
+    ]
+    if deferred:
+        row = deferred[-1]
+        return {
+            "left": str(row.get("left") or ""),
+            "right": str(row.get("right") or ""),
+            "label": "你曾经暂放的选择",
+            "note": "这组被你先放了一会儿，说明它确实需要多想一秒。",
+        }
+
+    choices = [
+        row
+        for row in log
+        if isinstance(row, dict) and row.get("type") == "choice" and (row.get("left") or row.get("right"))
+    ]
+    if choices:
+        top_set = set(ranked[:5])
+        top_choices = [
+            row
+            for row in choices
+            if str(row.get("left") or "") in top_set and str(row.get("right") or "") in top_set
+        ]
+        row = (top_choices or choices)[-1]
+        winner = str(row.get("winner") or "")
+        loser = str(row.get("right") if winner == row.get("left") else row.get("left") or "")
+        return {
+            "left": str(row.get("left") or ""),
+            "right": str(row.get("right") or ""),
+            "label": "关键取舍",
+            "note": f"最后你选择了「{winner}」。" if winner and loser else "这组选择参与决定了最终榜单的前列气质。",
+        }
+
+    if len(ranked) >= 2:
+        return {
+            "left": ranked[0],
+            "right": ranked[1],
+            "label": "冠军边上的分岔",
+            "note": "冠军和第二名之间，就是这份名单最有性格的一道分界线。",
+        }
+
+    skipped_items = st.session_state.get(k("skipped_items"), [])
+    if ranked and skipped_items:
+        return {
+            "left": ranked[0],
+            "right": skipped_items[0],
+            "label": "最后留下的分岔",
+            "note": "一个留在榜首，一个被你放下；这也构成了这份名单的性格。",
+        }
+
+    return {"left": ranked[0] if ranked else "", "right": "", "label": "最纠结的一组选择", "note": "完成一次整理后，这里会记录你的关键取舍。"}
+
+
 def handle_choice(prefer_left: bool) -> None:
     if st.session_state.get(k("finished"), False):
         return
 
     push_history_snapshot()
+
+    current_item, opponent_item = current_pair_for_log()
+    winner = current_item if prefer_left else opponent_item
+    append_decision_log("choice", current_item, opponent_item, winner)
 
     st.session_state[k("comparisons")] += 1
     ranked = st.session_state[k("ranked")]
@@ -2209,6 +2598,8 @@ def handle_defer_current_pair() -> None:
         return
 
     push_history_snapshot()
+    current_item, opponent_item = current_pair_for_log()
+    append_decision_log("defer", current_item, opponent_item)
     remaining.append(current_item)
     st.session_state[k("remaining")] = remaining
     st.session_state[k("current_item")] = None
@@ -2459,6 +2850,103 @@ def render_result_insights(total: int, comparisons: int, top_k: Optional[int]) -
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_result_peak(total: int, comparisons: int, top_k: Optional[int]) -> None:
+    ranked = st.session_state.get(k("ranked"), [])
+    theme = st.session_state.get(k("theme"), "我的电影审美名单")
+    champion = ranked[0] if ranked else "暂无"
+    contested = get_most_contested_pair()
+    left = contested.get("left") or "暂无"
+    right = contested.get("right") or "暂无"
+    result_scope = "完整名单" if top_k is None else f"Top {min(top_k, len(ranked))}"
+
+    st.markdown(
+        f"""
+        <div class="result-peak">
+          <div class="result-peak-kicker">整理完成 · {html.escape(result_scope)}</div>
+          <div class="result-peak-title">{html.escape(theme)}</div>
+          <div class="result-peak-grid">
+            <div class="result-peak-panel">
+              <div class="result-peak-label">我的冠军电影</div>
+              <div class="result-peak-value">{html.escape(champion)}</div>
+              <div class="result-peak-note">这部电影站在了你这次 {total} 部电影取舍的最前面。</div>
+            </div>
+            <div class="result-peak-panel">
+              <div class="result-peak-label">{html.escape(str(contested.get("label") or "最纠结的一组选择"))}</div>
+              <div class="contest-pair">
+                <div class="contest-item">{html.escape(left)}</div>
+                <div class="contest-versus">VS</div>
+                <div class="contest-item">{html.escape(right)}</div>
+              </div>
+              <div class="result-peak-note">{html.escape(str(contested.get("note") or ""))}</div>
+            </div>
+          </div>
+          <div class="result-peak-note">共作出 {comparisons} 次取舍。现在可以把这份名单变成海报，发给朋友猜你的冠军。</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def cycle_share_poster_style() -> None:
+    current = st.session_state.get(k("share_poster_style"), SHARE_POSTER_STYLES[0])
+    try:
+        idx = SHARE_POSTER_STYLES.index(current)
+    except ValueError:
+        idx = 0
+    st.session_state[k("share_poster_style")] = SHARE_POSTER_STYLES[(idx + 1) % len(SHARE_POSTER_STYLES)]
+    st.session_state[k("share_poster_signature")] = ""
+    st.session_state[k("share_poster_bytes")] = b""
+
+
+def render_poster_preview_html(poster_bytes: bytes) -> None:
+    src = poster_data_uri(poster_bytes)
+    if not src:
+        st.info("海报正在生成。")
+        return
+    st.markdown(
+        f"""
+        <div class="poster-preview-shell">
+          <img src="{src}" alt="结果海报预览" style="display:block;width:100%;border-radius:6px;" />
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_next_template_recommendations(current_template_id: str) -> None:
+    templates_by_id = {str(template["id"]): template for template in FILM_CHALLENGE_TEMPLATES}
+    routes = {
+        "douban-top50": ["nolan", "chinese-highscore", "miyazaki"],
+        "nolan": ["miyazaki", "chinese-highscore", "douban-top50"],
+        "miyazaki": ["nolan", "chinese-highscore", "douban-top50"],
+        "chinese-highscore": ["douban-top50", "nolan", "miyazaki"],
+        "couple-debate": ["douban-top50", "nolan", "chinese-highscore"],
+    }
+    preferred = routes.get(current_template_id, ["nolan", "chinese-highscore", "miyazaki"])
+    selected = [templates_by_id[item] for item in preferred if item in templates_by_id and item != current_template_id]
+    for template in FILM_CHALLENGE_TEMPLATES:
+        if len(selected) >= 3:
+            break
+        if str(template["id"]) != current_template_id and template not in selected:
+            selected.append(template)
+
+    if not selected:
+        return
+
+    cards = []
+    for template in selected[:3]:
+        template_id = html.escape(str(template["id"]), quote=True)
+        cards.append(
+            f'<a class="next-template-card" href="?list={template_id}" target="_self" aria-label="继续整理 {html.escape(str(template["name"]), quote=True)}">'
+            f'<div class="next-template-label">下一份片单</div>'
+            f'<div class="next-template-title">{html.escape(str(template["name"]))}</div>'
+            f'<div class="next-template-copy">{html.escape(str(template.get("recommendation") or template.get("tagline") or ""))}</div>'
+            f'</a>'
+        )
+    st.subheader("再生成一份不同气质的名单")
+    st.markdown(f'<div class="next-template-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
 
 
 def extract_ranked_items_from_payload(payload: dict) -> List[str]:
@@ -3141,21 +3629,42 @@ def render_admin_dashboard() -> None:
 
 def render_cover_header() -> None:
     cover_src = image_file_data_uri(COVER_IMAGE_PATH)
-    image_html = f'<img class="cover-image" src="{cover_src}" alt="{APP_TITLE} 封面">' if cover_src else ""
+    hero_title_html = html.escape(HERO_TITLE).replace("你的电影审美名单", "你的<br>电影审美名单")
+    cover_style = (
+        ' style="background-image: linear-gradient(90deg, rgba(23, 27, 34, 0.92) 0%, '
+        'rgba(23, 27, 34, 0.70) 46%, rgba(23, 27, 34, 0.26) 100%), '
+        f"url('{cover_src}');\""
+        if cover_src
+        else ""
+    )
     st.markdown(
         f"""
-        <div class="launch-hero">
+        <div class="launch-hero"{cover_style}>
           <div class="hero-copy">
             <div class="hero-kicker">电影片单整理器</div>
-            <h1 class="hero-title">{html.escape(HERO_TITLE)}</h1>
+            <h1 class="hero-title">{hero_title_html}</h1>
             <p class="hero-subtitle">{html.escape(HERO_SUBTITLE)} {html.escape(HERO_TAGLINE)}</p>
+            <div class="hero-outcomes">
+              <div class="hero-outcome">得到一份 Top 榜单</div>
+              <div class="hero-outcome">看见你的冠军电影</div>
+              <div class="hero-outcome">生成结果海报</div>
+              <div class="hero-outcome">复制链接给朋友同题挑战</div>
+            </div>
           </div>
           <div class="example-card">
-            {image_html}
-            <div class="example-title">示例：一份电影审美名单</div>
-            <div class="example-rank"><span>#01</span><div>千与千寻</div></div>
+            <div class="example-eyebrow">完成后会得到</div>
+            <div class="example-title">我的电影审美 Top 10</div>
+            <div class="example-champion">
+              <div class="example-champion-label">冠军电影</div>
+              <div class="example-champion-name">千与千寻</div>
+            </div>
             <div class="example-rank"><span>#02</span><div>星际穿越</div></div>
             <div class="example-rank"><span>#03</span><div>霸王别姬</div></div>
+            <div class="example-rank"><span>#04</span><div>盗梦空间</div></div>
+            <div class="example-footer">
+              <div class="example-result-chip">结果海报</div>
+              <div class="example-result-chip">片单链接</div>
+            </div>
           </div>
         </div>
         """,
@@ -3252,6 +3761,7 @@ def build_share_poster_signature(
     poster_style: str,
     poster_format: str,
     share_url: str = "",
+    qr_option: str = SHARE_POSTER_QR_OPTIONS[0],
 ) -> str:
     return "|".join(
         [
@@ -3260,6 +3770,7 @@ def build_share_poster_signature(
             user_name,
             poster_style,
             poster_format,
+            qr_option,
             share_url,
             "full" if top_k is None else f"top{top_k}",
             "ranked:" + "||".join(ranked),
@@ -3335,6 +3846,7 @@ def generate_share_poster_bytes(
     poster_style: str,
     poster_format: str,
     share_url: str = "",
+    include_qr: bool = True,
     poster_bytes_map: Optional[Dict[str, Optional[bytes]]] = None,
 ) -> bytes:
     width = 1080
@@ -3350,7 +3862,7 @@ def generate_share_poster_bytes(
     thumb_size = (86, 124)
     palette = get_share_palette(poster_style)
     poster_bytes_map = poster_bytes_map or {}
-    share_url = get_public_app_url()
+    share_url = share_url or get_public_app_url()
 
     measure_img = Image.new("RGB", (1, 1))
     measure_draw = ImageDraw.Draw(measure_img)
@@ -3363,8 +3875,11 @@ def generate_share_poster_bytes(
 
     title_lines = wrap_text(measure_draw, theme, title_font, width - padding * 2)
     title_height = len(title_lines) * 60
-    header_height = title_height + 54 + (34 if user_name else 0) + 34
-    qr_block_height = 184
+    champion = ranked[0] if ranked else ""
+    champion_lines = wrap_text(measure_draw, champion, item_font, width - padding * 2 - 170)[:2] if champion else []
+    champion_height = 106 + max(0, len(champion_lines) - 1) * 36 if champion else 0
+    header_height = title_height + 54 + (34 if user_name else 0) + champion_height + 34
+    qr_block_height = 184 if include_qr else 0
     bottom_margin = 48
 
     display_ranked = ranked
@@ -3392,7 +3907,7 @@ def generate_share_poster_bytes(
         content_height += 38
     if skipped_items:
         content_height += 12 + 2 + 24 + 36 + len(skipped_lines) * 28
-    content_height += qr_block_height + bottom_margin
+    content_height += (qr_block_height + 20 if include_qr else 0) + bottom_margin
     height = fixed_height or max(900, content_height)
 
     img = Image.new("RGB", (width, height), palette["bg"])
@@ -3416,6 +3931,24 @@ def generate_share_poster_bytes(
     if user_name:
         draw.text((padding, y), f"by {user_name}", font=small_font, fill=palette["muted"])
         y += 34
+
+    if champion:
+        champion_top = y + 8
+        champion_bottom = champion_top + champion_height - 16
+        champion_fill = (255, 252, 246) if poster_style != "夜场蓝" else (33, 40, 61)
+        draw.rounded_rectangle(
+            (padding, champion_top, width - padding, champion_bottom),
+            radius=22,
+            fill=champion_fill,
+            outline=palette["outline"],
+            width=2,
+        )
+        draw.text((padding + 28, champion_top + 22), "冠军电影", font=small_font, fill=palette["accent"])
+        text_y = champion_top + 54
+        for line in champion_lines:
+            draw.text((padding + 28, text_y), line, font=item_font, fill=palette["title"])
+            text_y += 38
+        y = champion_bottom + 28
 
     draw.line((padding, y, width - padding, y), fill=palette["outline"], width=2)
     y += 28
@@ -3463,15 +3996,16 @@ def generate_share_poster_bytes(
             draw.text((padding, y), line, font=small_font, fill=palette["muted"])
             y += 28
 
-    qr_y = min(max(y + 12, height - padding - qr_block_height), height - padding - qr_block_height)
-    draw.rounded_rectangle((padding, qr_y, width - padding, qr_y + qr_block_height), radius=24, fill=(255, 255, 255), outline=palette["outline"], width=2)
-    qr_img = make_qr_image(share_url, 144)
-    img.paste(qr_img, (padding + 20, qr_y + 20))
-    qr_text_x = padding + 188
-    draw.text((qr_text_x, qr_y + 30), "扫码打开电影审美名单", font=subtitle_font, fill=(31, 35, 40))
-    draw.text((qr_text_x, qr_y + 72), "从首页进入，排出你自己的顺序。", font=small_font, fill=(98, 106, 120))
-    for idx, line in enumerate(wrap_text(draw, share_url, tiny_font, width - qr_text_x - padding - 20)[:2]):
-        draw.text((qr_text_x, qr_y + 112 + idx * 24), line, font=tiny_font, fill=(112, 118, 130))
+    if include_qr:
+        qr_y = min(max(y + 12, height - padding - qr_block_height), height - padding - qr_block_height)
+        draw.rounded_rectangle((padding, qr_y, width - padding, qr_y + qr_block_height), radius=24, fill=(255, 255, 255), outline=palette["outline"], width=2)
+        qr_img = make_qr_image(share_url, 144)
+        img.paste(qr_img, (padding + 20, qr_y + 20))
+        qr_text_x = padding + 188
+        draw.text((qr_text_x, qr_y + 30), "扫码打开电影审美名单", font=subtitle_font, fill=(31, 35, 40))
+        draw.text((qr_text_x, qr_y + 72), "发给朋友，让 TA 也排同一份片单。", font=small_font, fill=(98, 106, 120))
+        for idx, line in enumerate(wrap_text(draw, share_url, tiny_font, width - qr_text_x - padding - 20)[:2]):
+            draw.text((qr_text_x, qr_y + 112 + idx * 24), line, font=tiny_font, fill=(112, 118, 130))
 
     footer = f"{APP_TITLE} · {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     draw.text((padding, height - 70), footer, font=small_font, fill=palette["muted"])
@@ -3536,7 +4070,7 @@ def ensure_share_poster_generated(share_url: str = "") -> None:
     ranked = st.session_state.get(k("ranked"), [])
     if not ranked:
         return
-    share_url = get_public_app_url()
+    share_url = share_url or get_public_app_url()
 
     theme = st.session_state.get(k("theme"), "我的排序")
     skipped_items = st.session_state.get(k("skipped_items"), [])
@@ -3545,7 +4079,9 @@ def ensure_share_poster_generated(share_url: str = "") -> None:
     user_name = st.session_state.get(k("user_name"), "")
     poster_style = st.session_state.get(k("share_poster_style"), SHARE_POSTER_STYLES[0])
     poster_format = st.session_state.get(k("share_poster_format"), SHARE_POSTER_FORMATS[0])
-    signature = build_share_poster_signature(theme, ranked, skipped_items, top_k, mode, user_name, poster_style, poster_format, share_url)
+    qr_option = st.session_state.get(k("share_poster_qr_option"), SHARE_POSTER_QR_OPTIONS[0])
+    include_qr = qr_option == SHARE_POSTER_QR_OPTIONS[0]
+    signature = build_share_poster_signature(theme, ranked, skipped_items, top_k, mode, user_name, poster_style, poster_format, share_url, qr_option)
 
     if st.session_state.get(k("share_poster_signature")) == signature and st.session_state.get(k("share_poster_bytes")):
         return
@@ -3566,6 +4102,7 @@ def ensure_share_poster_generated(share_url: str = "") -> None:
         poster_style,
         poster_format,
         share_url=share_url,
+        include_qr=include_qr,
         poster_bytes_map=poster_bytes_map,
     )
     st.session_state[k("share_poster_bytes")] = poster_bytes
@@ -3675,13 +4212,8 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
         )
         st.session_state[k("completion_event_signature")] = completion_signature
 
-    if top_k is None:
-        st.success("已经整理完成。下面是你的完整名单。")
-    else:
-        st.success(f"已经整理完成。下面是你的前 {len(ranked)} 名。")
-
+    render_result_peak(total=total, comparisons=comparisons, top_k=top_k)
     render_result_insights(total=total, comparisons=comparisons, top_k=top_k)
-    render_ranked_list(ranked)
 
     summary = f"共整理 {total} 部电影，作出 {comparisons} 次取舍。"
     if skipped_items:
@@ -3690,56 +4222,158 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
         summary += f" 暂放 {defers} 次。"
     st.caption(summary)
 
-    st.subheader("保存与分享")
+    theme = st.session_state.get(k("theme"), "ranking")
+    mode = st.session_state.get(k("mode"), MODE_CUSTOM)
+    share_caption = build_share_caption(
+        theme=theme,
+        ranked=ranked,
+        skipped_items=skipped_items,
+        comparisons=comparisons,
+        user_name=user_name,
+        seed_text=seed_text,
+        challenge_url=challenge_url,
+    )
+    challenge_invite_text = "\n".join(
+        [
+            f"猜猜我这份「{theme}」的冠军电影是哪一部？",
+            "我刚排完，发你同一份片单，看看你的冠军会不会一样。",
+            challenge_url,
+        ]
+    )
+
+    st.subheader("把结果变成海报")
     if st.session_state.get(k("share_poster_style")) not in SHARE_POSTER_STYLES:
         st.session_state[k("share_poster_style")] = SHARE_POSTER_STYLES[0]
     if st.session_state.get(k("share_poster_format")) not in SHARE_POSTER_FORMATS:
         st.session_state[k("share_poster_format")] = SHARE_POSTER_FORMATS[0]
-    share_col1, share_col2 = st.columns(2)
-    with share_col1:
+    if st.session_state.get(k("share_poster_qr_option")) not in SHARE_POSTER_QR_OPTIONS:
+        st.session_state[k("share_poster_qr_option")] = SHARE_POSTER_QR_OPTIONS[0]
+
+    control_col1, control_col2, control_col3, control_col4 = st.columns([1, 1, 1, 1])
+    with control_col1:
         st.selectbox(
             "海报风格",
             SHARE_POSTER_STYLES,
             key=k("share_poster_style"),
         )
-    with share_col2:
+    with control_col2:
         st.selectbox(
             "海报尺寸",
             SHARE_POSTER_FORMATS,
             key=k("share_poster_format"),
         )
+    with control_col3:
+        st.radio(
+            "二维码版本",
+            SHARE_POSTER_QR_OPTIONS,
+            key=k("share_poster_qr_option"),
+        )
+    with control_col4:
+        st.caption("换一种气质")
+        if render_button_compat("再生成一种风格", key="btn_cycle_poster_style", use_container_width=True):
+            cycle_share_poster_style()
     ensure_share_poster_generated(challenge_url)
 
     poster_bytes = st.session_state.get(k("share_poster_bytes"), b"")
     if poster_bytes:
-        with st.expander("结果海报", expanded=True):
-            show_image_compat(poster_bytes)
-            file_name = f"{slugify_filename(st.session_state.get(k('theme'), 'ranking'))}_share.png"
-            render_download_button_compat(
-                "下载结果海报",
-                data=poster_bytes,
-                file_name=file_name,
-                mime="image/png",
-                key="btn_download_share_poster",
-                on_click=lambda: track_event(
-                    EVENT_POSTER_DOWNLOADED,
+        file_name = f"{slugify_filename(st.session_state.get(k('theme'), 'ranking'))}_share.png"
+        preview_col, action_col = st.columns([0.95, 1.05])
+        with preview_col:
+            render_poster_preview_html(poster_bytes)
+        with action_col:
+            has_qr = st.session_state.get(k("share_poster_qr_option")) == SHARE_POSTER_QR_OPTIONS[0]
+            qr_copy = "、项目名称和二维码" if has_qr else "和项目名称"
+            st.markdown(
+                f"""
+                <div class="poster-side-panel">
+                  <div class="poster-panel-title">晒出你的冠军电影</div>
+                  <div class="poster-panel-copy">海报已经包含你的冠军电影、前列名单{qr_copy}。发出去时，朋友一眼就能看到你的电影审美。</div>
+                  <div class="challenge-invite">
+                    <div class="challenge-invite-title">发给朋友，让 TA 猜你的冠军</div>
+                    <div class="challenge-invite-copy">复制同题挑战链接，朋友排完后可以拿 JSON 和你对比差异。</div>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            a1, a2 = st.columns(2)
+            with a1:
+                render_download_button_compat(
+                    "下载海报",
+                    data=poster_bytes,
+                    file_name=file_name,
+                    mime="image/png",
+                    key="btn_download_share_poster",
+                    on_click=lambda: track_event(
+                        EVENT_POSTER_DOWNLOADED,
+                        challenge_id=challenge_id,
+                        mode=st.session_state.get(k("mode"), MODE_CUSTOM),
+                        template_id=template_id,
+                        source_channel=source_channel,
+                        payload={"poster_type": "result"},
+                    ),
+                )
+            with a2:
+                render_download_button_compat(
+                    "保存图片",
+                    data=poster_bytes,
+                    file_name=f"{slugify_filename(theme)}_image.png",
+                    mime="image/png",
+                    key="btn_save_share_image",
+                    on_click=lambda: track_event(
+                        EVENT_POSTER_DOWNLOADED,
+                        challenge_id=challenge_id,
+                        mode=st.session_state.get(k("mode"), MODE_CUSTOM),
+                        template_id=template_id,
+                        source_channel=source_channel,
+                        payload={"poster_type": "saved_image"},
+                    ),
+                )
+            if render_copy_button("复制链接", challenge_url, "copy_result_challenge_link", "片单链接"):
+                track_event(
+                    EVENT_SHARE_LINK_COPIED,
                     challenge_id=challenge_id,
-                    mode=st.session_state.get(k("mode"), MODE_CUSTOM),
+                    mode=mode,
                     template_id=template_id,
                     source_channel=source_channel,
-                    payload={"poster_type": "result"},
-                ),
+                    payload={"surface": "result_link"},
+                )
+            if render_copy_button("复制猜冠军文案", challenge_invite_text, "copy_guess_champion_caption", "猜冠军文案"):
+                track_event(
+                    EVENT_SHARE_LINK_COPIED,
+                    challenge_id=challenge_id,
+                    mode=mode,
+                    template_id=template_id,
+                    source_channel=source_channel,
+                    payload={"surface": "guess_champion"},
+                )
+
+    with st.expander("发布文案", expanded=False):
+        st.text_area("文案", value=share_caption, height=220)
+        st.caption("发朋友圈、群聊或评论区时可以直接使用；JSON 可用于查看两份名单的差异。")
+        if render_copy_button("复制文案", share_caption, "copy_result_share_caption", "发布文案"):
+            track_event(
+                EVENT_SHARE_LINK_COPIED,
+                challenge_id=challenge_id,
+                mode=mode,
+                template_id=template_id,
+                source_channel=source_channel,
+                payload={"surface": "caption"},
             )
 
-    challenge_poster = generate_challenge_poster_bytes(
-        st.session_state.get(k("theme"), "电影审美名单"),
-        challenge_url,
-        len(st.session_state.get(k("source_options"), [])),
-    )
-    with st.expander("同一份片单海报", expanded=False):
+    safe_divider()
+    st.subheader("完整名单")
+    render_ranked_list(ranked)
+
+    with st.expander("同一份片单邀请海报", expanded=False):
+        challenge_poster = generate_challenge_poster_bytes(
+            st.session_state.get(k("theme"), "电影审美名单"),
+            challenge_url,
+            len(st.session_state.get(k("source_options"), [])),
+        )
         show_image_compat(challenge_poster)
         render_download_button_compat(
-            "下载片单海报",
+            "下载邀请海报",
             data=challenge_poster,
             file_name=f"{slugify_filename(st.session_state.get(k('theme'), 'challenge'))}_challenge.png",
             mime="image/png",
@@ -3753,39 +4387,6 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                 payload={"poster_type": "challenge"},
             ),
         )
-
-    theme = st.session_state.get(k("theme"), "ranking")
-    mode = st.session_state.get(k("mode"), MODE_CUSTOM)
-    share_caption = build_share_caption(
-        theme=theme,
-        ranked=ranked,
-        skipped_items=skipped_items,
-        comparisons=comparisons,
-        user_name=user_name,
-        seed_text=seed_text,
-        challenge_url=challenge_url,
-    )
-    with st.expander("发布文案", expanded=True):
-        st.text_area("文案", value=share_caption, height=220)
-        st.caption("发朋友圈、群聊或评论区时可以直接使用；JSON 可用于查看两份名单的差异。")
-        if render_copy_button("复制片单链接", challenge_url, "copy_result_challenge_link", "片单链接"):
-            track_event(
-                EVENT_SHARE_LINK_COPIED,
-                challenge_id=challenge_id,
-                mode=mode,
-                template_id=template_id,
-                source_channel=source_channel,
-                payload={"surface": "result"},
-            )
-        if render_copy_button("复制文案", share_caption, "copy_result_share_caption", "发布文案"):
-            track_event(
-                EVENT_SHARE_LINK_COPIED,
-                challenge_id=challenge_id,
-                mode=mode,
-                template_id=template_id,
-                source_channel=source_channel,
-                payload={"surface": "caption"},
-            )
 
     txt_bytes, csv_bytes, json_bytes, md_bytes = build_export_payloads(
         theme=theme,
@@ -3811,6 +4412,7 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
             render_download_button_compat("下载 Markdown", md_bytes, f"{base_name}.md", "text/markdown", "btn_export_md")
 
     render_friend_compare(ranked)
+    render_next_template_recommendations(template_id)
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -3904,14 +4506,14 @@ def render_right_panel() -> None:
 
     ctrl1, ctrl2, ctrl3, ctrl4 = st.columns(4)
     with ctrl1:
-        label_left = "未看过 A" if mode == MODE_DOUBAN else "略过 A"
+        label_left = "跳过 / 不想排 A"
         if render_button_compat(label_left, key="btn_skip_left", use_container_width=True):
             if current_on_left:
                 handle_skip_current_item()
             else:
                 handle_skip_opponent_item()
     with ctrl2:
-        label_right = "未看过 B" if mode == MODE_DOUBAN else "略过 B"
+        label_right = "跳过 / 不想排 B"
         if render_button_compat(label_right, key="btn_skip_right", use_container_width=True):
             if current_on_left:
                 handle_skip_opponent_item()
@@ -4019,11 +4621,11 @@ def render_mode_selection_page() -> None:
         """
         <div class="collect-spotlight">
           <div>
-            <div class="collect-spotlight-kicker">主推功能 · 豆瓣已看</div>
-            <div class="collect-spotlight-title">给你的所有已看排出你的榜单</div>
-            <div class="collect-spotlight-copy">输入豆瓣 ID，读取公开的“看过”电影；接下来只需要一轮轮二选一，就能整理出自己的总榜或 Top N。</div>
+            <div class="collect-spotlight-kicker">主推功能 · 豆瓣已看总榜</div>
+            <div class="collect-spotlight-title">把你看过的电影排成私人总榜</div>
+            <div class="collect-spotlight-copy">适合想排出自己总榜单、年度榜单或某个阶段观影坐标的用户。输入豆瓣 ID，读取公开的“看过”电影，再用一轮轮二选一整理出总榜或 Top N。</div>
           </div>
-          <div class="collect-spotlight-note">适合认真整理<br>自己的电影坐标</div>
+          <div class="collect-spotlight-note">可只排 Top N<br>也可整理完整总榜</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -4041,16 +4643,18 @@ def render_mode_selection_page() -> None:
     card_html = []
     for template in FILM_CHALLENGE_TEMPLATES:
         template_id = html.escape(str(template["id"]), quote=True)
+        recommendation = html.escape(str(template.get("recommendation", "")))
         card_html.append(
             f'<a class="challenge-card" href="?list={template_id}" target="_self" aria-label="整理 {html.escape(str(template["name"]), quote=True)}">'
             f'<div>'
             f'<span class="challenge-badge">{html.escape(str(template.get("badge", "电影片单")))}</span>'
             f'<div class="challenge-title">{html.escape(str(template["name"]))}</div>'
             f'<div class="challenge-copy">{html.escape(str(template.get("tagline", "")))}</div>'
+            f'<div class="challenge-reason"><div class="challenge-reason-label">推荐理由</div>{recommendation}</div>'
             f'</div>'
             f'<div class="challenge-foot">'
             f'<div class="mini-note">{len(template.get("items", []))} 部电影 · 前 {template.get("top_k", 10)} 名</div>'
-            f'<span class="challenge-action">整理</span>'
+            f'<span class="challenge-action">开始整理</span>'
             f'</div>'
             f'</a>'
         )

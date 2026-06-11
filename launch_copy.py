@@ -17,6 +17,7 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "seed_text": "douban-top50-v1",
         "source": "builtin",
         "badge": "初次整理",
+        "recommendation": "适合第一次玩，或想从经典高分片里排出一份个人总榜的用户。",
         "items": [
             "肖申克的救赎", "霸王别姬", "阿甘正传", "泰坦尼克号", "这个杀手不太冷",
             "美丽人生", "千与千寻", "辛德勒的名单", "盗梦空间", "忠犬八公的故事",
@@ -39,6 +40,7 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "seed_text": "nolan-v1",
         "source": "builtin",
         "badge": "导演",
+        "recommendation": "适合诺兰粉丝，想认真比较《盗梦空间》《星际穿越》和《奥本海默》的用户。",
         "items": [
             "追随", "记忆碎片", "失眠症", "蝙蝠侠：侠影之谜", "致命魔术", "蝙蝠侠：黑暗骑士",
             "盗梦空间", "蝙蝠侠：黑暗骑士崛起", "星际穿越", "敦刻尔克", "信条", "奥本海默",
@@ -53,6 +55,7 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "seed_text": "miyazaki-v1",
         "source": "builtin",
         "badge": "动画",
+        "recommendation": "适合宫崎骏粉丝，想把童年、飞行、温柔和冒险排出自己顺序的用户。",
         "items": [
             "风之谷", "天空之城", "龙猫", "魔女宅急便", "红猪", "幽灵公主",
             "千与千寻", "哈尔的移动城堡", "悬崖上的金鱼姬", "起风了", "你想活出怎样的人生",
@@ -67,6 +70,7 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "seed_text": "chinese-highscore-v1",
         "source": "builtin",
         "badge": "华语",
+        "recommendation": "适合华语电影爱好者，想排出自己的华语高分总榜或年度补片清单。",
         "items": [
             "霸王别姬", "活着", "无间道", "大话西游之大圣娶亲", "让子弹飞", "鬼子来了",
             "饮食男女", "牯岭街少年杀人事件", "阳光灿烂的日子", "花样年华", "一一",
@@ -83,6 +87,7 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "seed_text": "couple-debate-v1",
         "source": "builtin",
         "badge": "双人",
+        "recommendation": "适合和朋友、伴侣一起玩，看同一批电影在两个人心里的差异。",
         "items": [
             "爱在黎明破晓前", "爱在日落黄昏时", "怦然心动", "花束般的恋爱", "消失的爱人",
             "婚姻故事", "泰坦尼克号", "时空恋旅人", "恋恋笔记本", "重庆森林", "春光乍泄",
