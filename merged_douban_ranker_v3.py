@@ -461,6 +461,17 @@ def show_image_compat(image_data: bytes) -> bool:
         return False
 
 
+def render_boot_loading_notice() -> None:
+    st.markdown(
+        """
+        <div style="margin: 0 0 12px; padding: 10px 14px; border: 1px solid #d8dee8; border-radius: 8px; background: #f6f8fb; color: #3f4957; font-size: 14px; font-weight: 700;">
+          第一次打开可能需要几秒
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def image_mime_type(image_data: bytes) -> str:
     if image_data.startswith(b"\xff\xd8"):
         return "image/jpeg"
@@ -3963,26 +3974,40 @@ def render_admin_home_load_diagnostics(events: List[Dict[str, Any]]) -> None:
     )
 
 
-def render_admin_version_metrics(events: List[Dict[str, Any]]) -> None:
-    rows = build_version_metrics(events)
-    st.markdown("**版本表现**")
-    if not rows:
-        st.info("当前筛选范围内没有可归因到版本的事件。")
-        return
+def version_sort_value(row: Dict[str, Any]) -> str:
+    return str(row.get("released_at") or row.get("first_event_at") or "")
 
+
+def admin_delta_pp(current: Any, previous: Any) -> str:
+    try:
+        return f"{(float(current) - float(previous)) * 100:+.1f} pp"
+    except (TypeError, ValueError):
+        return ""
+
+
+def admin_delta_ms(current: Any, previous: Any) -> str:
+    try:
+        return f"{float(current) - float(previous):+.0f} ms"
+    except (TypeError, ValueError):
+        return ""
+
+
+def build_version_overview_display(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     display_rows = []
     for row in rows:
         display_rows.append(
             {
                 "版本": row.get("release_label", row.get("app_version", "")),
                 "上线时间": admin_short_time(row.get("released_at")),
+                "事件窗口": f"{admin_short_time(row.get('first_event_at'))} ~ {admin_short_time(row.get('last_event_at'))}",
                 "事件数": int(row.get("events", 0)),
                 "session": int(row.get("sessions", 0)),
-                "首页访问 session": int(row.get("visit_sessions", 0)),
+                "首页访问": int(row.get("visit_sessions", 0)),
+                "加载中流失": int(row.get("pre_render_lost_sessions", 0)),
                 "首页渲染完成率": admin_percent(row.get("home_render_rate")),
-                "开始整理 session": int(row.get("started_sessions", 0)),
-                "完成 session": int(row.get("completed_sessions", 0)),
-                "分享 session": int(row.get("shared_sessions", 0)),
+                "加载中流失率": admin_percent(row.get("pre_render_loss_rate")),
+                "渲染后行动率": admin_percent(row.get("post_render_action_rate")),
+                "打开/选择率": admin_percent(row.get("open_or_select_rate")),
                 "开始率": admin_percent(row.get("start_rate")),
                 "完成率": admin_percent(row.get("completion_rate")),
                 "分享率": admin_percent(row.get("share_rate")),
@@ -3990,8 +4015,126 @@ def render_admin_version_metrics(events: List[Dict[str, Any]]) -> None:
                 "commit": row.get("commit", ""),
             }
         )
+    return display_rows
 
-    render_admin_dataframe(pd.DataFrame(display_rows))
+
+def build_version_comparison_display(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    chronological = sorted(rows, key=version_sort_value)
+    display_rows = []
+    for previous, current in zip(chronological, chronological[1:]):
+        display_rows.append(
+            {
+                "版本对比": f"{previous.get('app_version', '')} -> {current.get('app_version', '')}",
+                "当前版本": current.get("release_label", current.get("app_version", "")),
+                "上一版本": previous.get("release_label", previous.get("app_version", "")),
+                "首页渲染完成率变化": admin_delta_pp(current.get("home_render_rate"), previous.get("home_render_rate")),
+                "加载中流失率变化": admin_delta_pp(current.get("pre_render_loss_rate"), previous.get("pre_render_loss_rate")),
+                "渲染后行动率变化": admin_delta_pp(current.get("post_render_action_rate"), previous.get("post_render_action_rate")),
+                "开始率变化": admin_delta_pp(current.get("start_rate"), previous.get("start_rate")),
+                "完成率变化": admin_delta_pp(current.get("completion_rate"), previous.get("completion_rate")),
+                "分享率变化": admin_delta_pp(current.get("share_rate"), previous.get("share_rate")),
+                "P90 渲染耗时变化": admin_delta_ms(current.get("p90_render_elapsed_ms"), previous.get("p90_render_elapsed_ms")),
+                "当前首页访问": int(current.get("visit_sessions", 0)),
+                "当前开始": int(current.get("started_sessions", 0)),
+                "当前完成": int(current.get("completed_sessions", 0)),
+            }
+        )
+    return list(reversed(display_rows))
+
+
+def render_admin_version_metrics(events: List[Dict[str, Any]]) -> None:
+    rows = build_version_metrics(events)
+    st.markdown("**版本表现**")
+    if not rows:
+        st.info("当前筛选范围内没有可归因到版本的事件。")
+        return
+
+    latest = max(rows, key=version_sort_value)
+    cards = [
+        ("版本数", admin_int(len(rows))),
+        ("最新版本", str(latest.get("release_label") or latest.get("app_version") or "")),
+        ("最新版本首页访问", admin_int(latest.get("visit_sessions"))),
+        ("最新版本开始率", admin_percent(latest.get("start_rate"))),
+    ]
+    columns = st.columns(len(cards))
+    for column, (label, value) in zip(columns, cards):
+        with column:
+            st.metric(label, value)
+
+    st.markdown("**版本总览**")
+    render_admin_dataframe(pd.DataFrame(build_version_overview_display(rows)))
+
+    chronological = sorted(rows, key=version_sort_value)
+    chart_rows = [
+        {
+            "版本": row.get("app_version", ""),
+            "首页渲染完成率": float(row.get("home_render_rate", 0.0)),
+            "加载中流失率": float(row.get("pre_render_loss_rate", 0.0)),
+            "开始率": float(row.get("start_rate", 0.0)),
+            "完成率": float(row.get("completion_rate", 0.0)),
+            "分享率": float(row.get("share_rate", 0.0)),
+        }
+        for row in chronological
+    ]
+    if len(chart_rows) >= 2:
+        st.markdown("**版本趋势**")
+        st.line_chart(pd.DataFrame(chart_rows).set_index("版本"))
+
+    st.markdown("**相邻版本对比**")
+    comparison_rows = build_version_comparison_display(rows)
+    if comparison_rows:
+        render_admin_dataframe(pd.DataFrame(comparison_rows))
+    else:
+        st.info("当前筛选范围内只有一个版本，暂时无法做相邻版本对比。")
+
+    st.markdown("**单版本详情**")
+    label_to_row = {str(row.get("release_label") or row.get("app_version") or ""): row for row in rows}
+    labels = list(label_to_row.keys())
+    selected_label = st.selectbox("选择版本", labels, key="admin_version_detail_select")
+    selected = label_to_row[selected_label]
+    previous_rows = [row for row in chronological if version_sort_value(row) < version_sort_value(selected)]
+    previous = previous_rows[-1] if previous_rows else None
+
+    metric_cards = [
+        ("首页访问", admin_int(selected.get("visit_sessions"))),
+        ("加载中流失", admin_int(selected.get("pre_render_lost_sessions"))),
+        ("内容已渲染", admin_int(selected.get("home_rendered_sessions"))),
+        ("渲染后行动", admin_int(selected.get("home_engaged_sessions"))),
+        ("开始整理", admin_int(selected.get("started_sessions"))),
+        ("完成名单", admin_int(selected.get("completed_sessions"))),
+        ("分享/海报", admin_int(selected.get("shared_sessions"))),
+        ("P90 渲染耗时", f"{float(selected.get('p90_render_elapsed_ms', 0.0)):.0f} ms"),
+    ]
+    columns = st.columns(4)
+    for index, (label, value) in enumerate(metric_cards):
+        with columns[index % 4]:
+            st.metric(label, value)
+
+    detail_rows = [
+        ("首页访问", int(selected.get("visit_sessions", 0)), 1.0),
+        ("首页核心内容已渲染", int(selected.get("home_rendered_sessions", 0)), float(selected.get("home_render_rate", 0.0))),
+        ("打开/选择片单", int(selected.get("opened_or_selected_sessions", 0)), float(selected.get("open_or_select_rate", 0.0))),
+        ("开始整理", int(selected.get("started_sessions", 0)), float(selected.get("start_rate", 0.0))),
+        ("完成名单", int(selected.get("completed_sessions", 0)), float(selected.get("completion_rate", 0.0))),
+        ("分享/下载海报", int(selected.get("shared_sessions", 0)), float(selected.get("share_rate", 0.0))),
+    ]
+    render_admin_dataframe(
+        pd.DataFrame(
+            {
+                "阶段": [row[0] for row in detail_rows],
+                "session 数": [row[1] for row in detail_rows],
+                "核心转化率": [admin_percent(row[2]) for row in detail_rows],
+            }
+        )
+    )
+    if previous:
+        st.info(
+            "相对上一版本："
+            f"首页渲染完成率 {admin_delta_pp(selected.get('home_render_rate'), previous.get('home_render_rate'))}，"
+            f"加载中流失率 {admin_delta_pp(selected.get('pre_render_loss_rate'), previous.get('pre_render_loss_rate'))}，"
+            f"开始率 {admin_delta_pp(selected.get('start_rate'), previous.get('start_rate'))}，"
+            f"完成率 {admin_delta_pp(selected.get('completion_rate'), previous.get('completion_rate'))}。"
+        )
     st.caption(
         "说明：新版事件优先使用 payload.app_version；历史事件没有版本字段时，按 created_at 落到 release_history.py 的上线时间区间。"
     )
@@ -6600,8 +6743,8 @@ def main() -> None:
         layout="wide",
     )
     home_render_started_at = datetime.now()
+    render_boot_loading_notice()
     render_app_styles()
-    st.info("第一次打开可能需要几秒")
 
     if get_query_param("admin"):
         render_admin_dashboard()
