@@ -4,7 +4,7 @@ import uuid
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from statistics import median
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import requests
 import streamlit as st
@@ -20,6 +20,7 @@ EVENT_POSTER_DOWNLOADED = "poster_downloaded"
 EVENT_SHARE_COPIED = "share_copied"
 EVENT_RESULT_VIEWED = "result_viewed"
 EVENT_QR_VIEWED = "qr_viewed"
+EVENT_HOME_CONTENT_RENDERED = "home_content_rendered"
 
 # Backward-compatible names used by older app code and historical rows.
 LEGACY_EVENT_PAGE_VIEW = "page_view"
@@ -50,6 +51,7 @@ TRACKED_EVENTS = [
     EVENT_SHARE_COPIED,
     EVENT_RESULT_VIEWED,
     EVENT_QR_VIEWED,
+    EVENT_HOME_CONTENT_RENDERED,
 ]
 LEGACY_TRACKED_EVENTS = list(LEGACY_EVENT_MAP)
 
@@ -67,6 +69,7 @@ EVENT_LABELS = {
     EVENT_SHARE_COPIED: "复制分享",
     EVENT_RESULT_VIEWED: "查看结果",
     EVENT_QR_VIEWED: "查看二维码",
+    EVENT_HOME_CONTENT_RENDERED: "首页内容已渲染",
     LEGACY_EVENT_PAGE_VIEW: "访问",
     LEGACY_EVENT_CHALLENGE_OPENED: "打开片单",
     LEGACY_EVENT_RANKING_STARTED: "开始整理",
@@ -87,6 +90,36 @@ SHARED_FUNNEL_STEPS: List[Tuple[Union[str, Tuple[str, ...]], str]] = [
     (EVENT_RANKING_COMPLETED, "完成名单"),
     ((EVENT_SHARE_COPIED, EVENT_POSTER_DOWNLOADED), "复制分享/下载海报"),
 ]
+
+CURRENT_TOTAL_FUNNEL_STEPS: List[Tuple[Union[str, Tuple[str, ...]], str]] = [
+    (EVENT_HOME_CONTENT_RENDERED, "首页内容已渲染"),
+    ((EVENT_LIST_OPENED, EVENT_LIST_SELECTED), "打开/选择片单"),
+    (EVENT_SORTING_STARTED, "实际开始整理"),
+    (EVENT_RANKING_COMPLETED, "完成名单"),
+    ((EVENT_SHARE_COPIED, EVENT_POSTER_DOWNLOADED), "分享/下载海报"),
+]
+
+LIGHT_LIST_FUNNEL_STEPS: List[Tuple[Union[str, Tuple[str, ...]], str]] = [
+    (EVENT_LIST_OPENED, "打开轻量片单"),
+    (EVENT_SORTING_STARTED, "实际开始整理"),
+    (EVENT_RANKING_COMPLETED, "完成名单"),
+    ((EVENT_SHARE_COPIED, EVENT_POSTER_DOWNLOADED), "分享/下载海报"),
+]
+
+HEAVY_LIST_FUNNEL_STEPS: List[Tuple[Union[str, Tuple[str, ...]], str]] = [
+    (EVENT_LIST_SELECTED, "进入填参数/配置页"),
+    (EVENT_SORTING_STARTED, "实际开始整理"),
+    (EVENT_RANKING_COMPLETED, "完成名单"),
+    ((EVENT_SHARE_COPIED, EVENT_POSTER_DOWNLOADED), "分享/下载海报"),
+]
+
+HOME_ENGAGEMENT_EVENTS = (
+    EVENT_LIST_OPENED,
+    EVENT_LIST_SELECTED,
+    EVENT_SORTING_STARTED,
+)
+
+HEAVY_MODE_VALUES = {"豆瓣已看", "自备片单", "豆瓣高分"}
 
 
 def get_secret(name: str, default: str = "") -> str:
@@ -612,10 +645,224 @@ def build_admin_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def _event_session_id(event: Dict[str, Any]) -> str:
+    return str(event.get("session_id") or "").strip()
+
+
+def _is_legacy_compatible_event(event: Dict[str, Any]) -> bool:
+    return bool(_payload(event).get("legacy_event_name"))
+
+
+def _event_mode(event: Dict[str, Any]) -> str:
+    payload = _payload(event)
+    return _safe_text(event.get("mode")) or _safe_text(payload.get("mode"))
+
+
+def _event_route(event: Dict[str, Any]) -> str:
+    return _safe_text(_payload(event).get("route"))
+
+
+def _is_heavy_entry_event(event: Dict[str, Any]) -> bool:
+    return _event_matches(event, EVENT_LIST_SELECTED) and _event_mode(event) in HEAVY_MODE_VALUES
+
+
+def _is_light_entry_event(event: Dict[str, Any]) -> bool:
+    return _event_matches(event, EVENT_LIST_OPENED) and _event_route(event) == "list_open"
+
+
+def _is_home_entry_visit(event: Dict[str, Any]) -> bool:
+    if not _event_matches(event, EVENT_VISIT):
+        return False
+    payload = _payload(event)
+    if str(payload.get("route") or "") != "home":
+        return False
+    return not any(
+        bool(payload.get(key))
+        for key in ("has_list", "has_payload", "has_import")
+    )
+
+
+def _session_set(events: Iterable[Dict[str, Any]]) -> set:
+    return {session_id for event in events if (session_id := _event_session_id(event))}
+
+
+def build_home_load_metrics(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    events = normalize_events(events)
+    home_visit_events = [event for event in events if _is_home_entry_visit(event)]
+    rendered_events = [
+        event
+        for event in events
+        if _event_matches(event, EVENT_HOME_CONTENT_RENDERED)
+        and str(_payload(event).get("route") or "") == "home"
+    ]
+    engagement_events = [
+        event
+        for event in events
+        if canonical_event_name(event.get("event_name")) in HOME_ENGAGEMENT_EVENTS
+    ]
+
+    visit_sessions = _session_set(home_visit_events)
+    rendered_sessions = _session_set(rendered_events) & visit_sessions
+    engaged_sessions = _session_set(engagement_events)
+
+    pre_render_lost_sessions = visit_sessions - rendered_sessions - engaged_sessions
+    rendered_no_action_sessions = rendered_sessions - engaged_sessions
+    rendered_action_sessions = rendered_sessions & engaged_sessions
+
+    matched_rendered_events = [event for event in rendered_events if _event_session_id(event) in rendered_sessions]
+    render_times = _payload_numbers(matched_rendered_events, EVENT_HOME_CONTENT_RENDERED, "render_elapsed_ms", "home_render_elapsed_ms")
+
+    return {
+        "home_visit_sessions": len(visit_sessions),
+        "home_rendered_sessions": len(rendered_sessions),
+        "home_engaged_sessions": len(rendered_action_sessions),
+        "pre_render_lost_sessions": len(pre_render_lost_sessions),
+        "post_render_no_action_sessions": len(rendered_no_action_sessions),
+        "render_completion_rate": _rate(len(rendered_sessions), len(visit_sessions)),
+        "pre_render_loss_rate": _rate(len(pre_render_lost_sessions), len(visit_sessions)),
+        "post_render_no_action_rate": _rate(len(rendered_no_action_sessions), len(rendered_sessions)),
+        "post_render_action_rate": _rate(len(rendered_action_sessions), len(rendered_sessions)),
+        "avg_render_elapsed_ms": _avg(render_times),
+        "p75_render_elapsed_ms": _percentile(render_times, 0.75),
+        "p90_render_elapsed_ms": _percentile(render_times, 0.90),
+    }
+
+
+def build_home_load_insight(metrics: Dict[str, Any]) -> str:
+    visits = int(metrics.get("home_visit_sessions", 0))
+    if not visits:
+        return "当前筛选范围内没有普通首页访问，暂时无法判断首页加载流失。"
+
+    pre_render_rate = float(metrics.get("pre_render_loss_rate", 0.0))
+    post_render_rate = float(metrics.get("post_render_no_action_rate", 0.0))
+    render_rate = float(metrics.get("render_completion_rate", 0.0))
+    p90_ms = float(metrics.get("p90_render_elapsed_ms", 0.0))
+
+    if pre_render_rate > post_render_rate and pre_render_rate >= 0.1:
+        return (
+            f"当前更需要关注首页加载阶段：有 {_format_percent(pre_render_rate)} 的首页访问没有进入内容已渲染事件，"
+            f"首页渲染完成率为 {_format_percent(render_rate)}，P90 服务端渲染耗时约 {p90_ms:.0f}ms。"
+        )
+    if post_render_rate >= 0.1:
+        return (
+            f"当前主要流失更像发生在看到首页内容之后：{_format_percent(post_render_rate)} 的已渲染 session "
+            "没有继续打开/选择片单或开始整理，建议优先检查首屏价值表达、入口顺序和 CTA 成本。"
+        )
+    return (
+        f"当前首页加载诊断较健康：首页渲染完成率为 {_format_percent(render_rate)}，"
+        f"渲染后行动率为 {_format_percent(float(metrics.get('post_render_action_rate', 0.0)))}。"
+    )
+
+
 def _step_event_names(step: Union[str, Tuple[str, ...], List[str]]) -> Tuple[str, ...]:
     if isinstance(step, str):
         return (step,)
     return tuple(str(item) for item in step)
+
+
+def _event_in_step(event: Dict[str, Any], step: Union[str, Tuple[str, ...], List[str]]) -> bool:
+    event_names = _step_event_names(step)
+    return canonical_event_name(event.get("event_name")) in event_names
+
+
+def build_session_funnel_rows(
+    events: List[Dict[str, Any]],
+    steps: List[Tuple[Union[str, Tuple[str, ...]], str]],
+    *,
+    current_only: bool = True,
+    first_step_filter: Optional[Callable[[Dict[str, Any]], bool]] = None,
+) -> List[Dict[str, Any]]:
+    normalized = normalize_events(events)
+    if current_only:
+        normalized = [event for event in normalized if not _is_legacy_compatible_event(event)]
+
+    if not steps:
+        return []
+
+    first_spec = steps[0][0]
+    first_events = [
+        event
+        for event in normalized
+        if _event_in_step(event, first_spec)
+        and (first_step_filter(event) if first_step_filter else True)
+    ]
+    eligible_sessions = _session_set(first_events)
+    previous_sessions: Set[str] = set()
+    first_count = len(eligible_sessions)
+    rows: List[Dict[str, Any]] = []
+
+    for index, (event_spec, label) in enumerate(steps):
+        step_events = [
+            event
+            for event in normalized
+            if _event_in_step(event, event_spec)
+            and _event_session_id(event) in eligible_sessions
+            and (first_step_filter(event) if index == 0 and first_step_filter else True)
+        ]
+        step_sessions = _session_set(step_events)
+        if index > 0:
+            step_sessions = previous_sessions & step_sessions
+
+        count = len(step_sessions)
+        previous_count = first_count if index == 0 else len(previous_sessions)
+        dropoff = 0 if index == 0 else max(0, previous_count - count)
+        rows.append(
+            {
+                "step": label,
+                "event_name": " / ".join(_step_event_names(event_spec)),
+                "event_names": _step_event_names(event_spec),
+                "count": count,
+                "step_rate": 1.0 if index == 0 else _rate(count, previous_count),
+                "overall_rate": 1.0 if index == 0 else _rate(count, first_count),
+                "dropoff": dropoff,
+                "unit": "session",
+                "current_only": current_only,
+            }
+        )
+        previous_sessions = step_sessions
+    return rows
+
+
+def build_current_total_funnel_rows(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return build_session_funnel_rows(events, CURRENT_TOTAL_FUNNEL_STEPS, current_only=True)
+
+
+def build_light_list_funnel_rows(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return build_session_funnel_rows(
+        events,
+        LIGHT_LIST_FUNNEL_STEPS,
+        current_only=True,
+        first_step_filter=_is_light_entry_event,
+    )
+
+
+def build_heavy_list_funnel_rows(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return build_session_funnel_rows(
+        events,
+        HEAVY_LIST_FUNNEL_STEPS,
+        current_only=True,
+        first_step_filter=_is_heavy_entry_event,
+    )
+
+
+def build_funnel_instrumentation_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    normalized = normalize_events(events)
+    legacy_events = [event for event in normalized if _is_legacy_compatible_event(event)]
+    current_events = [event for event in normalized if not _is_legacy_compatible_event(event)]
+    current_sessions = _session_set(current_events)
+    legacy_sessions = _session_set(legacy_events)
+    heavy_entry_events = [event for event in current_events if _is_heavy_entry_event(event)]
+    light_entry_events = [event for event in current_events if _is_light_entry_event(event)]
+    return {
+        "total_events": len(normalized),
+        "current_events": len(current_events),
+        "legacy_events": len(legacy_events),
+        "current_sessions": len(current_sessions),
+        "legacy_sessions": len(legacy_sessions),
+        "home_rendered_sessions": len(_session_set(event for event in current_events if _event_matches(event, EVENT_HOME_CONTENT_RENDERED))),
+        "light_entry_sessions": len(_session_set(light_entry_events)),
+        "heavy_entry_sessions": len(_session_set(heavy_entry_events)),
+    }
 
 
 def build_funnel_rows(events: List[Dict[str, Any]], steps: List[Tuple[Union[str, Tuple[str, ...]], str]]) -> List[Dict[str, Any]]:
@@ -712,6 +959,7 @@ def build_daily_metrics(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 EVENT_RANKING_COMPLETED: completed,
                 EVENT_SHARE_COPIED: copied,
                 EVENT_POSTER_DOWNLOADED: posters,
+                EVENT_HOME_CONTENT_RENDERED: counts.get(EVENT_HOME_CONTENT_RENDERED, 0),
                 "start_rate": _rate(started, visits),
                 "completion_rate": _rate(completed, started),
                 "share_rate": _rate(copied, completed),

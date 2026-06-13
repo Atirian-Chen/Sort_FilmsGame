@@ -26,6 +26,7 @@ from analytics import (
     EVENT_LABELS,
     EVENT_CHALLENGE_OPENED,
     EVENT_COMPARISON_MADE,
+    EVENT_HOME_CONTENT_RENDERED,
     EVENT_LIST_SELECTED,
     EVENT_PAGE_VIEW,
     EVENT_POSTER_DOWNLOADED,
@@ -44,9 +45,15 @@ from analytics import (
     build_daily_metrics,
     build_event_table_rows,
     build_experiment_metrics,
+    build_current_total_funnel_rows,
     build_funnel_insight,
+    build_funnel_instrumentation_summary,
     build_funnel_rows,
     build_group_metrics,
+    build_heavy_list_funnel_rows,
+    build_home_load_insight,
+    build_home_load_metrics,
+    build_light_list_funnel_rows,
     build_list_metrics,
     build_numeric_payload_histogram,
     build_payload_value_counts,
@@ -3743,6 +3750,22 @@ def admin_funnel_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
     )
 
 
+def admin_session_funnel_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    frame = pd.DataFrame(rows)
+    return pd.DataFrame(
+        {
+            "步骤": frame["step"],
+            "埋点": frame["event_name"],
+            "session 数": frame["count"],
+            "单步转化率": frame["step_rate"].map(admin_percent),
+            "总体转化率": frame["overall_rate"].map(admin_percent),
+            "相邻流失 session": frame["dropoff"],
+        }
+    )
+
+
 def render_admin_funnel(title: str, rows: List[Dict[str, Any]], caption: str) -> None:
     st.markdown(f"**{title}**")
     if not rows:
@@ -3757,6 +3780,95 @@ def render_admin_funnel(title: str, rows: List[Dict[str, Any]], caption: str) ->
         render_admin_dataframe(admin_funnel_df(rows))
     st.info(build_funnel_insight(rows))
     st.caption(caption)
+
+
+def render_admin_session_funnel(title: str, rows: List[Dict[str, Any]], caption: str) -> None:
+    st.markdown(f"**{title}**")
+    if not rows or int(rows[0].get("count", 0)) == 0:
+        st.info("当前筛选范围内没有符合当前埋点口径的 session。")
+        st.caption(caption)
+        return
+    frame = pd.DataFrame(rows)
+    chart = frame[["step", "count"]].rename(columns={"step": "步骤", "count": "session 数"}).set_index("步骤")
+    chart_col, table_col = st.columns([1, 1.35])
+    with chart_col:
+        st.bar_chart(chart)
+    with table_col:
+        render_admin_dataframe(admin_session_funnel_df(rows))
+    st.info(build_funnel_insight(rows))
+    st.caption(caption)
+
+
+def render_admin_instrumentation_note(events: List[Dict[str, Any]]) -> None:
+    summary = build_funnel_instrumentation_summary(events)
+    cols = st.columns(4)
+    cards = [
+        ("当前埋点事件", admin_int(summary.get("current_events"))),
+        ("历史兼容事件", admin_int(summary.get("legacy_events"))),
+        ("首页已渲染 session", admin_int(summary.get("home_rendered_sessions"))),
+        ("重链路入口 session", admin_int(summary.get("heavy_entry_sessions"))),
+    ]
+    for col, (label, value) in zip(cols, cards):
+        with col:
+            st.metric(label, value)
+    st.caption(
+        "新版 session 漏斗只统计当前 canonical 埋点，并按上一步 session 逐步收敛；"
+        "历史兼容事件会继续用于趋势、最近事件和旧口径参考，但不会进入新版漏斗的上一级分母。"
+    )
+
+
+def render_admin_home_load_diagnostics(events: List[Dict[str, Any]]) -> None:
+    metrics = build_home_load_metrics(events)
+    visits = int(metrics.get("home_visit_sessions", 0))
+    st.markdown("**首页加载诊断**")
+    if not visits:
+        st.info("当前筛选范围内没有普通首页访问。带 list/challenge/payload 的深链访问不计入这个诊断。")
+        return
+
+    cards = [
+        ("首页访问 session", admin_int(visits)),
+        ("内容已渲染 session", admin_int(metrics.get("home_rendered_sessions"))),
+        ("加载中流失 session", admin_int(metrics.get("pre_render_lost_sessions"))),
+        ("渲染后未行动 session", admin_int(metrics.get("post_render_no_action_sessions"))),
+        ("渲染完成率", admin_percent(metrics.get("render_completion_rate"))),
+        ("渲染后行动率", admin_percent(metrics.get("post_render_action_rate"))),
+        ("平均渲染耗时", f"{float(metrics.get('avg_render_elapsed_ms', 0.0)):.0f} ms"),
+        ("P75 渲染耗时", f"{float(metrics.get('p75_render_elapsed_ms', 0.0)):.0f} ms"),
+        ("P90 渲染耗时", f"{float(metrics.get('p90_render_elapsed_ms', 0.0)):.0f} ms"),
+    ]
+    columns = st.columns(4)
+    for index, (label, value) in enumerate(cards):
+        with columns[index % 4]:
+            st.metric(label, value)
+
+    st.info(build_home_load_insight(metrics))
+    render_admin_dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "阶段": "visit：开始加载首页",
+                    "session 数": visits,
+                    "相对首页访问": admin_percent(1.0),
+                },
+                {
+                    "阶段": "home_content_rendered：首页核心内容已渲染",
+                    "session 数": int(metrics.get("home_rendered_sessions", 0)),
+                    "相对首页访问": admin_percent(metrics.get("render_completion_rate")),
+                },
+                {
+                    "阶段": "list_opened/list_selected/sorting_started：渲染后发生片单动作",
+                    "session 数": int(metrics.get("home_engaged_sessions", 0)),
+                    "相对首页访问": admin_percent(
+                        int(metrics.get("home_engaged_sessions", 0)) / visits if visits else 0.0
+                    ),
+                },
+            ]
+        )
+    )
+    st.caption(
+        "说明：这是匿名 session 级诊断。home_content_rendered 表示 Streamlit 服务端完成首页核心内容渲染；"
+        "它能帮助定位服务端渲染前流失，但不等同于浏览器真实 FCP/LCP。"
+    )
 
 
 def admin_group_df(rows: List[Dict[str, Any]], label_key: str, label_name: str, include_winners: bool = False) -> pd.DataFrame:
@@ -3834,6 +3946,7 @@ def render_admin_trends(events: List[Dict[str, Any]]) -> None:
         EVENT_RANKING_COMPLETED,
         EVENT_SHARE_LINK_COPIED,
         EVENT_POSTER_DOWNLOADED,
+        EVENT_HOME_CONTENT_RENDERED,
     ]
     event_chart = daily[[column for column in event_cols if column in daily.columns]].rename(columns=EVENT_LABELS)
     rate_chart = (daily[["start_rate", "completion_rate", "share_rate", "poster_rate"]] * 100).rename(
@@ -3995,22 +4108,41 @@ def render_admin_dashboard() -> None:
     render_admin_insights(build_admin_insights(events))
     safe_divider()
 
-    funnel_tab, trend_tab, list_tab, channel_tab, experiment_tab, behavior_tab, share_tab, event_tab = st.tabs(
-        ["漏斗分析", "每日趋势", "片单分析", "渠道归因", "实验分析", "行为质量", "分享素材", "最近事件"]
+    funnel_tab, load_tab, trend_tab, list_tab, channel_tab, experiment_tab, behavior_tab, share_tab, event_tab = st.tabs(
+        ["漏斗分析", "首页加载诊断", "每日趋势", "片单分析", "渠道归因", "实验分析", "行为质量", "分享素材", "最近事件"]
     )
 
     with funnel_tab:
-        render_admin_funnel(
-            "完整转化漏斗",
-            build_funnel_rows(events, MAIN_FUNNEL_STEPS),
-            "漏斗按事件总量计算，并兼容旧事件名；分享和下载海报作为完成后的传播动作合并展示。",
+        render_admin_instrumentation_note(events)
+        safe_divider()
+        render_admin_session_funnel(
+            "总漏斗（当前埋点，按 session）",
+            build_current_total_funnel_rows(events),
+            "从 home_content_rendered 起算，只统计能确认首页核心内容已渲染的当前埋点 session；旧埋点数据不进入这个漏斗分母。",
         )
         safe_divider()
+        two_col_a, two_col_b = st.columns(2)
+        with two_col_a:
+            render_admin_session_funnel(
+                "轻量片单漏斗",
+                build_light_list_funnel_rows(events),
+                "轻量片单指从 ?list / ?challenge / ?payload 直接打开并开始整理的片单，当前口径从 list_opened 起算。",
+            )
+        with two_col_b:
+            render_admin_session_funnel(
+                "重链路漏斗（豆瓣已看 / 自填 / 参数页）",
+                build_heavy_list_funnel_rows(events),
+                "重链路从 list_selected 起算；这里把它作为“进入填参数/配置页”的代理事件，再观察实际开始、完成和传播。",
+            )
+        safe_divider()
         render_admin_funnel(
-            "片单传播漏斗",
-            build_funnel_rows(events, SHARED_FUNNEL_STEPS),
-            "用于观察从片单链接进入后的打开、开始、完成和传播表现。",
+            "历史兼容事件数漏斗（旧口径参考）",
+            build_funnel_rows(events, MAIN_FUNNEL_STEPS),
+            "这是事件总量口径，用于兼容改埋点前的数据；不建议用它判断新版分步漏斗的精确流失。",
         )
+
+    with load_tab:
+        render_admin_home_load_diagnostics(events)
 
     with trend_tab:
         render_admin_trends(events)
@@ -5381,6 +5513,7 @@ def render_mode_selection_page() -> None:
         {"home_layout_order": "current"},
     )
     home_layout_order = str(layout_config.get("home_layout_order") or "current")
+    st.session_state["home_layout_order"] = home_layout_order
     render_step_header(
         1,
         "",
@@ -6343,6 +6476,7 @@ def main() -> None:
         page_icon="🎬",
         layout="wide",
     )
+    home_render_started_at = datetime.now()
     render_app_styles()
 
     if get_query_param("admin"):
@@ -6362,6 +6496,7 @@ def main() -> None:
             route="home",
             has_list=bool(get_query_param("list") or get_query_param("challenge")),
             has_payload=bool(get_query_param("payload")),
+            has_import=bool(get_query_param("import")),
             session_hint=get_session_id()[-8:],
         ),
     )
@@ -6383,6 +6518,18 @@ def main() -> None:
 
     if step == 1:
         render_mode_selection_page()
+        track_once(
+            f"home_content_rendered_{get_source_channel()}",
+            EVENT_HOME_CONTENT_RENDERED,
+            mode=get_selected_mode(),
+            source_channel=get_source_channel(),
+            payload=build_event_payload(
+                route="home",
+                mode=get_selected_mode(),
+                render_elapsed_ms=int(max(0, (datetime.now() - home_render_started_at).total_seconds() * 1000)),
+                home_layout_order=st.session_state.get("home_layout_order", "current"),
+            ),
+        )
     elif step == 2:
         render_parameter_page()
     elif step == 4:

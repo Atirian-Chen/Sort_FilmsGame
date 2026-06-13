@@ -31,6 +31,7 @@ Sort_FilmsGame 是一个影视偏好排序 Web App。它把“手动给几十部
 - `share_copied`
 - `result_viewed`
 - `qr_viewed`
+- `home_content_rendered`
 
 历史事件名会自动映射到新口径，因此旧数据仍然可以在后台看板中继续使用。事件 payload 会记录必要的产品上下文，例如页面路径、片单 ID、模式、渠道 / UTM 参数、片单规模、取舍次数、设备类型、实验 ID 和版本 ID。
 
@@ -45,7 +46,9 @@ Sort_FilmsGame 是一个影视偏好排序 Web App。它把“手动给几十部
 后台数据看板 v2 包含：
 
 - 总览指标：访问数、独立 session、开始整理、完成名单、复制分享、下载海报、开始率、完成率、复制/完成、海报/完成、平均取舍次数、平均整理规模。
-- 漏斗分析：`visit -> list_opened/list_selected -> sorting_started -> ranking_completed -> share_copied/poster_downloaded`。
+- 漏斗分析：同时展示当前埋点 session 总漏斗、轻量片单漏斗、重链路漏斗，以及历史兼容事件数漏斗。
+- 重链路漏斗：`list_selected -> sorting_started -> ranking_completed -> share_copied/poster_downloaded`，用于判断豆瓣已看 / 自备片单用户是否卡在填参数到实际开始之间。
+- 首页加载诊断：通过 `visit -> home_content_rendered -> list_opened/list_selected/sorting_started` 判断流失更可能发生在加载中还是渲染后。
 - 自动识别最大流失环节，并生成产品洞察文案。
 - 按 `list_id / template_id / mode` 查看片单维度表现。
 - 按 `source / utm_source / utm_medium / utm_campaign` 查看渠道归因。
@@ -162,7 +165,7 @@ python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py chal
 ### 5. 数据与隐私
 
 - 只使用随机 session id，不要求登录。
-- 匿名事件包括：`visit`、`list_opened`、`list_selected`、`sorting_started`、`comparison_made`、`ranking_completed`、`poster_downloaded`、`share_copied`、`result_viewed`、`qr_viewed`；历史事件名会在后台分析时自动兼容映射。
+- 匿名事件包括：`visit`、`list_opened`、`list_selected`、`sorting_started`、`comparison_made`、`ranking_completed`、`poster_downloaded`、`share_copied`、`result_viewed`、`qr_viewed`、`home_content_rendered`；历史事件名会在后台分析时自动兼容映射。
 - 默认不记录姓名、IP、联系方式。
 - 事件 payload 会过滤完整候选项、完整排名、自定义完整榜单等敏感字段。
 - 自定义片单只有在用户主动生成片单链接时才会保存。

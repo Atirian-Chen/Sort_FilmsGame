@@ -18,6 +18,7 @@
 - `share_copied`
 - `result_viewed`
 - `qr_viewed`
+- `home_content_rendered`
 
 ## 历史事件兼容
 
@@ -56,6 +57,7 @@ v2 新增的上下文字段写入经过过滤的 `payload`：
 - `utm_campaign`
 - `list_size`
 - `comparison_count`
+- `render_elapsed_ms`
 - `device_type`
 - `experiment_id`
 - `variant_id`
@@ -77,6 +79,52 @@ payload 会屏蔽完整候选项、完整排名、用户名、手机号、邮箱
 - 相邻步骤流失数
 - 最大流失步骤
 - 自动洞察文案
+
+## 新版分层漏斗
+
+后台 “漏斗分析” tab 同时展示新版 session 漏斗和历史兼容事件数漏斗。
+
+新版 session 漏斗采用逐步收敛口径：只有进入上一步的匿名 session，才会进入下一步分母。这样可以避免改埋点前的旧数据因为缺少上游事件，错误拉低新版漏斗转化率。
+
+### 总漏斗（当前埋点）
+
+`home_content_rendered -> list_opened/list_selected -> sorting_started -> ranking_completed -> share_copied/poster_downloaded`
+
+这个漏斗从 `home_content_rendered` 起算，只统计确认看到首页核心内容的当前埋点 session。改埋点前没有 `home_content_rendered` 的历史访问不会进入这个漏斗分母。
+
+### 轻量片单漏斗
+
+`list_opened -> sorting_started -> ranking_completed -> share_copied/poster_downloaded`
+
+轻量片单指从内置片单或分享片单链接直接打开后进入整理的链路，例如 `?list=`、`?challenge=`、`?payload=`。当前口径只统计 canonical `list_opened`，不会把旧的 `challenge_opened` 历史兼容事件混进新版分母。
+
+### 重链路漏斗
+
+`list_selected -> sorting_started -> ranking_completed -> share_copied/poster_downloaded`
+
+重链路指需要进入参数页再开始整理的链路，例如豆瓣已看、自备片单，以及通过参数页配置的豆瓣高分。当前没有单独的 `parameter_page_viewed` 事件，因此 `list_selected` 作为“进入填参数 / 配置页”的代理信号；`sorting_started` 表示用户真正完成配置并进入排序。
+
+### 历史兼容事件数漏斗
+
+历史兼容漏斗仍然保留，用于查看旧数据趋势和整体事件量。但它是事件次数口径，会兼容 `page_view`、`challenge_opened`、`ranking_started`、`share_link_copied` 等历史事件，不建议用来判断新版分步漏斗的精确流失。
+
+## 首页加载诊断
+
+为了判断首页流失更可能发生在加载中还是看到内容之后，v2 增加诊断事件：
+
+- `visit`：普通首页访问开始。
+- `home_content_rendered`：Streamlit 服务端完成首页核心内容渲染。
+- `list_opened/list_selected/sorting_started`：用户在首页渲染后发生片单动作。
+
+后台 “首页加载诊断” tab 会按匿名 session 统计：
+
+- 首页访问 session
+- 内容已渲染 session
+- 加载中流失 session：有 `visit`，但没有 `home_content_rendered`，也没有片单动作。
+- 渲染后未行动 session：有 `home_content_rendered`，但没有继续打开/选择片单或开始整理。
+- 平均、P75、P90 服务端渲染耗时。
+
+说明：`home_content_rendered` 是服务端渲染完成信号，不等同于浏览器真实 FCP/LCP。如果后续需要更精确的前端性能监控，需要增加客户端 beacon 或前端性能 SDK。
 
 ## 渠道归因
 

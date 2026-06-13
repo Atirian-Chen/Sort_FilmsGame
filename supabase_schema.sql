@@ -80,7 +80,8 @@ with check (
     'comparison_made',
     'share_copied',
     'result_viewed',
-    'qr_viewed'
+    'qr_viewed',
+    'home_content_rendered'
   )
 );
 
