@@ -62,6 +62,7 @@ from analytics import (
     get_admin_token,
     get_public_app_url,
     get_session_id,
+    supabase_request,
     track_event,
     track_once,
 )
@@ -468,6 +469,13 @@ def render_boot_loading_notice() -> None:
           第一次打开可能需要几秒
         </div>
         """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_home_collab_badge() -> None:
+    st.markdown(
+        '<div class="home-collab-badge">合作：13823698639@163.com</div>',
         unsafe_allow_html=True,
     )
 
@@ -1279,6 +1287,73 @@ def render_app_styles() -> None:
             color: #4b352d;
             margin: 8px 0 12px;
         }
+        .home-collab-badge {
+            position: fixed;
+            top: 58px;
+            right: 18px;
+            z-index: 60;
+            padding: 4px 8px;
+            border: 1px solid rgba(31, 35, 40, 0.10);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.62);
+            color: rgba(31, 35, 40, 0.62);
+            font-size: 12px;
+            line-height: 1.2;
+            font-weight: 650;
+            pointer-events: none;
+            backdrop-filter: blur(6px);
+        }
+        .peer-match-panel {
+            border: 1px solid #dbe7e3;
+            border-radius: 8px;
+            background: #f7fbf9;
+            padding: 14px;
+            margin: 12px 0;
+        }
+        .peer-match-title {
+            color: #1f3f3b;
+            font-size: 16px;
+            font-weight: 850;
+            margin-bottom: 5px;
+        }
+        .peer-match-copy {
+            color: #586760;
+            font-size: 13px;
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+        .peer-card-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .peer-card {
+            border: 1px solid #dbe7e3;
+            border-radius: 8px;
+            background: #fff;
+            padding: 12px;
+            min-width: 0;
+        }
+        .peer-card-label {
+            color: #6b7a73;
+            font-size: 12px;
+            font-weight: 750;
+            margin-bottom: 5px;
+        }
+        .peer-contact {
+            color: #1f2328;
+            font-size: 15px;
+            font-weight: 850;
+            overflow-wrap: anywhere;
+            margin-bottom: 7px;
+        }
+        .peer-shared {
+            color: #56625d;
+            font-size: 13px;
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+        }
         .result-peak {
             border: 1px solid #d8d1c6;
             border-radius: 8px;
@@ -1532,6 +1607,15 @@ def render_app_styles() -> None:
                 min-width: 0;
             }
             .challenge-grid {
+                grid-template-columns: 1fr;
+            }
+            .home-collab-badge {
+                top: 50px;
+                right: 10px;
+                font-size: 11px;
+                max-width: calc(100vw - 20px);
+            }
+            .peer-card-grid {
                 grid-template-columns: 1fr;
             }
             .hero-proof {
@@ -3182,6 +3266,239 @@ def render_friend_compare(my_ranked: List[str]) -> None:
             st.caption(f"相差最大：{item}，你放在第 {mine} 位，对方放在第 {friend} 位，相差 {gap} 位。")
 
 
+def clean_contact_value(raw_value: str) -> str:
+    text = re.sub(r"\s+", " ", str(raw_value or "")).strip()
+    for prefix in ("微信号：", "微信：", "微信号:", "微信:", "wechat:", "WeChat:", "WECHAT:"):
+        if text.startswith(prefix):
+            text = text[len(prefix):].strip()
+    if len(text) > 80:
+        text = text[:80]
+    return text
+
+
+def peer_list_key(mode: str, challenge_id: str, template_id: str) -> str:
+    return template_id or challenge_id or mode or "unknown"
+
+
+def peer_match_kind(mode: str, ranked: List[str], challenge_id: str, template_id: str, total: int) -> str:
+    has_shared_list = bool(challenge_id or template_id)
+    if mode == MODE_CUSTOM and has_shared_list and total <= 80:
+        return "light"
+    if len(ranked) < 10 and has_shared_list:
+        return "light"
+    return "heavy"
+
+
+def peer_top_items(ranked: List[str], limit: int = 20) -> List[str]:
+    return [str(item).strip() for item in ranked[:limit] if str(item).strip()]
+
+
+def save_peer_contact(
+    *,
+    contact: str,
+    ranked: List[str],
+    mode: str,
+    challenge_id: str,
+    template_id: str,
+    total: int,
+) -> bool:
+    if not analytics_enabled() or not ranked:
+        return False
+    clean_contact = clean_contact_value(contact)
+    if len(clean_contact) < 2:
+        return False
+    top_items = peer_top_items(ranked, 20)
+    body = {
+        "session_id": get_session_id(),
+        "contact": clean_contact,
+        "list_kind": peer_match_kind(mode, ranked, challenge_id, template_id, total),
+        "list_key": peer_list_key(mode, challenge_id, template_id),
+        "challenge_id": challenge_id or None,
+        "template_id": template_id or None,
+        "mode": mode,
+        "champion": top_items[0],
+        "top_items": top_items,
+        "ranked_count": len(ranked),
+        "allow_display": True,
+    }
+    result = supabase_request(
+        "POST",
+        "peer_match_contacts",
+        json_body=body,
+        prefer="return=representation",
+    )
+    return isinstance(result, list) and bool(result)
+
+
+def fetch_peer_contact_candidates(kind: str, champion: str, list_key: str) -> List[Dict[str, Any]]:
+    if not analytics_enabled():
+        return []
+    params = {
+        "select": "id,created_at,session_id,contact,list_kind,list_key,champion,top_items,ranked_count",
+        "allow_display": "eq.true",
+        "order": "created_at.desc",
+        "limit": "200",
+    }
+    if kind == "light":
+        params["list_kind"] = "eq.light"
+        params["champion"] = f"eq.{champion}"
+        if list_key:
+            params["list_key"] = f"eq.{list_key}"
+        params["limit"] = "30"
+    else:
+        params["list_kind"] = "eq.heavy"
+    result = supabase_request("GET", "peer_match_contacts", params=params)
+    return result if isinstance(result, list) else []
+
+
+def peer_contact_matches(
+    *,
+    ranked: List[str],
+    mode: str,
+    challenge_id: str,
+    template_id: str,
+    total: int,
+) -> Tuple[str, List[Dict[str, Any]]]:
+    if not ranked:
+        return "light", []
+    kind = peer_match_kind(mode, ranked, challenge_id, template_id, total)
+    list_key = peer_list_key(mode, challenge_id, template_id)
+    candidates = fetch_peer_contact_candidates(kind, ranked[0], list_key)
+    current_session = get_session_id()
+    seen_contacts = set()
+    matches: List[Dict[str, Any]] = []
+
+    for row in candidates:
+        contact = clean_contact_value(str(row.get("contact") or ""))
+        if not contact or contact in seen_contacts:
+            continue
+        if str(row.get("session_id") or "") == current_session:
+            continue
+        candidate_items = row.get("top_items") if isinstance(row.get("top_items"), list) else []
+        clean_items = [str(item).strip() for item in candidate_items if str(item).strip()]
+        if kind == "light":
+            if str(row.get("champion") or "") != ranked[0]:
+                continue
+            shared = [ranked[0]]
+            score = 1.0
+        else:
+            my_top10 = peer_top_items(ranked, 10)
+            other_top10 = clean_items[:10]
+            shared = [item for item in my_top10 if item in set(other_top10)]
+            if len(shared) < 3:
+                continue
+            score = len(shared) / max(1, len(my_top10))
+        seen_contacts.add(contact)
+        item = dict(row)
+        item["contact"] = contact
+        item["shared_items"] = shared
+        item["match_score"] = score
+        matches.append(item)
+
+    matches.sort(key=lambda item: (float(item.get("match_score", 0.0)), len(item.get("shared_items", [])), str(item.get("created_at", ""))), reverse=True)
+    return kind, matches[:5]
+
+
+def render_peer_cards(kind: str, ranked: List[str], matches: List[Dict[str, Any]]) -> None:
+    if not ranked:
+        return
+    if not matches:
+        if kind == "light":
+            st.caption("暂时还没有找到第一名相同且愿意公开联系方式的同好。")
+        else:
+            st.caption("暂时还没有找到前十重合度达到 30% 且愿意公开联系方式的同好。")
+        return
+
+    cards = []
+    champion = html.escape(ranked[0])
+    for index, match in enumerate(matches, 1):
+        contact = html.escape(str(match.get("contact") or ""))
+        shared_items = [html.escape(str(item)) for item in match.get("shared_items", [])[:5]]
+        if kind == "light":
+            label = "第一名相同"
+            copy = f"TA与你的第一名相同，你们都很喜欢 {champion}"
+        else:
+            overlap = len(match.get("shared_items", []))
+            score = float(match.get("match_score", 0.0))
+            label = f"前十重合 {overlap}/10"
+            copy = "你们都很喜欢 " + "、".join(shared_items)
+            if score:
+                copy += f" · 重合度 {score:.0%}"
+        cards.append(
+            f"""
+            <div class="peer-card">
+              <div class="peer-card-label">{index}. {html.escape(label)}</div>
+              <div class="peer-contact">{contact}</div>
+              <div class="peer-shared">{copy}</div>
+            </div>
+            """
+        )
+    st.markdown(f'<div class="peer-card-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
+
+
+def render_peer_contact_section(
+    *,
+    ranked: List[str],
+    mode: str,
+    challenge_id: str,
+    template_id: str,
+    total: int,
+) -> None:
+    if not ranked:
+        return
+
+    kind, matches = peer_contact_matches(
+        ranked=ranked,
+        mode=mode,
+        challenge_id=challenge_id,
+        template_id=template_id,
+        total=total,
+    )
+    title = "TA与你的第一名相同" if kind == "light" else "TA与你的前十重合度"
+    copy = (
+        "想认识喜欢一样电影的同好，可以自愿留下微信号；提交后，符合匹配条件的用户可能在结果页看到你的联系方式。"
+    )
+    st.markdown(
+        f"""
+        <div class="peer-match-panel">
+          <div class="peer-match-title">{html.escape(title)}</div>
+          <div class="peer-match-copy">{html.escape(copy)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    render_peer_cards(kind, ranked, matches)
+
+    with st.expander("自愿留下微信号", expanded=False):
+        st.caption("只在你主动提交后保存；会展示给与你结果相似的用户。请不要填写不想公开的信息。")
+        contact = st.text_input("微信号", key=k("peer_contact_input"), max_chars=80)
+        consent = st.checkbox(
+            "我同意把这个微信号展示给与我榜单相似的用户",
+            key=k("peer_contact_consent"),
+        )
+        if render_button_compat("提交联系方式", key="btn_submit_peer_contact", use_container_width=True):
+            clean_contact = clean_contact_value(contact)
+            signature = f"{clean_contact}|{peer_list_key(mode, challenge_id, template_id)}|{ranked[0]}"
+            if not consent:
+                st.warning("需要先确认同意展示联系方式。")
+            elif len(clean_contact) < 2:
+                st.warning("请填写有效的微信号。")
+            elif st.session_state.get(k("peer_contact_saved_signature")) == signature:
+                st.success("这个联系方式已经提交过了。")
+            elif save_peer_contact(
+                contact=clean_contact,
+                ranked=ranked,
+                mode=mode,
+                challenge_id=challenge_id,
+                template_id=template_id,
+                total=total,
+            ):
+                st.session_state[k("peer_contact_saved_signature")] = signature
+                st.success("已提交。之后相似榜单的用户可能会看到你的联系方式。")
+            else:
+                st.error("暂时没有保存成功。请确认 Supabase 已更新表结构，或稍后再试。")
+
+
 def current_challenge_for_share() -> Challenge:
     return Challenge(
         id=st.session_state.get(k("challenge_id"), ""),
@@ -3923,6 +4240,8 @@ def render_admin_instrumentation_note(events: List[Dict[str, Any]]) -> None:
 def render_admin_home_load_diagnostics(events: List[Dict[str, Any]]) -> None:
     metrics = build_home_load_metrics(events)
     visits = int(metrics.get("home_visit_sessions", 0))
+    home_load_available = int(metrics.get("home_render_event_count", 0) or 0) > 0
+    render_time_available = int(metrics.get("home_render_time_count", 0) or 0) > 0
     st.markdown("**首页加载诊断**")
     if not visits:
         st.info("当前筛选范围内没有普通首页访问。带 list/challenge/payload 的深链访问不计入这个诊断。")
@@ -3930,14 +4249,14 @@ def render_admin_home_load_diagnostics(events: List[Dict[str, Any]]) -> None:
 
     cards = [
         ("首页访问 session", admin_int(visits)),
-        ("内容已渲染 session", admin_int(metrics.get("home_rendered_sessions"))),
-        ("加载中流失 session", admin_int(metrics.get("pre_render_lost_sessions"))),
-        ("渲染后未行动 session", admin_int(metrics.get("post_render_no_action_sessions"))),
-        ("渲染完成率", admin_percent(metrics.get("render_completion_rate"))),
-        ("渲染后行动率", admin_percent(metrics.get("post_render_action_rate"))),
-        ("平均渲染耗时", f"{float(metrics.get('avg_render_elapsed_ms', 0.0)):.0f} ms"),
-        ("P75 渲染耗时", f"{float(metrics.get('p75_render_elapsed_ms', 0.0)):.0f} ms"),
-        ("P90 渲染耗时", f"{float(metrics.get('p90_render_elapsed_ms', 0.0)):.0f} ms"),
+        ("内容已渲染 session", admin_int(metrics.get("home_rendered_sessions")) if home_load_available else VERSION_NO_DATA),
+        ("加载中流失 session", admin_int(metrics.get("pre_render_lost_sessions")) if home_load_available else VERSION_NO_DATA),
+        ("渲染后未行动 session", admin_int(metrics.get("post_render_no_action_sessions")) if home_load_available else VERSION_NO_DATA),
+        ("渲染完成率", admin_percent(metrics.get("render_completion_rate")) if home_load_available else VERSION_NO_DATA),
+        ("渲染后行动率", admin_percent(metrics.get("post_render_action_rate")) if home_load_available and int(metrics.get("home_rendered_sessions", 0) or 0) > 0 else VERSION_NO_DATA),
+        ("平均渲染耗时", f"{float(metrics.get('avg_render_elapsed_ms', 0.0)):.0f} ms" if render_time_available else VERSION_NO_DATA),
+        ("P75 渲染耗时", f"{float(metrics.get('p75_render_elapsed_ms', 0.0)):.0f} ms" if render_time_available else VERSION_NO_DATA),
+        ("P90 渲染耗时", f"{float(metrics.get('p90_render_elapsed_ms', 0.0)):.0f} ms" if render_time_available else VERSION_NO_DATA),
     ]
     columns = st.columns(4)
     for index, (label, value) in enumerate(cards):
@@ -3955,14 +4274,16 @@ def render_admin_home_load_diagnostics(events: List[Dict[str, Any]]) -> None:
                 },
                 {
                     "阶段": "home_content_rendered：首页核心内容已渲染",
-                    "session 数": int(metrics.get("home_rendered_sessions", 0)),
-                    "相对首页访问": admin_percent(metrics.get("render_completion_rate")),
+                    "session 数": int(metrics.get("home_rendered_sessions", 0)) if home_load_available else VERSION_NO_DATA,
+                    "相对首页访问": admin_percent(metrics.get("render_completion_rate")) if home_load_available else VERSION_NO_DATA,
                 },
                 {
                     "阶段": "list_opened/list_selected/sorting_started：渲染后发生片单动作",
-                    "session 数": int(metrics.get("home_engaged_sessions", 0)),
-                    "相对首页访问": admin_percent(
-                        int(metrics.get("home_engaged_sessions", 0)) / visits if visits else 0.0
+                    "session 数": int(metrics.get("home_engaged_sessions", 0)) if home_load_available else VERSION_NO_DATA,
+                    "相对首页访问": (
+                        admin_percent(int(metrics.get("home_engaged_sessions", 0)) / visits)
+                        if home_load_available and visits
+                        else VERSION_NO_DATA
                     ),
                 },
             ]
@@ -3978,18 +4299,73 @@ def version_sort_value(row: Dict[str, Any]) -> str:
     return str(row.get("released_at") or row.get("first_event_at") or "")
 
 
+VERSION_NO_DATA = "---"
+
+
+def version_has_home_load_data(row: Dict[str, Any]) -> bool:
+    return bool(row.get("home_load_diagnostic_available"))
+
+
+def version_percent_or_dash(row: Dict[str, Any], key: str, denominator_key: str, *, require_home_load: bool = False) -> str:
+    if require_home_load and not version_has_home_load_data(row):
+        return VERSION_NO_DATA
+    try:
+        if int(row.get(denominator_key, 0)) <= 0:
+            return VERSION_NO_DATA
+        if row.get(key) is None:
+            return VERSION_NO_DATA
+        return admin_percent(row.get(key))
+    except (TypeError, ValueError):
+        return VERSION_NO_DATA
+
+
+def version_count_or_dash(row: Dict[str, Any], key: str, *, require_home_load: bool = False) -> str:
+    if require_home_load and not version_has_home_load_data(row):
+        return VERSION_NO_DATA
+    try:
+        return admin_int(row.get(key))
+    except (TypeError, ValueError):
+        return VERSION_NO_DATA
+
+
+def version_ms_or_dash(row: Dict[str, Any], key: str, *, require_render_time: bool = False) -> str:
+    if require_render_time and int(row.get("home_render_time_count", 0) or 0) <= 0:
+        return VERSION_NO_DATA
+    try:
+        if row.get(key) is None:
+            return VERSION_NO_DATA
+        return f"{float(row.get(key, 0.0)):.0f} ms"
+    except (TypeError, ValueError):
+        return VERSION_NO_DATA
+
+
+def version_rate_value_or_none(row: Dict[str, Any], key: str, denominator_key: str, *, require_home_load: bool = False) -> Optional[float]:
+    if require_home_load and not version_has_home_load_data(row):
+        return None
+    try:
+        if int(row.get(denominator_key, 0)) <= 0:
+            return None
+        return float(row.get(key, 0.0))
+    except (TypeError, ValueError):
+        return None
+
+
 def admin_delta_pp(current: Any, previous: Any) -> str:
+    if current is None or previous is None:
+        return VERSION_NO_DATA
     try:
         return f"{(float(current) - float(previous)) * 100:+.1f} pp"
     except (TypeError, ValueError):
-        return ""
+        return VERSION_NO_DATA
 
 
 def admin_delta_ms(current: Any, previous: Any) -> str:
+    if current is None or previous is None:
+        return VERSION_NO_DATA
     try:
         return f"{float(current) - float(previous):+.0f} ms"
     except (TypeError, ValueError):
-        return ""
+        return VERSION_NO_DATA
 
 
 def build_version_overview_display(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -4003,15 +4379,15 @@ def build_version_overview_display(rows: List[Dict[str, Any]]) -> List[Dict[str,
                 "事件数": int(row.get("events", 0)),
                 "session": int(row.get("sessions", 0)),
                 "首页访问": int(row.get("visit_sessions", 0)),
-                "加载中流失": int(row.get("pre_render_lost_sessions", 0)),
-                "首页渲染完成率": admin_percent(row.get("home_render_rate")),
-                "加载中流失率": admin_percent(row.get("pre_render_loss_rate")),
-                "渲染后行动率": admin_percent(row.get("post_render_action_rate")),
-                "打开/选择率": admin_percent(row.get("open_or_select_rate")),
-                "开始率": admin_percent(row.get("start_rate")),
-                "完成率": admin_percent(row.get("completion_rate")),
-                "分享率": admin_percent(row.get("share_rate")),
-                "P90 渲染耗时": f"{float(row.get('p90_render_elapsed_ms', 0.0)):.0f} ms",
+                "加载中流失": version_count_or_dash(row, "pre_render_lost_sessions", require_home_load=True),
+                "首页渲染完成率": version_percent_or_dash(row, "home_render_rate", "visit_sessions", require_home_load=True),
+                "加载中流失率": version_percent_or_dash(row, "pre_render_loss_rate", "visit_sessions", require_home_load=True),
+                "渲染后行动率": version_percent_or_dash(row, "post_render_action_rate", "home_rendered_sessions", require_home_load=True),
+                "打开/选择率": version_percent_or_dash(row, "open_or_select_rate", "visit_sessions"),
+                "开始率": version_percent_or_dash(row, "start_rate", "visit_sessions"),
+                "完成率": version_percent_or_dash(row, "completion_rate", "started_sessions"),
+                "分享率": version_percent_or_dash(row, "share_rate", "completed_sessions"),
+                "P90 渲染耗时": version_ms_or_dash(row, "p90_render_elapsed_ms", require_render_time=True),
                 "commit": row.get("commit", ""),
             }
         )
@@ -4027,19 +4403,68 @@ def build_version_comparison_display(rows: List[Dict[str, Any]]) -> List[Dict[st
                 "版本对比": f"{previous.get('app_version', '')} -> {current.get('app_version', '')}",
                 "当前版本": current.get("release_label", current.get("app_version", "")),
                 "上一版本": previous.get("release_label", previous.get("app_version", "")),
-                "首页渲染完成率变化": admin_delta_pp(current.get("home_render_rate"), previous.get("home_render_rate")),
-                "加载中流失率变化": admin_delta_pp(current.get("pre_render_loss_rate"), previous.get("pre_render_loss_rate")),
-                "渲染后行动率变化": admin_delta_pp(current.get("post_render_action_rate"), previous.get("post_render_action_rate")),
-                "开始率变化": admin_delta_pp(current.get("start_rate"), previous.get("start_rate")),
-                "完成率变化": admin_delta_pp(current.get("completion_rate"), previous.get("completion_rate")),
-                "分享率变化": admin_delta_pp(current.get("share_rate"), previous.get("share_rate")),
-                "P90 渲染耗时变化": admin_delta_ms(current.get("p90_render_elapsed_ms"), previous.get("p90_render_elapsed_ms")),
+                "首页渲染完成率变化": admin_delta_pp(
+                    version_rate_value_or_none(current, "home_render_rate", "visit_sessions", require_home_load=True),
+                    version_rate_value_or_none(previous, "home_render_rate", "visit_sessions", require_home_load=True),
+                ),
+                "加载中流失率变化": admin_delta_pp(
+                    version_rate_value_or_none(current, "pre_render_loss_rate", "visit_sessions", require_home_load=True),
+                    version_rate_value_or_none(previous, "pre_render_loss_rate", "visit_sessions", require_home_load=True),
+                ),
+                "渲染后行动率变化": admin_delta_pp(
+                    version_rate_value_or_none(current, "post_render_action_rate", "home_rendered_sessions", require_home_load=True),
+                    version_rate_value_or_none(previous, "post_render_action_rate", "home_rendered_sessions", require_home_load=True),
+                ),
+                "开始率变化": admin_delta_pp(
+                    version_rate_value_or_none(current, "start_rate", "visit_sessions"),
+                    version_rate_value_or_none(previous, "start_rate", "visit_sessions"),
+                ),
+                "完成率变化": admin_delta_pp(
+                    version_rate_value_or_none(current, "completion_rate", "started_sessions"),
+                    version_rate_value_or_none(previous, "completion_rate", "started_sessions"),
+                ),
+                "分享率变化": admin_delta_pp(
+                    version_rate_value_or_none(current, "share_rate", "completed_sessions"),
+                    version_rate_value_or_none(previous, "share_rate", "completed_sessions"),
+                ),
+                "P90 渲染耗时变化": admin_delta_ms(
+                    current.get("p90_render_elapsed_ms") if int(current.get("home_render_time_count", 0) or 0) > 0 else None,
+                    previous.get("p90_render_elapsed_ms") if int(previous.get("home_render_time_count", 0) or 0) > 0 else None,
+                ),
                 "当前首页访问": int(current.get("visit_sessions", 0)),
                 "当前开始": int(current.get("started_sessions", 0)),
                 "当前完成": int(current.get("completed_sessions", 0)),
             }
         )
     return list(reversed(display_rows))
+
+
+def render_version_metric_definitions() -> None:
+    with st.expander("每列怎么计算", expanded=False):
+        st.markdown(
+            """
+| 列 | 计算方式 |
+| --- | --- |
+| 事件窗口 | 当前筛选范围内，归因到该版本的第一条事件时间 ~ 最后一条事件时间 |
+| 事件数 | 归因到该版本的匿名事件条数 |
+| session | 归因到该版本的去重匿名 session 数 |
+| 首页访问 | `visit` 且 `payload.route = home`，并且不是 `?list / ?challenge / ?payload / ?import` 深链入口的去重 session 数 |
+| 加载中流失 | 仅在该版本有 `home_content_rendered` 埋点时计算：`首页访问 session - 首页已渲染 session - 已发生片单动作 session` |
+| 首页渲染完成率 | 仅在该版本有 `home_content_rendered` 埋点时计算：`首页已渲染 session / 首页访问 session` |
+| 加载中流失率 | 仅在该版本有 `home_content_rendered` 埋点时计算：`加载中流失 session / 首页访问 session` |
+| 渲染后行动率 | 仅在该版本有 `home_content_rendered` 埋点时计算：`渲染后发生片单动作 session / 首页已渲染 session` |
+| 打开/选择率 | `打开或选择片单 session / 首页访问 session` |
+| 开始率 | `开始整理 session / 首页访问 session` |
+| 完成率 | `完成名单 session / 开始整理 session` |
+| 分享率 | `复制链接或下载海报 session / 完成名单 session` |
+| P90 渲染耗时 | `home_content_rendered.payload.render_elapsed_ms` 的 P90 |
+| commit | `release_history.py` 里记录的版本起始 commit |
+            """.strip()
+        )
+        st.caption(
+            "显示 --- 表示当前筛选范围内没有对应埋点或没有分母，不能解释为 0。"
+            "例如老版本没有 home_content_rendered 埋点时，首页渲染完成率、加载中流失率和 P90 渲染耗时都会显示 ---。"
+        )
 
 
 def render_admin_version_metrics(events: List[Dict[str, Any]]) -> None:
@@ -4054,7 +4479,7 @@ def render_admin_version_metrics(events: List[Dict[str, Any]]) -> None:
         ("版本数", admin_int(len(rows))),
         ("最新版本", str(latest.get("release_label") or latest.get("app_version") or "")),
         ("最新版本首页访问", admin_int(latest.get("visit_sessions"))),
-        ("最新版本开始率", admin_percent(latest.get("start_rate"))),
+        ("最新版本开始率", version_percent_or_dash(latest, "start_rate", "visit_sessions")),
     ]
     columns = st.columns(len(cards))
     for column, (label, value) in zip(columns, cards):
@@ -4062,17 +4487,18 @@ def render_admin_version_metrics(events: List[Dict[str, Any]]) -> None:
             st.metric(label, value)
 
     st.markdown("**版本总览**")
+    render_version_metric_definitions()
     render_admin_dataframe(pd.DataFrame(build_version_overview_display(rows)))
 
     chronological = sorted(rows, key=version_sort_value)
     chart_rows = [
         {
             "版本": row.get("app_version", ""),
-            "首页渲染完成率": float(row.get("home_render_rate", 0.0)),
-            "加载中流失率": float(row.get("pre_render_loss_rate", 0.0)),
-            "开始率": float(row.get("start_rate", 0.0)),
-            "完成率": float(row.get("completion_rate", 0.0)),
-            "分享率": float(row.get("share_rate", 0.0)),
+            "首页渲染完成率": version_rate_value_or_none(row, "home_render_rate", "visit_sessions", require_home_load=True),
+            "加载中流失率": version_rate_value_or_none(row, "pre_render_loss_rate", "visit_sessions", require_home_load=True),
+            "开始率": version_rate_value_or_none(row, "start_rate", "visit_sessions"),
+            "完成率": version_rate_value_or_none(row, "completion_rate", "started_sessions"),
+            "分享率": version_rate_value_or_none(row, "share_rate", "completed_sessions"),
         }
         for row in chronological
     ]
@@ -4097,13 +4523,13 @@ def render_admin_version_metrics(events: List[Dict[str, Any]]) -> None:
 
     metric_cards = [
         ("首页访问", admin_int(selected.get("visit_sessions"))),
-        ("加载中流失", admin_int(selected.get("pre_render_lost_sessions"))),
-        ("内容已渲染", admin_int(selected.get("home_rendered_sessions"))),
-        ("渲染后行动", admin_int(selected.get("home_engaged_sessions"))),
+        ("加载中流失", version_count_or_dash(selected, "pre_render_lost_sessions", require_home_load=True)),
+        ("内容已渲染", version_count_or_dash(selected, "home_rendered_sessions", require_home_load=True)),
+        ("渲染后行动", version_count_or_dash(selected, "home_engaged_sessions", require_home_load=True)),
         ("开始整理", admin_int(selected.get("started_sessions"))),
         ("完成名单", admin_int(selected.get("completed_sessions"))),
         ("分享/海报", admin_int(selected.get("shared_sessions"))),
-        ("P90 渲染耗时", f"{float(selected.get('p90_render_elapsed_ms', 0.0)):.0f} ms"),
+        ("P90 渲染耗时", version_ms_or_dash(selected, "p90_render_elapsed_ms", require_render_time=True)),
     ]
     columns = st.columns(4)
     for index, (label, value) in enumerate(metric_cards):
@@ -4111,29 +4537,53 @@ def render_admin_version_metrics(events: List[Dict[str, Any]]) -> None:
             st.metric(label, value)
 
     detail_rows = [
-        ("首页访问", int(selected.get("visit_sessions", 0)), 1.0),
-        ("首页核心内容已渲染", int(selected.get("home_rendered_sessions", 0)), float(selected.get("home_render_rate", 0.0))),
-        ("打开/选择片单", int(selected.get("opened_or_selected_sessions", 0)), float(selected.get("open_or_select_rate", 0.0))),
-        ("开始整理", int(selected.get("started_sessions", 0)), float(selected.get("start_rate", 0.0))),
-        ("完成名单", int(selected.get("completed_sessions", 0)), float(selected.get("completion_rate", 0.0))),
-        ("分享/下载海报", int(selected.get("shared_sessions", 0)), float(selected.get("share_rate", 0.0))),
+        (
+            "首页访问",
+            admin_int(selected.get("visit_sessions")),
+            "100.0%" if int(selected.get("visit_sessions", 0) or 0) > 0 else VERSION_NO_DATA,
+        ),
+        (
+            "首页核心内容已渲染",
+            version_count_or_dash(selected, "home_rendered_sessions", require_home_load=True),
+            version_percent_or_dash(selected, "home_render_rate", "visit_sessions", require_home_load=True),
+        ),
+        (
+            "打开/选择片单",
+            admin_int(selected.get("opened_or_selected_sessions")),
+            version_percent_or_dash(selected, "open_or_select_rate", "visit_sessions"),
+        ),
+        (
+            "开始整理",
+            admin_int(selected.get("started_sessions")),
+            version_percent_or_dash(selected, "start_rate", "visit_sessions"),
+        ),
+        (
+            "完成名单",
+            admin_int(selected.get("completed_sessions")),
+            version_percent_or_dash(selected, "completion_rate", "started_sessions"),
+        ),
+        (
+            "分享/下载海报",
+            admin_int(selected.get("shared_sessions")),
+            version_percent_or_dash(selected, "share_rate", "completed_sessions"),
+        ),
     ]
     render_admin_dataframe(
         pd.DataFrame(
             {
                 "阶段": [row[0] for row in detail_rows],
                 "session 数": [row[1] for row in detail_rows],
-                "核心转化率": [admin_percent(row[2]) for row in detail_rows],
+                "核心转化率": [row[2] for row in detail_rows],
             }
         )
     )
     if previous:
         st.info(
             "相对上一版本："
-            f"首页渲染完成率 {admin_delta_pp(selected.get('home_render_rate'), previous.get('home_render_rate'))}，"
-            f"加载中流失率 {admin_delta_pp(selected.get('pre_render_loss_rate'), previous.get('pre_render_loss_rate'))}，"
-            f"开始率 {admin_delta_pp(selected.get('start_rate'), previous.get('start_rate'))}，"
-            f"完成率 {admin_delta_pp(selected.get('completion_rate'), previous.get('completion_rate'))}。"
+            f"首页渲染完成率 {admin_delta_pp(version_rate_value_or_none(selected, 'home_render_rate', 'visit_sessions', require_home_load=True), version_rate_value_or_none(previous, 'home_render_rate', 'visit_sessions', require_home_load=True))}，"
+            f"加载中流失率 {admin_delta_pp(version_rate_value_or_none(selected, 'pre_render_loss_rate', 'visit_sessions', require_home_load=True), version_rate_value_or_none(previous, 'pre_render_loss_rate', 'visit_sessions', require_home_load=True))}，"
+            f"开始率 {admin_delta_pp(version_rate_value_or_none(selected, 'start_rate', 'visit_sessions'), version_rate_value_or_none(previous, 'start_rate', 'visit_sessions'))}，"
+            f"完成率 {admin_delta_pp(version_rate_value_or_none(selected, 'completion_rate', 'started_sessions'), version_rate_value_or_none(previous, 'completion_rate', 'started_sessions'))}。"
         )
     st.caption(
         "说明：新版事件优先使用 payload.app_version；历史事件没有版本字段时，按 created_at 落到 release_history.py 的上线时间区间。"
@@ -5473,6 +5923,13 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
     safe_divider()
     st.subheader("完整名单")
     render_ranked_list(ranked)
+    render_peer_contact_section(
+        ranked=ranked,
+        mode=mode,
+        challenge_id=challenge_id,
+        template_id=template_id,
+        total=total,
+    )
 
     txt_bytes, csv_bytes, json_bytes, md_bytes = build_export_payloads(
         theme=theme,
@@ -6775,6 +7232,7 @@ def main() -> None:
     if step == 3:
         st.caption(APP_TITLE)
     elif step == 1:
+        render_home_collab_badge()
         render_cover_header()
     else:
         st.title(APP_TITLE)

@@ -739,6 +739,8 @@ def build_home_load_metrics(events: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     return {
         "home_visit_sessions": len(visit_sessions),
+        "home_render_event_count": len(rendered_events),
+        "home_render_time_count": len(render_times),
         "home_rendered_sessions": len(rendered_sessions),
         "home_engaged_sessions": len(rendered_action_sessions),
         "pre_render_lost_sessions": len(pre_render_lost_sessions),
@@ -757,6 +759,11 @@ def build_home_load_insight(metrics: Dict[str, Any]) -> str:
     visits = int(metrics.get("home_visit_sessions", 0))
     if not visits:
         return "当前筛选范围内没有普通首页访问，暂时无法判断首页加载流失。"
+    if int(metrics.get("home_render_event_count", 0) or 0) <= 0:
+        return (
+            "当前筛选范围内没有 home_content_rendered 埋点，不能判断首页渲染完成率或加载中流失率。"
+            "这通常表示数据来自加入首页加载埋点之前的版本，应解读为没有数据，而不是 0%。"
+        )
 
     pre_render_rate = float(metrics.get("pre_render_loss_rate", 0.0))
     post_render_rate = float(metrics.get("post_render_no_action_rate", 0.0))
@@ -818,6 +825,9 @@ def build_version_metrics(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "events": len(version_events),
                 "sessions": len(sessions),
                 "visit_sessions": len(visit_sessions),
+                "home_load_diagnostic_available": int(home_metrics.get("home_render_event_count", 0)) > 0,
+                "home_render_event_count": int(home_metrics.get("home_render_event_count", 0)),
+                "home_render_time_count": int(home_metrics.get("home_render_time_count", 0)),
                 "home_rendered_sessions": int(home_metrics.get("home_rendered_sessions", 0)),
                 "home_engaged_sessions": int(home_metrics.get("home_engaged_sessions", 0)),
                 "pre_render_lost_sessions": int(home_metrics.get("pre_render_lost_sessions", 0)),

@@ -35,15 +35,35 @@ create table if not exists public.imported_movie_lists (
   use_count int not null default 0
 );
 
+create table if not exists public.peer_match_contacts (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  session_id text,
+  contact text not null,
+  list_kind text not null,
+  list_key text not null default '',
+  challenge_id text,
+  template_id text,
+  mode text,
+  champion text not null,
+  top_items jsonb not null default '[]'::jsonb,
+  ranked_count int not null default 0,
+  allow_display boolean not null default true
+);
+
 create index if not exists analytics_events_created_at_idx on public.analytics_events (created_at desc);
 create index if not exists analytics_events_event_name_idx on public.analytics_events (event_name);
 create index if not exists analytics_events_challenge_id_idx on public.analytics_events (challenge_id);
 create index if not exists analytics_events_template_id_idx on public.analytics_events (template_id);
 create index if not exists imported_movie_lists_expires_at_idx on public.imported_movie_lists (expires_at desc);
+create index if not exists peer_match_contacts_created_at_idx on public.peer_match_contacts (created_at desc);
+create index if not exists peer_match_contacts_light_idx on public.peer_match_contacts (list_kind, list_key, champion, created_at desc);
+create index if not exists peer_match_contacts_heavy_idx on public.peer_match_contacts (list_kind, created_at desc);
 
 alter table public.challenge_sets enable row level security;
 alter table public.analytics_events enable row level security;
 alter table public.imported_movie_lists enable row level security;
+alter table public.peer_match_contacts enable row level security;
 
 drop policy if exists "challenge sets are readable" on public.challenge_sets;
 drop policy if exists "challenge sets can be created by anon" on public.challenge_sets;
@@ -51,6 +71,8 @@ drop policy if exists "analytics events can be inserted by anon" on public.analy
 drop policy if exists "analytics events are readable for app dashboards" on public.analytics_events;
 drop policy if exists "imported movie lists can be created by anon" on public.imported_movie_lists;
 drop policy if exists "imported movie lists are readable before expiry" on public.imported_movie_lists;
+drop policy if exists "peer match contacts can be created by anon" on public.peer_match_contacts;
+drop policy if exists "peer match contacts are readable when allowed" on public.peer_match_contacts;
 
 create policy "challenge sets are readable"
 on public.challenge_sets for select
@@ -105,3 +127,21 @@ create policy "imported movie lists are readable before expiry"
 on public.imported_movie_lists for select
 to anon
 using (expires_at > now());
+
+create policy "peer match contacts can be created by anon"
+on public.peer_match_contacts for insert
+to anon
+with check (
+  allow_display = true
+  and list_kind in ('light', 'heavy')
+  and length(contact) between 2 and 80
+  and length(champion) between 1 and 120
+  and ranked_count between 1 and 1500
+  and jsonb_typeof(top_items) = 'array'
+  and jsonb_array_length(top_items) between 1 and 20
+);
+
+create policy "peer match contacts are readable when allowed"
+on public.peer_match_contacts for select
+to anon
+using (allow_display = true);
