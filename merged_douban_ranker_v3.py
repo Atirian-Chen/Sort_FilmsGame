@@ -1322,11 +1322,33 @@ def render_app_styles() -> None:
             line-height: 1.5;
             margin-bottom: 10px;
         }
+        .peer-side-section {
+            margin-top: 18px;
+        }
+        .peer-section-heading {
+            color: #1f2328;
+            font-size: 17px;
+            font-weight: 900;
+            line-height: 1.25;
+            margin-bottom: 5px;
+        }
+        .peer-section-copy {
+            color: #6f665d;
+            font-size: 12px;
+            line-height: 1.45;
+            margin-bottom: 8px;
+        }
         .peer-card-grid {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 10px;
             margin-top: 10px;
+        }
+        .peer-card-list {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+            margin: 8px 0 12px;
         }
         .peer-card {
             border: 1px solid #dbe7e3;
@@ -1353,6 +1375,15 @@ def render_app_styles() -> None:
             font-size: 13px;
             line-height: 1.45;
             overflow-wrap: anywhere;
+        }
+        .peer-empty-note {
+            color: #7a6f66;
+            font-size: 12px;
+            line-height: 1.45;
+            border: 1px dashed #d8d1c6;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin: 8px 0 12px;
         }
         .result-peak {
             border: 1px solid #d8d1c6;
@@ -3399,14 +3430,16 @@ def peer_contact_matches(
     return kind, matches[:5]
 
 
-def render_peer_cards(kind: str, ranked: List[str], matches: List[Dict[str, Any]]) -> None:
+def render_peer_cards(kind: str, ranked: List[str], matches: List[Dict[str, Any]], *, compact: bool = False) -> None:
     if not ranked:
         return
     if not matches:
-        if kind == "light":
-            st.caption("暂时还没有找到第一名相同且愿意公开联系方式的同好。")
-        else:
-            st.caption("暂时还没有找到前十重合度达到 30% 且愿意公开联系方式的同好。")
+        note = (
+            "暂时还没有找到第一名相同且愿意公开联系方式的同好。"
+            if kind == "light"
+            else "暂时还没有找到前十重合度达到 30% 且愿意公开联系方式的同好。"
+        )
+        st.markdown(f'<div class="peer-empty-note">{html.escape(note)}</div>', unsafe_allow_html=True)
         return
 
     cards = []
@@ -3433,7 +3466,8 @@ def render_peer_cards(kind: str, ranked: List[str], matches: List[Dict[str, Any]
             </div>
             """
         )
-    st.markdown(f'<div class="peer-card-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
+    container_class = "peer-card-list" if compact else "peer-card-grid"
+    st.markdown(f'<div class="{container_class}">{"".join(cards)}</div>', unsafe_allow_html=True)
 
 
 def render_peer_contact_section(
@@ -3443,6 +3477,7 @@ def render_peer_contact_section(
     challenge_id: str,
     template_id: str,
     total: int,
+    compact: bool = False,
 ) -> None:
     if not ranked:
         return
@@ -3454,49 +3489,52 @@ def render_peer_contact_section(
         template_id=template_id,
         total=total,
     )
-    title = "TA与你的第一名相同" if kind == "light" else "TA与你的前十重合度"
-    copy = (
-        "想认识喜欢一样电影的同好，可以自愿留下微信号；提交后，符合匹配条件的用户可能在结果页看到你的联系方式。"
-    )
+    match_copy = "第一名相同会优先推荐；重榜单会看前十重合度。"
     st.markdown(
         f"""
-        <div class="peer-match-panel">
-          <div class="peer-match-title">{html.escape(title)}</div>
-          <div class="peer-match-copy">{html.escape(copy)}</div>
+        <div class="peer-side-section">
+          <div class="peer-section-heading">推荐好友</div>
+          <div class="peer-section-copy">{html.escape(match_copy)}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    render_peer_cards(kind, ranked, matches)
+    render_peer_cards(kind, ranked, matches, compact=compact)
 
-    with st.expander("自愿留下微信号", expanded=False):
-        st.caption("只在你主动提交后保存；会展示给与你结果相似的用户。请不要填写不想公开的信息。")
-        contact = st.text_input("微信号", key=k("peer_contact_input"), max_chars=80)
-        consent = st.checkbox(
-            "我同意把这个微信号展示给与我榜单相似的用户",
-            key=k("peer_contact_consent"),
-        )
-        if render_button_compat("提交联系方式", key="btn_submit_peer_contact", use_container_width=True):
-            clean_contact = clean_contact_value(contact)
-            signature = f"{clean_contact}|{peer_list_key(mode, challenge_id, template_id)}|{ranked[0]}"
-            if not consent:
-                st.warning("需要先确认同意展示联系方式。")
-            elif len(clean_contact) < 2:
-                st.warning("请填写有效的微信号。")
-            elif st.session_state.get(k("peer_contact_saved_signature")) == signature:
-                st.success("这个联系方式已经提交过了。")
-            elif save_peer_contact(
-                contact=clean_contact,
-                ranked=ranked,
-                mode=mode,
-                challenge_id=challenge_id,
-                template_id=template_id,
-                total=total,
-            ):
-                st.session_state[k("peer_contact_saved_signature")] = signature
-                st.success("已提交。之后相似榜单的用户可能会看到你的联系方式。")
-            else:
-                st.error("暂时没有保存成功。请确认 Supabase 已更新表结构，或稍后再试。")
+    st.markdown(
+        """
+        <div class="peer-side-section">
+          <div class="peer-section-heading">留下联系方式</div>
+          <div class="peer-section-copy">提交后会展示给与你结果相似的用户。请只填写愿意公开的信息。</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    contact = st.text_input(
+        "微信号 / 联系方式",
+        key=k("peer_contact_input"),
+        max_chars=80,
+        placeholder="例如微信号",
+    )
+    if render_button_compat("提交联系方式", key="btn_submit_peer_contact", use_container_width=True):
+        clean_contact = clean_contact_value(contact)
+        signature = f"{clean_contact}|{peer_list_key(mode, challenge_id, template_id)}|{ranked[0]}"
+        if len(clean_contact) < 2:
+            st.warning("请填写有效的联系方式。")
+        elif st.session_state.get(k("peer_contact_saved_signature")) == signature:
+            st.success("这个联系方式已经提交过了。")
+        elif save_peer_contact(
+            contact=clean_contact,
+            ranked=ranked,
+            mode=mode,
+            challenge_id=challenge_id,
+            template_id=template_id,
+            total=total,
+        ):
+            st.session_state[k("peer_contact_saved_signature")] = signature
+            st.success("已提交。之后相似榜单的用户可能会看到你的联系方式。")
+        else:
+            st.error("暂时没有保存成功。请确认 Supabase 已更新表结构，或稍后再试。")
 
 
 def current_challenge_for_share() -> Challenge:
@@ -5900,6 +5938,14 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                         surface="guess_champion",
                     ),
                 )
+            render_peer_contact_section(
+                ranked=ranked,
+                mode=mode,
+                challenge_id=challenge_id,
+                template_id=template_id,
+                total=total,
+                compact=True,
+            )
 
     with st.expander("发布文案", expanded=False):
         st.text_area("文案", value=share_caption, height=220)
@@ -5923,13 +5969,6 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
     safe_divider()
     st.subheader("完整名单")
     render_ranked_list(ranked)
-    render_peer_contact_section(
-        ranked=ranked,
-        mode=mode,
-        challenge_id=challenge_id,
-        template_id=template_id,
-        total=total,
-    )
 
     txt_bytes, csv_bytes, json_bytes, md_bytes = build_export_payloads(
         theme=theme,

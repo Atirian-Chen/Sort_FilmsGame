@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional
 
 
-APP_VERSION = "v2.3"
-APP_RELEASE_ID = "v2.3-home-load-version-analytics"
-APP_RELEASE_NAME = "首页加载优化与版本分析"
-APP_RELEASED_AT = "2026-06-13T21:26:00+08:00"
+APP_VERSION = "v2.6"
+APP_RELEASE_ID = "v2.6-result-peer-entry"
+APP_RELEASE_NAME = "结果页好友推荐入口优化"
+APP_RELEASED_AT = "2026-06-14T01:10:20+08:00"
 
 
 # Version starts are based on the first push/deploy commit of each feature phase
@@ -103,6 +103,27 @@ RELEASE_TIMELINE = [
         "release_name": "新增王家卫/新海诚/迪士尼片单",
         "released_at": "2026-06-13T15:03:41+08:00",
         "commit": "6133044",
+    },
+    {
+        "app_version": "v2.3",
+        "release_id": "v2.3-home-load-version-analytics",
+        "release_name": "首页加载优化与版本分析",
+        "released_at": "2026-06-13T21:42:19+08:00",
+        "commit": "5508735",
+    },
+    {
+        "app_version": "v2.4",
+        "release_id": "v2.4-version-dashboard",
+        "release_name": "后台看板版本数据分析",
+        "released_at": "2026-06-13T22:14:02+08:00",
+        "commit": "abb13d0",
+    },
+    {
+        "app_version": "v2.5",
+        "release_id": "v2.5-dashboard-social-fix",
+        "release_name": "后台缺失值修正与同好联系方式",
+        "released_at": "2026-06-13T23:43:43+08:00",
+        "commit": "5294b59",
     },
     {
         "app_version": APP_VERSION,
