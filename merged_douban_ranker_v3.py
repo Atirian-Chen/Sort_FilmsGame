@@ -14,13 +14,9 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import pandas as pd
-import qrcode
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
-from bs4 import BeautifulSoup
-from PIL import Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 
 from analytics import (
     EVENT_LABELS,
@@ -59,6 +55,7 @@ from analytics import (
     build_payload_value_counts,
     build_setting_rows,
     build_top_k_distribution,
+    build_version_metrics,
     fetch_all_events,
     fetch_public_metrics,
     filter_events_by_date,
@@ -129,6 +126,14 @@ BOOKMARKLET_LINK_COMPONENT = components.declare_component(
 
 LOCAL_DRAFT_VERSION = 1
 LOCAL_DRAFT_STORAGE_KEY = "film_sort_local_draft_v1"
+pd = None
+Image = None
+ImageDraw = None
+ImageFont = None
+ImageOps = None
+UnidentifiedImageError = None
+qrcode = None
+BeautifulSoup = None
 
 HEADERS = {
     "User-Agent": (
@@ -139,6 +144,48 @@ HEADERS = {
     "Referer": "https://movie.douban.com/",
     "Accept": "application/json, text/plain, */*",
 }
+
+
+def ensure_pandas():
+    global pd
+    if pd is None:
+        import pandas as _pd
+
+        pd = _pd
+    return pd
+
+
+def ensure_pillow() -> None:
+    global Image, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
+    if Image is not None:
+        return
+    from PIL import Image as _Image
+    from PIL import ImageDraw as _ImageDraw
+    from PIL import ImageFont as _ImageFont
+    from PIL import ImageOps as _ImageOps
+    from PIL import UnidentifiedImageError as _UnidentifiedImageError
+
+    Image = _Image
+    ImageDraw = _ImageDraw
+    ImageFont = _ImageFont
+    ImageOps = _ImageOps
+    UnidentifiedImageError = _UnidentifiedImageError
+
+
+def ensure_qrcode() -> None:
+    global qrcode
+    if qrcode is None:
+        import qrcode as _qrcode
+
+        qrcode = _qrcode
+
+
+def ensure_beautiful_soup() -> None:
+    global BeautifulSoup
+    if BeautifulSoup is None:
+        from bs4 import BeautifulSoup as _BeautifulSoup
+
+        BeautifulSoup = _BeautifulSoup
 
 # 精确到 IMDb ID 的备用海报源，覆盖内置片单里豆瓣不稳定命中的影片。
 CURATED_IMDB_POSTERS: Dict[str, Dict[str, str]] = {
@@ -433,6 +480,7 @@ def poster_data_uri(image_data: Optional[bytes]) -> Optional[str]:
 
 @st.cache_data(show_spinner=False, max_entries=512)
 def poster_preview_data_uri(image_data: bytes, max_width: int = 360, max_height: int = 520) -> Optional[str]:
+    ensure_pillow()
     try:
         with Image.open(io.BytesIO(image_data)) as img:
             img = ImageOps.exif_transpose(img)
@@ -447,6 +495,7 @@ def poster_preview_data_uri(image_data: bytes, max_width: int = 360, max_height:
 
 
 def image_from_bytes(image_data: Optional[bytes]) -> Optional[Image.Image]:
+    ensure_pillow()
     if not image_data:
         return None
     try:
@@ -457,6 +506,7 @@ def image_from_bytes(image_data: Optional[bytes]) -> Optional[Image.Image]:
 
 
 def make_rounded_rect_mask(size: Tuple[int, int], radius: int) -> Image.Image:
+    ensure_pillow()
     mask = Image.new("L", size, 0)
     draw = ImageDraw.Draw(mask)
     draw.rounded_rectangle((0, 0, size[0], size[1]), radius=radius, fill=255)
@@ -464,6 +514,7 @@ def make_rounded_rect_mask(size: Tuple[int, int], radius: int) -> Image.Image:
 
 
 def render_poster_thumb(image_data: Optional[bytes], size: Tuple[int, int], bg: Tuple[int, int, int]) -> Image.Image:
+    ensure_pillow()
     thumb = Image.new("RGB", size, bg)
     poster = image_from_bytes(image_data)
     if poster:
@@ -475,6 +526,8 @@ def render_poster_thumb(image_data: Optional[bytes], size: Tuple[int, int], bg: 
 
 
 def make_qr_image(url: str, size: int = 164) -> Image.Image:
+    ensure_pillow()
+    ensure_qrcode()
     qr = qrcode.QRCode(
         version=None,
         error_correction=qrcode.constants.ERROR_CORRECT_M,
@@ -1499,6 +1552,7 @@ def render_app_styles() -> None:
 # =========================
 @st.cache_data(show_spinner=False)
 def fetch_douban_top_movie_entries(limit: int) -> List[Dict[str, Optional[str]]]:
+    ensure_beautiful_soup()
     limit = max(1, min(250, int(limit)))
     entries: List[Dict[str, Optional[str]]] = []
     seen = set()
@@ -1630,6 +1684,7 @@ def collect_entry_rated_at(item) -> Optional[str]:
 
 @st.cache_data(show_spinner=False)
 def fetch_douban_collect_entries(user_id: str, max_items: int = DOUBAN_COLLECT_MAX_ITEMS) -> List[Dict[str, Any]]:
+    ensure_beautiful_soup()
     clean_user_id = normalize_douban_user_id(user_id)
     if not clean_user_id:
         raise ValueError("豆瓣 ID 格式不正确。")
@@ -1817,6 +1872,7 @@ def filter_collect_entries(
 
 
 def normalize_image_bytes(image_bytes: bytes) -> Optional[bytes]:
+    ensure_pillow()
     if not image_bytes:
         return None
 
@@ -3538,6 +3594,7 @@ def render_admin_recent_events(events: List[Dict[str, Any]]) -> None:
 
 
 def render_admin_dashboard() -> None:
+    ensure_pandas()
     token = get_query_param("admin")
     expected = get_admin_token()
     if not expected or token != expected:
@@ -3906,6 +3963,40 @@ def render_admin_home_load_diagnostics(events: List[Dict[str, Any]]) -> None:
     )
 
 
+def render_admin_version_metrics(events: List[Dict[str, Any]]) -> None:
+    rows = build_version_metrics(events)
+    st.markdown("**版本表现**")
+    if not rows:
+        st.info("当前筛选范围内没有可归因到版本的事件。")
+        return
+
+    display_rows = []
+    for row in rows:
+        display_rows.append(
+            {
+                "版本": row.get("release_label", row.get("app_version", "")),
+                "上线时间": admin_short_time(row.get("released_at")),
+                "事件数": int(row.get("events", 0)),
+                "session": int(row.get("sessions", 0)),
+                "首页访问 session": int(row.get("visit_sessions", 0)),
+                "首页渲染完成率": admin_percent(row.get("home_render_rate")),
+                "开始整理 session": int(row.get("started_sessions", 0)),
+                "完成 session": int(row.get("completed_sessions", 0)),
+                "分享 session": int(row.get("shared_sessions", 0)),
+                "开始率": admin_percent(row.get("start_rate")),
+                "完成率": admin_percent(row.get("completion_rate")),
+                "分享率": admin_percent(row.get("share_rate")),
+                "P90 渲染耗时": f"{float(row.get('p90_render_elapsed_ms', 0.0)):.0f} ms",
+                "commit": row.get("commit", ""),
+            }
+        )
+
+    render_admin_dataframe(pd.DataFrame(display_rows))
+    st.caption(
+        "说明：新版事件优先使用 payload.app_version；历史事件没有版本字段时，按 created_at 落到 release_history.py 的上线时间区间。"
+    )
+
+
 def admin_group_df(rows: List[Dict[str, Any]], label_key: str, label_name: str, include_winners: bool = False) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame()
@@ -4067,6 +4158,7 @@ def render_admin_recent_events(events: List[Dict[str, Any]]) -> None:
 
 
 def render_admin_dashboard() -> None:
+    ensure_pandas()
     token = get_query_param("admin")
     expected = get_admin_token()
     if not expected or token != expected:
@@ -4143,8 +4235,8 @@ def render_admin_dashboard() -> None:
     render_admin_insights(build_admin_insights(events))
     safe_divider()
 
-    funnel_tab, load_tab, trend_tab, list_tab, channel_tab, experiment_tab, behavior_tab, share_tab, event_tab = st.tabs(
-        ["漏斗分析", "首页加载诊断", "每日趋势", "片单分析", "渠道归因", "实验分析", "行为质量", "分享素材", "最近事件"]
+    funnel_tab, load_tab, version_tab, trend_tab, list_tab, channel_tab, experiment_tab, behavior_tab, share_tab, event_tab = st.tabs(
+        ["漏斗分析", "首页加载诊断", "版本分析", "每日趋势", "片单分析", "渠道归因", "实验分析", "行为质量", "分享素材", "最近事件"]
     )
 
     with funnel_tab:
@@ -4178,6 +4270,9 @@ def render_admin_dashboard() -> None:
 
     with load_tab:
         render_admin_home_load_diagnostics(events)
+
+    with version_tab:
+        render_admin_version_metrics(events)
 
     with trend_tab:
         render_admin_trends(events)
@@ -4260,18 +4355,10 @@ def render_admin_dashboard() -> None:
 def render_cover_header() -> None:
     experiment_config = get_experiment_config(get_session_id(), "homepage_cta_v1", {"hero_title": HERO_TITLE})
     hero_title = str(experiment_config.get("hero_title") or HERO_TITLE)
-    cover_src = image_file_data_uri(COVER_IMAGE_PATH)
     hero_title_html = html.escape(hero_title).replace("你的电影审美名单", "你的<br>电影审美名单").replace("你的电影审美榜单", "你的<br>电影审美榜单")
-    cover_style = (
-        ' style="background-image: linear-gradient(90deg, rgba(23, 27, 34, 0.92) 0%, '
-        'rgba(23, 27, 34, 0.70) 46%, rgba(23, 27, 34, 0.26) 100%), '
-        f"url('{cover_src}');\""
-        if cover_src
-        else ""
-    )
     st.markdown(
         f"""
-        <div class="launch-hero"{cover_style}>
+        <div class="launch-hero">
           <div class="hero-copy">
             <div class="hero-kicker">电影片单整理器</div>
             <h1 class="hero-title">{hero_title_html}</h1>
@@ -4339,6 +4426,7 @@ def slugify_filename(text: str) -> str:
 
 
 def load_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
+    ensure_pillow()
     candidates = [
         "C:/Windows/Fonts/msyhbd.ttc" if bold else "C:/Windows/Fonts/msyh.ttc",
         "C:/Windows/Fonts/simhei.ttf",
@@ -4481,6 +4569,7 @@ def generate_share_poster_bytes(
     include_qr: bool = True,
     poster_bytes_map: Optional[Dict[str, Optional[bytes]]] = None,
 ) -> bytes:
+    ensure_pillow()
     width = 1080
     fixed_height = None
     if poster_format == "长图 9:16":
@@ -4609,6 +4698,7 @@ def generate_share_poster_bytes(
 
 
 def generate_challenge_poster_bytes(theme: str, challenge_url: str, item_count: int) -> bytes:
+    ensure_pillow()
     width, height = 1080, 1350
     palette = get_share_palette("银幕红")
     home_url = get_public_app_url()
@@ -4754,6 +4844,7 @@ def generate_contested_poster_bytes(
     share_url: str,
     poster_bytes_map: Optional[Dict[str, Optional[bytes]]] = None,
 ) -> bytes:
+    ensure_pillow()
     width, height = 1080, 1350
     poster_bytes_map = poster_bytes_map or {}
     left = str(contested.get("left") or "")
@@ -5596,9 +5687,6 @@ def render_mode_selection_page() -> None:
                 payload=build_event_payload(route="home", mode=mode, list_id=mode),
             )
             go_to_step(2)
-
-    safe_divider()
-    render_public_metrics()
 
 
 def render_custom_template_gallery() -> None:
@@ -6513,6 +6601,7 @@ def main() -> None:
     )
     home_render_started_at = datetime.now()
     render_app_styles()
+    st.info("第一次打开可能需要几秒")
 
     if get_query_param("admin"):
         render_admin_dashboard()

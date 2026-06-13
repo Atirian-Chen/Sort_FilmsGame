@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import uuid
-from collections import Counter
+from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from statistics import median
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import requests
 import streamlit as st
+
+from release_history import get_current_release_context, get_release_for_event, release_label
 
 
 EVENT_VISIT = "visit"
@@ -120,6 +123,7 @@ HOME_ENGAGEMENT_EVENTS = (
 )
 
 HEAVY_MODE_VALUES = {"豆瓣已看", "自备片单", "豆瓣高分"}
+_ANALYTICS_EXECUTOR: Optional[ThreadPoolExecutor] = None
 
 
 def get_secret(name: str, default: str = "") -> str:
@@ -395,6 +399,8 @@ def _event_payload_context(
 
     for key, value in _active_experiment_payload().items():
         safe.setdefault(key, value)
+    for key, value in get_current_release_context().items():
+        safe.setdefault(key, value)
 
     if "metadata" not in safe:
         safe["metadata"] = {}
@@ -473,6 +479,20 @@ def supabase_request(method: str, table: str, *, params: Optional[Dict[str, str]
         return None
 
 
+def get_analytics_executor() -> ThreadPoolExecutor:
+    global _ANALYTICS_EXECUTOR
+    if _ANALYTICS_EXECUTOR is None:
+        _ANALYTICS_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="analytics-track")
+    return _ANALYTICS_EXECUTOR
+
+
+def _post_analytics_event(endpoint: str, headers: Dict[str, str], body: Dict[str, Any]) -> None:
+    try:
+        requests.post(endpoint, json=body, headers=headers, timeout=4).raise_for_status()
+    except Exception:
+        return
+
+
 def track_event(
     event_name: str,
     *,
@@ -484,6 +504,9 @@ def track_event(
 ) -> bool:
     canonical_name = canonical_event_name(event_name)
     if canonical_name not in TRACKED_EVENTS or not analytics_enabled():
+        return False
+    url, key = get_supabase_config()
+    if not url or not key:
         return False
 
     safe_payload = _event_payload_context(
@@ -502,8 +525,10 @@ def track_event(
         "source_channel": source_channel or safe_payload.get("source") or None,
         "payload": safe_payload,
     }
-    result = supabase_request("POST", "analytics_events", json_body=body, prefer="return=minimal")
-    return result is not None or analytics_enabled()
+    endpoint = f"{url}/rest/v1/analytics_events"
+    headers = supabase_headers("return=minimal")
+    get_analytics_executor().submit(_post_analytics_event, endpoint, headers, body)
+    return True
 
 
 def track_once(key: str, event_name: str, **kwargs: Any) -> bool:
@@ -752,6 +777,71 @@ def build_home_load_insight(metrics: Dict[str, Any]) -> str:
         f"当前首页加载诊断较健康：首页渲染完成率为 {_format_percent(render_rate)}，"
         f"渲染后行动率为 {_format_percent(float(metrics.get('post_render_action_rate', 0.0)))}。"
     )
+
+
+def build_version_metrics(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    normalized = normalize_events(events)
+    grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    releases: Dict[str, Dict[str, str]] = {}
+
+    for event in normalized:
+        release = get_release_for_event(event)
+        version = str(release.get("app_version") or "unknown")
+        grouped[version].append(event)
+        releases[version] = release
+
+    rows: List[Dict[str, Any]] = []
+    for version, version_events in grouped.items():
+        release = releases.get(version, {})
+        sessions = _session_set(version_events)
+        visit_sessions = _session_set(event for event in version_events if _event_matches(event, EVENT_VISIT))
+        opened_sessions = _session_set(event for event in version_events if _event_matches(event, EVENT_LIST_OPENED))
+        selected_sessions = _session_set(event for event in version_events if _event_matches(event, EVENT_LIST_SELECTED))
+        started_sessions = _session_set(event for event in version_events if _event_matches(event, EVENT_SORTING_STARTED))
+        completed_sessions = _session_set(event for event in version_events if _event_matches(event, EVENT_RANKING_COMPLETED))
+        shared_sessions = _session_set(
+            event
+            for event in version_events
+            if _event_matches(event, EVENT_SHARE_COPIED) or _event_matches(event, EVENT_POSTER_DOWNLOADED)
+        )
+        home_metrics = build_home_load_metrics(version_events)
+        rows.append(
+            {
+                "app_version": version,
+                "release_id": release.get("release_id", ""),
+                "release_name": release.get("release_name", ""),
+                "release_label": release_label(release),
+                "released_at": release.get("released_at", ""),
+                "commit": release.get("commit", ""),
+                "events": len(version_events),
+                "sessions": len(sessions),
+                "visit_sessions": len(visit_sessions),
+                "home_rendered_sessions": int(home_metrics.get("home_rendered_sessions", 0)),
+                "home_render_rate": float(home_metrics.get("render_completion_rate", 0.0)),
+                "opened_or_selected_sessions": len(opened_sessions | selected_sessions),
+                "started_sessions": len(started_sessions),
+                "completed_sessions": len(completed_sessions),
+                "shared_sessions": len(shared_sessions),
+                "start_rate": _rate(len(started_sessions), len(visit_sessions)),
+                "completion_rate": _rate(len(completed_sessions), len(started_sessions)),
+                "share_rate": _rate(len(shared_sessions), len(completed_sessions)),
+                "avg_render_elapsed_ms": float(home_metrics.get("avg_render_elapsed_ms", 0.0)),
+                "p90_render_elapsed_ms": float(home_metrics.get("p90_render_elapsed_ms", 0.0)),
+            }
+        )
+
+    rows.sort(key=lambda item: parse_sortable_datetime(str(item.get("released_at") or "")), reverse=True)
+    return rows
+
+
+def parse_sortable_datetime(value: str) -> str:
+    if not value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    return parsed.isoformat()
 
 
 def _step_event_names(step: Union[str, Tuple[str, ...], List[str]]) -> Tuple[str, ...]:
