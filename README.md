@@ -584,6 +584,16 @@ https://movie.douban.com/people/123456/collect
 - 手动移除只影响本次整理，不改 Supabase 里的导入片单 ID；提供“恢复全部”一键还原。
 - 新增 [docs/version_updates/version2.7.md](docs/version_updates/version2.7.md) 记录版本细节、兼容性和测试清单。
 
+### v2.8 后台看板百万事件读取
+
+覆盖提交：当前工作区，2026-06-17
+
+- 后台看板主读取从最多 50,000 条历史事件提升到最多 1,000,000 条历史事件。
+- 新增 `ADMIN_EVENT_PAGE_SIZE` 和 `ADMIN_EVENT_MAX_ROWS` 常量，集中管理后台分页大小和总读取上限。
+- 保持时间范围筛选逻辑不变，仍支持最近 7 天、最近 30 天、全部历史和自定义范围。
+- 解决事件累计超过 50,000 条后，“全部历史”也只覆盖最近一段事件，导致早期版本 / 早期日期数据被挤出统计窗口的问题。
+- 新增 [docs/version_updates/version2.8.md](docs/version_updates/version2.8.md) 记录版本细节、风险说明和测试清单。
+
 ---
 
 ## 简历表达

@@ -60,6 +60,8 @@ LEGACY_TRACKED_EVENTS = list(LEGACY_EVENT_MAP)
 
 DEFAULT_PUBLIC_APP_URL = "https://sortfilmsgamegit.streamlit.app"
 ADMIN_EVENT_SELECT = "event_name,created_at,session_id,challenge_id,template_id,mode,source_channel,payload"
+ADMIN_EVENT_PAGE_SIZE = 1000
+ADMIN_EVENT_MAX_ROWS = 1_000_000
 
 EVENT_LABELS = {
     EVENT_VISIT: "访问",
@@ -553,7 +555,7 @@ def fetch_recent_events(limit: int = 1000) -> List[Dict[str, Any]]:
 
 
 @st.cache_data(show_spinner=False, ttl=300)
-def fetch_all_events(page_size: int = 1000, max_rows: int = 50000) -> List[Dict[str, Any]]:
+def fetch_all_events(page_size: int = ADMIN_EVENT_PAGE_SIZE, max_rows: int = ADMIN_EVENT_MAX_ROWS) -> List[Dict[str, Any]]:
     if not analytics_enabled():
         return []
 
