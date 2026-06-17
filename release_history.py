@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional
 
 
-APP_VERSION = "v2.6"
-APP_RELEASE_ID = "v2.6-result-peer-entry"
-APP_RELEASE_NAME = "结果页好友推荐入口优化"
-APP_RELEASED_AT = "2026-06-14T01:10:20+08:00"
+APP_VERSION = "v2.7"
+APP_RELEASE_ID = "v2.7-douban-media-filter-edit-preview"
+APP_RELEASE_NAME = "豆瓣已看类型筛选与片单预编辑"
+APP_RELEASED_AT = "2026-06-17T18:50:06+08:00"
 
 
 # Version starts are based on the first push/deploy commit of each feature phase
@@ -124,6 +124,13 @@ RELEASE_TIMELINE = [
         "release_name": "后台缺失值修正与同好联系方式",
         "released_at": "2026-06-13T23:43:43+08:00",
         "commit": "5294b59",
+    },
+    {
+        "app_version": "v2.6",
+        "release_id": "v2.6-result-peer-entry",
+        "release_name": "结果页好友推荐入口优化",
+        "released_at": "2026-06-14T01:10:20+08:00",
+        "commit": "",
     },
     {
         "app_version": APP_VERSION,

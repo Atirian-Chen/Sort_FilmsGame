@@ -77,6 +77,10 @@ from challenge_store import (
     save_challenge,
 )
 from import_store import (
+    MEDIA_TYPE_MOVIE,
+    MEDIA_TYPE_SERIES,
+    MEDIA_TYPE_UNKNOWN,
+    clean_media_type,
     build_douban_bookmarklet,
     build_import_url,
     clean_collect_date,
@@ -319,6 +323,13 @@ SHARE_POSTER_STYLES = ["留白卡片", "银幕红", "夜场蓝"]
 SHARE_POSTER_FORMATS = ["自适应长图", "长图 9:16", "方图 1:1"]
 SHARE_POSTER_QR_OPTIONS = ["带二维码", "不带二维码"]
 DOUBAN_RATING_VALUES = [5, 4, 3, 2, 1]
+DOUBAN_COLLECT_MEDIA_FILTERS = [(MEDIA_TYPE_MOVIE, "movie"), (MEDIA_TYPE_SERIES, "tv")]
+DOUBAN_COLLECT_MEDIA_TYPES = [MEDIA_TYPE_MOVIE, MEDIA_TYPE_SERIES]
+MEDIA_TYPE_LABELS = {
+    MEDIA_TYPE_MOVIE: "电影",
+    MEDIA_TYPE_SERIES: "剧集",
+    MEDIA_TYPE_UNKNOWN: "未识别类型",
+}
 
 HISTORY_KEYS = [
     "remaining",
@@ -1788,6 +1799,13 @@ def collect_entry_title(item, seen: Dict[str, int]) -> str:
     return f"{title} #{count + 1}"
 
 
+def collect_entry_subject_id(item) -> str:
+    link_el = item.select_one("li.title a") or item.select_one("a.nbgnbg")
+    href = link_el.get("href", "") if link_el else ""
+    match = re.search(r"/subject/(\d+)", href)
+    return match.group(1) if match else ""
+
+
 def collect_entry_rating(item) -> Optional[int]:
     rating_el = item.select_one('span[class*="rating"]')
     if not rating_el:
@@ -1808,6 +1826,12 @@ def collect_entry_rated_at(item) -> Optional[str]:
     return clean_collect_date(item.get_text(" ", strip=True))
 
 
+def sort_collect_entries_by_recency(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    indexed = list(enumerate(entries))
+    indexed.sort(key=lambda pair: (str(pair[1].get("rated_at") or ""), -pair[0]), reverse=True)
+    return [entry for _, entry in indexed]
+
+
 @st.cache_data(show_spinner=False)
 def fetch_douban_collect_entries(user_id: str, max_items: int = DOUBAN_COLLECT_MAX_ITEMS) -> List[Dict[str, Any]]:
     ensure_beautiful_soup()
@@ -1816,57 +1840,65 @@ def fetch_douban_collect_entries(user_id: str, max_items: int = DOUBAN_COLLECT_M
         raise ValueError("豆瓣 ID 格式不正确。")
 
     max_items = max(DOUBAN_COLLECT_PAGE_SIZE, min(DOUBAN_COLLECT_MAX_ITEMS, int(max_items)))
-    entries: List[Dict[str, Optional[str]]] = []
+    entries: List[Dict[str, Any]] = []
     seen_titles: Dict[str, int] = {}
+    seen_keys = set()
 
-    for start in range(0, max_items, DOUBAN_COLLECT_PAGE_SIZE):
-        resp = requests.get(
-            DOUBAN_COLLECT_URL_TEMPLATE.format(user_id=clean_user_id),
-            params={
-                "start": start,
-                "sort": "time",
-                "type": "all",
-                "filter": "all",
-                "mode": "grid",
-            },
-            headers=HEADERS,
-            timeout=15,
-        )
-        resp.raise_for_status()
+    for media_type, douban_type in DOUBAN_COLLECT_MEDIA_FILTERS:
+        for start in range(0, max_items, DOUBAN_COLLECT_PAGE_SIZE):
+            resp = requests.get(
+                DOUBAN_COLLECT_URL_TEMPLATE.format(user_id=clean_user_id),
+                params={
+                    "start": start,
+                    "sort": "time",
+                    "type": douban_type,
+                    "filter": "all",
+                    "mode": "grid",
+                },
+                headers=HEADERS,
+                timeout=15,
+            )
+            resp.raise_for_status()
 
-        soup = BeautifulSoup(resp.text, "html.parser")
-        items = soup.select("div.item.comment-item, div.item")
-        if not items:
-            break
+            soup = BeautifulSoup(resp.text, "html.parser")
+            items = soup.select("div.item.comment-item, div.item")
+            if not items:
+                break
 
-        before_count = len(entries)
-        for item in items:
-            title = collect_entry_title(item, seen_titles)
-            if not title:
-                continue
+            before_count = len(entries)
+            for item in items:
+                title = collect_entry_title(item, seen_titles)
+                if not title:
+                    continue
 
-            img_el = item.select_one("div.pic img")
-            poster_url = img_el.get("src") or img_el.get("data-src") if img_el else None
-            entries.append(
-                {
+                subject_id = collect_entry_subject_id(item)
+                dedupe_key = f"id:{subject_id}" if subject_id else f"title:{media_type}:{title}"
+                if dedupe_key in seen_keys:
+                    continue
+                seen_keys.add(dedupe_key)
+
+                img_el = item.select_one("div.pic img")
+                poster_url = img_el.get("src") or img_el.get("data-src") if img_el else None
+                entry: Dict[str, Any] = {
                     "title": title,
                     "poster_url": poster_url,
                     "rating": collect_entry_rating(item),
                     "rated_at": collect_entry_rated_at(item),
+                    "media_type": media_type,
                 }
-            )
-            if len(entries) >= max_items:
+                if subject_id:
+                    entry["subject_id"] = subject_id
+                entries.append(entry)
+
+            if len(entries) == before_count:
+                break
+            next_link = soup.select_one("span.next a, .paginator .next a")
+            if not next_link:
                 break
 
-        if len(entries) == before_count:
-            break
-        next_link = soup.select_one("span.next a, .paginator .next a")
-        if not next_link:
-            break
-
     if not entries:
-        raise ValueError("没有读取到公开的“看过”电影。请确认豆瓣主页公开，且链接是 /people/你的ID/collect。")
-    return entries
+        raise ValueError("没有读取到公开的“看过”条目。请确认豆瓣主页公开，且链接是 /people/你的ID/collect。")
+    return sort_collect_entries_by_recency(entries)[:max_items]
 
 
 def normalize_collect_entries(entries: List[Any]) -> List[Dict[str, Any]]:
@@ -1876,15 +1908,20 @@ def normalize_collect_entries(entries: List[Any]) -> List[Dict[str, Any]]:
         if not isinstance(entry, dict):
             title = str(entry or "").strip()
             poster_url = ""
+            subject_id = ""
             rating = None
             rated_at = None
+            media_type = MEDIA_TYPE_UNKNOWN
             has_rating_key = False
             has_rated_at_key = False
+            has_media_type_key = False
         else:
             title = str(entry.get("title") or "").strip()
             poster_url = str(entry.get("poster_url") or entry.get("poster") or "").strip()
+            subject_id = str(entry.get("subject_id") or entry.get("subject") or "").strip()
             has_rating_key = "rating" in entry
             has_rated_at_key = "rated_at" in entry or "collect_date" in entry or "date" in entry
+            has_media_type_key = "media_type" in entry or "type" in entry or "category" in entry
             try:
                 rating = int(entry.get("rating")) if entry.get("rating") is not None else None
             except (TypeError, ValueError):
@@ -1892,15 +1929,20 @@ def normalize_collect_entries(entries: List[Any]) -> List[Dict[str, Any]]:
             if rating not in DOUBAN_RATING_VALUES:
                 rating = None
             rated_at = clean_collect_date(entry.get("rated_at") or entry.get("collect_date") or entry.get("date"))
+            media_type = clean_media_type(entry.get("media_type") or entry.get("type") or entry.get("category"))
         title = re.sub(r"\s+", " ", title)
         if not title or title in seen:
             continue
         seen.add(title)
         item: Dict[str, Any] = {"title": title, "poster_url": poster_url}
+        if subject_id:
+            item["subject_id"] = subject_id
         if has_rating_key:
             item["rating"] = rating
         if has_rated_at_key:
             item["rated_at"] = rated_at
+        if has_media_type_key:
+            item["media_type"] = media_type
         normalized.append(item)
     return normalized
 
@@ -1911,6 +1953,18 @@ def collect_entries_have_rating_data(entries: List[Dict[str, Any]]) -> bool:
 
 def collect_entries_have_year_data(entries: List[Dict[str, Any]]) -> bool:
     return any(isinstance(entry, dict) and "rated_at" in entry for entry in entries)
+
+
+def collect_entries_have_media_type_data(entries: List[Dict[str, Any]]) -> bool:
+    return any(isinstance(entry, dict) and "media_type" in entry for entry in entries)
+
+
+def collect_media_type_counts(entries: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts: Dict[str, int] = {MEDIA_TYPE_MOVIE: 0, MEDIA_TYPE_SERIES: 0, MEDIA_TYPE_UNKNOWN: 0}
+    for entry in entries:
+        media_type = clean_media_type(entry.get("media_type") if isinstance(entry, dict) else None)
+        counts[media_type] = counts.get(media_type, 0) + 1
+    return counts
 
 
 def collect_rating_counts(entries: List[Dict[str, Any]]) -> Dict[Optional[int], int]:
@@ -1935,6 +1989,23 @@ def collect_year_counts(entries: List[Dict[str, Any]]) -> Dict[Optional[int], in
         else:
             counts[None] = counts.get(None, 0) + 1
     return dict(sorted(counts.items(), key=lambda item: -1 if item[0] is None else -int(item[0])))
+
+
+def filter_collect_entries_by_media_type(
+    entries: List[Dict[str, Any]],
+    selected_media_types: List[str],
+    include_unknown_media_type: bool,
+) -> List[Dict[str, Any]]:
+    clean_types = {clean_media_type(media_type) for media_type in selected_media_types}
+    clean_types.discard(MEDIA_TYPE_UNKNOWN)
+    if not clean_types and not include_unknown_media_type:
+        return []
+    filtered: List[Dict[str, Any]] = []
+    for entry in entries:
+        media_type = clean_media_type(entry.get("media_type") if isinstance(entry, dict) else None)
+        if media_type in clean_types or (media_type == MEDIA_TYPE_UNKNOWN and include_unknown_media_type):
+            filtered.append(entry)
+    return filtered
 
 
 def filter_collect_entries_by_rating(
@@ -1986,12 +2057,15 @@ def filter_collect_entries_by_year(
 
 def filter_collect_entries(
     entries: List[Dict[str, Any]],
+    selected_media_types: List[str],
+    include_unknown_media_type: bool,
     selected_ratings: List[int],
     include_unrated: bool,
     selected_years: Optional[List[int]] = None,
     include_unknown_year: bool = True,
 ) -> List[Dict[str, Any]]:
-    filtered = filter_collect_entries_by_rating(entries, selected_ratings, include_unrated)
+    filtered = filter_collect_entries_by_media_type(entries, selected_media_types, include_unknown_media_type)
+    filtered = filter_collect_entries_by_rating(filtered, selected_ratings, include_unrated)
     if selected_years is None:
         return filtered
     return filter_collect_entries_by_year(filtered, selected_years, include_unknown_year)
@@ -2276,6 +2350,8 @@ def prepare_douban_collect_candidates_ui(
     user_id: str,
     warm_posters: bool,
     max_items: int = DOUBAN_COLLECT_MAX_ITEMS,
+    selected_media_types: Optional[List[str]] = None,
+    include_unknown_media_type: bool = True,
     selected_ratings: Optional[List[int]] = None,
     include_unrated: bool = True,
     selected_years: Optional[List[int]] = None,
@@ -2292,8 +2368,17 @@ def prepare_douban_collect_candidates_ui(
         text_holder.caption("正在读取已导入片单...")
     else:
         entries = fetch_douban_collect_entries(user_id, max_items)
+    active_media_types = DOUBAN_COLLECT_MEDIA_TYPES if selected_media_types is None else selected_media_types
     active_ratings = DOUBAN_RATING_VALUES if selected_ratings is None else selected_ratings
-    entries = filter_collect_entries(entries, active_ratings, include_unrated, selected_years, include_unknown_year)
+    entries = filter_collect_entries(
+        entries,
+        active_media_types,
+        include_unknown_media_type,
+        active_ratings,
+        include_unrated,
+        selected_years,
+        include_unknown_year,
+    )
     movies = [entry["title"] for entry in entries if entry.get("title")]
     poster_url_map = {
         str(entry["title"]): str(entry.get("poster_url") or "")
@@ -2321,7 +2406,7 @@ def prepare_douban_collect_candidates_ui(
         bar.progress(95)
 
     bar.progress(100)
-    text_holder.caption(f"已读取 {len(movies)} 部看过的电影。")
+    text_holder.caption(f"已读取 {len(movies)} 个看过的条目。")
     return movies, poster_map, poster_url_map
 
 
@@ -2970,6 +3055,77 @@ def filter_items(items: List[str], query: str) -> List[str]:
     return [item for item in items if query in item.lower()]
 
 
+def filter_collect_preview_entries(entries: List[Dict[str, Any]], query: str) -> List[Dict[str, Any]]:
+    query = query.strip().lower()
+    if not query:
+        return entries
+    return [entry for entry in entries if query in str(entry.get("title") or "").lower()]
+
+
+def collect_entry_meta(entry: Dict[str, Any]) -> str:
+    parts = []
+    media_type = clean_media_type(entry.get("media_type"))
+    parts.append(MEDIA_TYPE_LABELS.get(media_type, "未识别类型"))
+    rating = entry.get("rating")
+    if rating in DOUBAN_RATING_VALUES:
+        parts.append(f"{rating} 星")
+    rated_at = clean_collect_date(entry.get("rated_at"))
+    if rated_at:
+        parts.append(rated_at)
+    return " · ".join(parts)
+
+
+def valid_excluded_titles(excluded_titles: Any, entries: List[Dict[str, Any]]) -> List[str]:
+    valid_titles = {str(entry.get("title") or "") for entry in entries if entry.get("title")}
+    return [str(title) for title in excluded_titles if str(title) in valid_titles] if isinstance(excluded_titles, list) else []
+
+
+def apply_excluded_titles(entries: List[Dict[str, Any]], excluded_titles: List[str]) -> List[Dict[str, Any]]:
+    excluded = set(excluded_titles)
+    return [entry for entry in entries if str(entry.get("title") or "") not in excluded]
+
+
+def render_editable_collect_preview(
+    entries: List[Dict[str, Any]],
+    search_key: str,
+    excluded_key: str,
+    empty_text: str = "还没有预览结果。",
+) -> None:
+    excluded_titles = list(st.session_state.get(excluded_key, []))
+    if excluded_titles:
+        cols = st.columns([2.2, 1])
+        with cols[0]:
+            st.caption(f"已手动移除 {len(excluded_titles)} 部。")
+        with cols[1]:
+            if render_button_compat("恢复全部", key=f"{excluded_key}_restore", use_container_width=True):
+                st.session_state[excluded_key] = []
+                rerun()
+
+    if not entries:
+        st.write(empty_text)
+        return
+
+    query = st.text_input("搜索候选项", key=search_key, placeholder="输入关键词筛选")
+    filtered = filter_collect_preview_entries(entries, query)
+    display_entries = filtered[:30]
+    st.caption(f"显示 {len(display_entries)} / {len(filtered)} 项；当前候选共 {len(entries)} 项。")
+    for index, entry in enumerate(display_entries, 1):
+        title = str(entry.get("title") or "")
+        row_cols = st.columns([0.10, 0.78, 0.12])
+        with row_cols[0]:
+            st.write(f"{index}.")
+        with row_cols[1]:
+            st.write(title)
+            st.caption(collect_entry_meta(entry))
+        with row_cols[2]:
+            if render_button_compat("×", key=f"{excluded_key}_remove_{stable_int(title)}", use_container_width=True):
+                next_excluded = list(dict.fromkeys([*excluded_titles, title]))
+                st.session_state[excluded_key] = next_excluded
+                rerun()
+    if len(filtered) > len(display_entries):
+        st.caption("还有更多结果未显示，请继续输入关键词缩小范围。")
+
+
 def render_searchable_item_preview(items: List[str], search_key: str, empty_text: str = "还没有候选项。") -> None:
     if not items:
         st.write(empty_text)
@@ -3585,13 +3741,16 @@ def store_imported_movie_list_state(imported, *, update_collect_input: bool = Tr
     st.session_state["ui_douban_collect_preview_movies"] = imported.items
     st.session_state["ui_douban_collect_preview_source"] = f"import:{imported.id}"
     st.session_state["ui_douban_collect_preview_user_id"] = ""
+    st.session_state["ui_douban_collect_excluded_titles"] = []
     st.session_state["ui_import_id"] = imported.id
     st.session_state["ui_import_item_count"] = len(imported.items)
     st.session_state["ui_import_poster_url_map"] = imported.poster_url_map
     st.session_state["ui_import_rating_map"] = imported.rating_map
     st.session_state["ui_import_rated_at_map"] = imported.rated_at_map
+    st.session_state["ui_import_media_type_map"] = imported.media_type_map
     st.session_state["ui_import_has_rating_data"] = imported.has_rating_data
     st.session_state["ui_import_has_year_data"] = imported.has_rated_at_data
+    st.session_state["ui_import_has_media_type_data"] = imported.has_media_type_data
     st.session_state["ui_import_entries"] = imported.entries
     st.session_state["ui_import_source"] = imported.source
 
@@ -6441,10 +6600,13 @@ def reset_douban_collect_parameter_defaults() -> None:
     st.session_state["ui_douban_collect_seed_text"] = ""
     st.session_state["ui_douban_collect_blind_mode"] = False
     st.session_state["ui_douban_collect_side_shuffle"] = True
+    st.session_state["ui_douban_collect_selected_media_types"] = DOUBAN_COLLECT_MEDIA_TYPES[:]
+    st.session_state["ui_douban_collect_include_unknown_media_type"] = True
     st.session_state["ui_douban_collect_selected_ratings"] = DOUBAN_RATING_VALUES[:]
     st.session_state["ui_douban_collect_include_unrated"] = True
     st.session_state.pop("ui_douban_collect_selected_years", None)
     st.session_state["ui_douban_collect_include_unknown_year"] = True
+    st.session_state["ui_douban_collect_excluded_titles"] = []
     st.session_state.pop("ui_douban_collect_preview_movies", None)
     st.session_state.pop("ui_douban_collect_preview_entries", None)
     st.session_state.pop("ui_douban_collect_preview_source", None)
@@ -6455,8 +6617,10 @@ def reset_douban_collect_parameter_defaults() -> None:
     st.session_state.pop("ui_import_entries", None)
     st.session_state.pop("ui_import_rating_map", None)
     st.session_state.pop("ui_import_rated_at_map", None)
+    st.session_state.pop("ui_import_media_type_map", None)
     st.session_state.pop("ui_import_has_rating_data", None)
     st.session_state.pop("ui_import_has_year_data", None)
+    st.session_state.pop("ui_import_has_media_type_data", None)
     st.session_state.pop("ui_import_source", None)
     st.session_state.pop("ui_import_loaded_notice", None)
     st.session_state.pop("ui_import_lookup_id", None)
@@ -6471,7 +6635,7 @@ def render_imported_list_notice() -> None:
 
     item_count = int(st.session_state.get("ui_import_item_count", 0) or 0)
     import_url = build_import_url(import_id)
-    st.info(f"已导入豆瓣已看片单：{item_count} 部。片单 ID：{import_id}")
+    st.info(f"已导入豆瓣已看片单：{item_count} 个条目。片单 ID：{import_id}")
     c1, c2 = st.columns(2)
     with c1:
         render_copy_button("复制手机继续链接", import_url, "copy_import_url", "导入链接")
@@ -6481,9 +6645,14 @@ def render_imported_list_notice() -> None:
 
 def render_collect_filters(
     entries: List[Dict[str, Any]],
+    has_media_type_data: bool,
     has_rating_data: bool,
     has_year_data: bool,
-) -> tuple[List[int], bool, Optional[List[int]], bool, List[Dict[str, Any]]]:
+) -> tuple[List[str], bool, List[int], bool, Optional[List[int]], bool, List[Dict[str, Any]]]:
+    if "ui_douban_collect_selected_media_types" not in st.session_state:
+        st.session_state["ui_douban_collect_selected_media_types"] = DOUBAN_COLLECT_MEDIA_TYPES[:]
+    if "ui_douban_collect_include_unknown_media_type" not in st.session_state:
+        st.session_state["ui_douban_collect_include_unknown_media_type"] = True
     if "ui_douban_collect_selected_ratings" not in st.session_state:
         st.session_state["ui_douban_collect_selected_ratings"] = DOUBAN_RATING_VALUES[:]
     if "ui_douban_collect_include_unrated" not in st.session_state:
@@ -6491,18 +6660,66 @@ def render_collect_filters(
     if "ui_douban_collect_include_unknown_year" not in st.session_state:
         st.session_state["ui_douban_collect_include_unknown_year"] = True
 
+    if not entries:
+        st.caption("读取片单后会显示各星级数量。")
+        return DOUBAN_COLLECT_MEDIA_TYPES[:], True, DOUBAN_RATING_VALUES[:], True, None, True, []
+
+    st.markdown("**按条目类型筛选**")
+    st.caption("提示：新版读取会区分电影和剧集；旧导入片单没有类型信息时会归为未识别类型。")
+
+    media_counts = collect_media_type_counts(entries)
+    if not has_media_type_data:
+        st.warning("这份片单没有类型信息。可以继续整理全部条目；如果想按电影/剧集筛选，请重新读取或重新用书签导入一次。")
+        selected_media_types, include_unknown_media_type = DOUBAN_COLLECT_MEDIA_TYPES[:], True
+        media_filtered_entries = entries
+    else:
+        stored_media_types = st.session_state.get("ui_douban_collect_selected_media_types", [])
+        valid_media_types = [
+            clean_media_type(media_type)
+            for media_type in stored_media_types
+            if clean_media_type(media_type) in DOUBAN_COLLECT_MEDIA_TYPES
+        ]
+        if valid_media_types != stored_media_types:
+            st.session_state["ui_douban_collect_selected_media_types"] = valid_media_types
+
+        media_cols = st.columns(4)
+        with media_cols[0]:
+            if render_button_compat("全部类型", key="btn_media_type_all", use_container_width=True):
+                st.session_state["ui_douban_collect_selected_media_types"] = DOUBAN_COLLECT_MEDIA_TYPES[:]
+                st.session_state["ui_douban_collect_include_unknown_media_type"] = True
+        with media_cols[1]:
+            if render_button_compat("只看电影", key="btn_media_type_movie", use_container_width=True):
+                st.session_state["ui_douban_collect_selected_media_types"] = [MEDIA_TYPE_MOVIE]
+                st.session_state["ui_douban_collect_include_unknown_media_type"] = False
+        with media_cols[2]:
+            if render_button_compat("只看剧集", key="btn_media_type_series", use_container_width=True):
+                st.session_state["ui_douban_collect_selected_media_types"] = [MEDIA_TYPE_SERIES]
+                st.session_state["ui_douban_collect_include_unknown_media_type"] = False
+        with media_cols[3]:
+            if render_button_compat("清空类型", key="btn_media_type_clear", use_container_width=True):
+                st.session_state["ui_douban_collect_selected_media_types"] = []
+                st.session_state["ui_douban_collect_include_unknown_media_type"] = False
+
+        selected_media_types = st.multiselect(
+            "选择要整理的类型",
+            options=DOUBAN_COLLECT_MEDIA_TYPES,
+            format_func=lambda media_type: f"{MEDIA_TYPE_LABELS.get(media_type, media_type)}（{media_counts.get(media_type, 0)} 部）",
+            key="ui_douban_collect_selected_media_types",
+        )
+        include_unknown_media_type = st.checkbox(
+            f"包含未识别类型（{media_counts.get(MEDIA_TYPE_UNKNOWN, 0)} 部）",
+            key="ui_douban_collect_include_unknown_media_type",
+        )
+        media_filtered_entries = filter_collect_entries_by_media_type(entries, selected_media_types, include_unknown_media_type)
+
     st.markdown("**按我的豆瓣评分筛选**")
     st.caption("提示：老版本获取的片单不支持按评分筛选，使用该功能需重新获取片单。")
 
-    if not entries:
-        st.caption("读取片单后会显示各星级数量。")
-        return DOUBAN_RATING_VALUES[:], True, None, True, []
-
-    counts = collect_rating_counts(entries)
+    counts = collect_rating_counts(media_filtered_entries)
     if not has_rating_data:
-        st.warning("这份片单没有评分信息。可以继续整理全部电影；如果想按星级筛选，请重新用书签导入一次。")
+        st.warning("这份片单没有评分信息。可以继续整理全部条目；如果想按星级筛选，请重新用书签导入一次。")
         selected_ratings, include_unrated = DOUBAN_RATING_VALUES[:], True
-        rating_filtered_entries = entries
+        rating_filtered_entries = media_filtered_entries
     else:
         preset_cols = st.columns(4)
         with preset_cols[0]:
@@ -6532,7 +6749,7 @@ def render_collect_filters(
             f"包含未评分 / 未识别评分（{counts.get(None, 0)} 部）",
             key="ui_douban_collect_include_unrated",
         )
-        rating_filtered_entries = filter_collect_entries_by_rating(entries, selected_ratings, include_unrated)
+        rating_filtered_entries = filter_collect_entries_by_rating(media_filtered_entries, selected_ratings, include_unrated)
 
     st.markdown("**按我的豆瓣标记年份筛选**")
     st.caption("提示：按“看过”页面显示的标记日期筛选，可以用来整理某一年的观影名单。")
@@ -6540,10 +6757,10 @@ def render_collect_filters(
     year_counts = collect_year_counts(rating_filtered_entries)
     available_years = sorted([year for year in year_counts if year is not None], reverse=True)
     if not has_year_data:
-        st.warning("这份片单没有标记年份信息。可以继续整理当前评分筛选后的电影；如果想按年份筛选，请重新读取或重新用书签导入一次。")
+        st.warning("这份片单没有标记年份信息。可以继续整理当前评分筛选后的条目；如果想按年份筛选，请重新读取或重新用书签导入一次。")
         filtered_entries = rating_filtered_entries
         st.caption(f"当前筛选后：{len(filtered_entries)} 部。")
-        return selected_ratings, include_unrated, None, True, filtered_entries
+        return selected_media_types, include_unknown_media_type, selected_ratings, include_unrated, None, True, filtered_entries
 
     stored_years = st.session_state.get("ui_douban_collect_selected_years")
     if stored_years is None:
@@ -6595,7 +6812,7 @@ def render_collect_filters(
 
     filtered_entries = filter_collect_entries_by_year(rating_filtered_entries, selected_years, include_unknown_year)
     st.caption(f"当前筛选后：{len(filtered_entries)} 部。")
-    return selected_ratings, include_unrated, selected_years, include_unknown_year, filtered_entries
+    return selected_media_types, include_unknown_media_type, selected_ratings, include_unrated, selected_years, include_unknown_year, filtered_entries
 
 
 def render_import_id_loader() -> None:
@@ -6916,7 +7133,7 @@ def render_douban_collect_parameter_page(mode: str) -> None:
         reset_douban_collect_parameter_defaults()
 
     if st.session_state.pop("ui_import_loaded_notice", False):
-        st.success("导入成功。你可以先按评分筛选，再开始整理。")
+        st.success("导入成功。你可以先按类型、评分和标记年份筛选，再开始整理。")
 
     st.text_input(
         "豆瓣 ID 或看过页面链接",
@@ -6976,7 +7193,7 @@ def render_douban_collect_parameter_page(mode: str) -> None:
             )
         )
     else:
-        st.info("完整排序会把所有看过的电影排出顺序；如果片单很长，可能需要比较很多次。第一次建议先试 Top 20。")
+        st.info("完整排序会把所有看过的条目排出顺序；如果片单很长，可能需要比较很多次。第一次建议先试 Top 20。")
 
     show_poster = st.checkbox(
         "整理时显示电影海报",
@@ -6989,18 +7206,35 @@ def render_douban_collect_parameter_page(mode: str) -> None:
     preview_entries = normalize_collect_entries(st.session_state.get("ui_douban_collect_preview_entries", []))
     if st.session_state.get("ui_douban_collect_preview_source") != active_source:
         preview_entries = []
+        st.session_state["ui_douban_collect_excluded_titles"] = []
+    else:
+        valid_excluded = valid_excluded_titles(st.session_state.get("ui_douban_collect_excluded_titles", []), preview_entries)
+        if valid_excluded != st.session_state.get("ui_douban_collect_excluded_titles", []):
+            st.session_state["ui_douban_collect_excluded_titles"] = valid_excluded
+    preview_has_media_type_data = collect_entries_have_media_type_data(preview_entries)
     preview_has_rating_data = collect_entries_have_rating_data(preview_entries)
     preview_has_year_data = collect_entries_have_year_data(preview_entries)
-    selected_ratings, include_unrated, selected_years, include_unknown_year, filtered_entries = render_collect_filters(
+    (
+        selected_media_types,
+        include_unknown_media_type,
+        selected_ratings,
+        include_unrated,
+        selected_years,
+        include_unknown_year,
+        filtered_entries,
+    ) = render_collect_filters(
         preview_entries,
+        preview_has_media_type_data,
         preview_has_rating_data,
         preview_has_year_data,
     )
-    preview_movies = [str(entry["title"]) for entry in filtered_entries if entry.get("title")]
+    excluded_titles = list(st.session_state.get("ui_douban_collect_excluded_titles", []))
+    final_entries = apply_excluded_titles(filtered_entries, excluded_titles)
+    preview_movies = [str(entry["title"]) for entry in final_entries if entry.get("title")]
 
     if preview_movies:
         effective_top_k = min(top_k, len(preview_movies)) if top_k is not None else None
-        st.caption(f"当前将整理 {len(preview_movies)} 部电影。预计需要取舍约 {estimated_comparisons(len(preview_movies), effective_top_k)} 次。")
+        st.caption(f"当前将整理 {len(preview_movies)} 个条目。预计需要取舍约 {estimated_comparisons(len(preview_movies), effective_top_k)} 次。")
     else:
         st.caption("先预览一次，确认能读取片单，再开始整理。")
 
@@ -7013,7 +7247,7 @@ def render_douban_collect_parameter_page(mode: str) -> None:
                     st.error("没有读到这份片单。请确认片单 ID 正确，或刚导入后等待几秒再试。")
                 else:
                     store_imported_movie_list_state(imported, update_collect_input=False)
-                    st.success(f"读取到 {len(imported.items)} 部已导入电影。")
+                    st.success(f"读取到 {len(imported.items)} 个已导入条目。")
                     rerun()
             elif clean_user_id:
                 try:
@@ -7023,7 +7257,8 @@ def render_douban_collect_parameter_page(mode: str) -> None:
                     st.session_state["ui_douban_collect_preview_movies"] = movies
                     st.session_state["ui_douban_collect_preview_source"] = f"user:{clean_user_id}"
                     st.session_state["ui_douban_collect_preview_user_id"] = clean_user_id
-                    st.success(f"读取到 {len(movies)} 部看过的电影。")
+                    st.session_state["ui_douban_collect_excluded_titles"] = []
+                    st.success(f"读取到 {len(movies)} 个看过的条目。")
                     rerun()
                 except Exception as e:
                     st.error(f"读取豆瓣看过列表失败：{e}")
@@ -7035,9 +7270,14 @@ def render_douban_collect_parameter_page(mode: str) -> None:
         elif clean_user_id:
             st.caption(f"将读取：movie.douban.com/people/{clean_user_id}/collect")
 
-    if preview_movies:
-        with st.expander(f"当前筛选后的片单（{len(preview_movies)} 部）", expanded=True):
-            render_searchable_item_preview(preview_movies, "ui_douban_collect_preview_search", empty_text="还没有预览结果。")
+    if filtered_entries or excluded_titles:
+        with st.expander(f"当前筛选后的片单（{len(preview_movies)} 个条目）", expanded=True):
+            render_editable_collect_preview(
+                final_entries,
+                "ui_douban_collect_preview_search",
+                "ui_douban_collect_excluded_titles",
+                empty_text="当前候选已被筛选或手动移除为空。",
+            )
 
     nav1, nav2, nav3 = st.columns(3)
     with nav1:
@@ -7061,13 +7301,16 @@ def render_douban_collect_parameter_page(mode: str) -> None:
                         return
                 filtered_entries = filter_collect_entries(
                     preview_entries,
+                    selected_media_types,
+                    include_unknown_media_type,
                     selected_ratings,
                     include_unrated,
                     selected_years,
                     include_unknown_year,
                 )
-                if len(filtered_entries) < 2:
-                    st.warning("当前筛选后不足 2 部电影，无法开始整理。")
+                final_entries = apply_excluded_titles(filtered_entries, list(st.session_state.get("ui_douban_collect_excluded_titles", [])))
+                if len(final_entries) < 2:
+                    st.warning("当前筛选和手动移除后不足 2 个条目，无法开始整理。")
                     return
                 st.session_state["ui_pending_douban"] = {
                     "source_type": "collect_import",
@@ -7076,7 +7319,9 @@ def render_douban_collect_parameter_page(mode: str) -> None:
                     "top_k": top_k,
                     "user_id": "",
                     "import_id": clean_import_id_value,
-                    "entries": preview_entries,
+                    "entries": final_entries,
+                    "selected_media_types": selected_media_types,
+                    "include_unknown_media_type": include_unknown_media_type,
                     "selected_ratings": selected_ratings,
                     "include_unrated": include_unrated,
                     "selected_years": selected_years,
@@ -7090,8 +7335,8 @@ def render_douban_collect_parameter_page(mode: str) -> None:
                 st.session_state["ui_step"] = 4
                 rerun()
             elif clean_user_id:
-                if preview_entries and len(filtered_entries) < 2:
-                    st.warning("当前筛选后不足 2 部电影，无法开始整理。")
+                if preview_entries and len(final_entries) < 2:
+                    st.warning("当前筛选和手动移除后不足 2 个条目，无法开始整理。")
                     return
                 st.session_state["ui_pending_douban"] = {
                     "source_type": "collect",
@@ -7099,6 +7344,9 @@ def render_douban_collect_parameter_page(mode: str) -> None:
                     "theme": (st.session_state.get("ui_douban_collect_theme", "") or "").strip() or "我的豆瓣已看电影总榜",
                     "top_k": top_k,
                     "user_id": clean_user_id,
+                    "entries": final_entries if preview_entries else None,
+                    "selected_media_types": selected_media_types,
+                    "include_unknown_media_type": include_unknown_media_type,
                     "selected_ratings": selected_ratings,
                     "include_unrated": include_unrated,
                     "selected_years": selected_years,
@@ -7151,14 +7399,17 @@ def render_douban_prepare_page() -> None:
         poster_url_map: Dict[str, str] = {}
         if source_type in {"collect", "collect_import"}:
             pending_ratings = pending.get("selected_ratings")
+            pending_media_types = pending.get("selected_media_types")
             movies, poster_map, poster_url_map = prepare_douban_collect_candidates_ui(
                 str(pending.get("user_id", "")),
                 warm_posters=bool(pending["show_poster"]),
+                selected_media_types=list(DOUBAN_COLLECT_MEDIA_TYPES if pending_media_types is None else pending_media_types),
+                include_unknown_media_type=bool(pending.get("include_unknown_media_type", True)),
                 selected_ratings=list(DOUBAN_RATING_VALUES if pending_ratings is None else pending_ratings),
                 include_unrated=bool(pending.get("include_unrated", True)),
                 selected_years=pending.get("selected_years"),
                 include_unknown_year=bool(pending.get("include_unknown_year", True)),
-                imported_entries=pending.get("entries") if source_type == "collect_import" else None,
+                imported_entries=pending.get("entries") if pending.get("entries") else None,
             )
         else:
             movies, poster_map = prepare_douban_candidates_ui(
@@ -7166,7 +7417,7 @@ def render_douban_prepare_page() -> None:
                 warm_posters=bool(pending["show_poster"]),
             )
         if len(movies) < 2:
-            st.error("获取到的电影数量不足 2，无法开始整理。")
+            st.error("获取到的候选项不足 2，无法开始整理。")
             if render_button_compat("返回设置", key="btn_prepare_failed_back", use_container_width=True):
                 st.session_state.pop("ui_pending_douban", None)
                 go_to_step(2)
@@ -7196,7 +7447,7 @@ def render_douban_prepare_page() -> None:
         st.session_state["ui_step"] = 3
         rerun()
     except Exception as e:
-        st.error(f"准备豆瓣电影失败：{e}")
+        st.error(f"准备豆瓣片单失败：{e}")
         if render_button_compat("返回设置", key="btn_prepare_error_back", use_container_width=True):
             st.session_state.pop("ui_pending_douban", None)
             go_to_step(2)

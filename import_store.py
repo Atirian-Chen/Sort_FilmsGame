@@ -13,6 +13,23 @@ from analytics import analytics_enabled, get_public_app_url, get_supabase_config
 
 IMPORT_TABLE = "imported_movie_lists"
 IMPORT_ID_RE = re.compile(r"^db-[a-z0-9]{12,32}$")
+MEDIA_TYPE_MOVIE = "movie"
+MEDIA_TYPE_SERIES = "series"
+MEDIA_TYPE_UNKNOWN = "unknown"
+MEDIA_TYPE_VALUES = (MEDIA_TYPE_MOVIE, MEDIA_TYPE_SERIES, MEDIA_TYPE_UNKNOWN)
+MEDIA_TYPE_ALIASES = {
+    "movie": MEDIA_TYPE_MOVIE,
+    "film": MEDIA_TYPE_MOVIE,
+    "电影": MEDIA_TYPE_MOVIE,
+    "tv": MEDIA_TYPE_SERIES,
+    "series": MEDIA_TYPE_SERIES,
+    "show": MEDIA_TYPE_SERIES,
+    "drama": MEDIA_TYPE_SERIES,
+    "剧集": MEDIA_TYPE_SERIES,
+    "电视剧": MEDIA_TYPE_SERIES,
+    "unknown": MEDIA_TYPE_UNKNOWN,
+    "未知": MEDIA_TYPE_UNKNOWN,
+}
 
 
 @dataclass
@@ -23,8 +40,10 @@ class ImportedMovieList:
     poster_url_map: Dict[str, str]
     rating_map: Dict[str, int]
     rated_at_map: Dict[str, str]
+    media_type_map: Dict[str, str]
     has_rating_data: bool = False
     has_rated_at_data: bool = False
+    has_media_type_data: bool = False
     source: str = "douban_bookmarklet"
 
 
@@ -47,6 +66,11 @@ def clean_rating(value: Any) -> Optional[int]:
     return rating if 1 <= rating <= 5 else None
 
 
+def clean_media_type(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return MEDIA_TYPE_ALIASES.get(text, MEDIA_TYPE_UNKNOWN)
+
+
 def clean_collect_date(value: Any) -> Optional[str]:
     text = str(value or "").strip()
     if not text:
@@ -66,17 +90,23 @@ def normalize_import_entries(entries: List[Any]) -> List[Dict[str, Any]]:
     for entry in entries:
         title = ""
         poster_url = ""
+        subject_id = ""
         rating: Optional[int] = None
         rated_at: Optional[str] = None
+        media_type = MEDIA_TYPE_UNKNOWN
         has_rating_key = False
         has_rated_at_key = False
+        has_media_type_key = False
         if isinstance(entry, dict):
             title = str(entry.get("title") or "").strip()
             poster_url = str(entry.get("poster_url") or entry.get("poster") or "").strip()
+            subject_id = str(entry.get("subject_id") or entry.get("subject") or "").strip()
             has_rating_key = "rating" in entry
             rating = clean_rating(entry.get("rating"))
             has_rated_at_key = "rated_at" in entry or "collect_date" in entry or "date" in entry
             rated_at = clean_collect_date(entry.get("rated_at") or entry.get("collect_date") or entry.get("date"))
+            has_media_type_key = "media_type" in entry or "type" in entry or "category" in entry
+            media_type = clean_media_type(entry.get("media_type") or entry.get("type") or entry.get("category"))
         else:
             title = str(entry or "").strip()
         title = re.sub(r"\s+", " ", title)
@@ -84,10 +114,14 @@ def normalize_import_entries(entries: List[Any]) -> List[Dict[str, Any]]:
             continue
         seen.add(title)
         item: Dict[str, Any] = {"title": title, "poster_url": poster_url}
+        if subject_id:
+            item["subject_id"] = subject_id
         if has_rating_key:
             item["rating"] = rating
         if has_rated_at_key:
             item["rated_at"] = rated_at
+        if has_media_type_key:
+            item["media_type"] = media_type
         normalized.append(item)
     return normalized[:1500]
 
@@ -117,8 +151,10 @@ def save_imported_movie_list(entries: List[Any], *, source: str = "douban_bookma
         poster_url_map={entry["title"]: entry["poster_url"] for entry in clean_entries if entry.get("poster_url")},
         rating_map={entry["title"]: int(entry["rating"]) for entry in clean_entries if entry.get("rating") is not None},
         rated_at_map={entry["title"]: str(entry["rated_at"]) for entry in clean_entries if entry.get("rated_at")},
+        media_type_map={entry["title"]: str(entry["media_type"]) for entry in clean_entries if "media_type" in entry},
         has_rating_data=any("rating" in entry for entry in clean_entries),
         has_rated_at_data=any("rated_at" in entry for entry in clean_entries),
+        has_media_type_data=any("media_type" in entry for entry in clean_entries),
         source=source,
     )
 
@@ -144,6 +180,7 @@ def fetch_imported_movie_list(import_id: str) -> Optional[ImportedMovieList]:
     raw_entries = row.get("items") or []
     has_rating_data = any(isinstance(entry, dict) and "rating" in entry for entry in raw_entries)
     has_rated_at_data = any(isinstance(entry, dict) and "rated_at" in entry for entry in raw_entries)
+    has_media_type_data = any(isinstance(entry, dict) and ("media_type" in entry or "type" in entry or "category" in entry) for entry in raw_entries)
     entries = normalize_import_entries(raw_entries)
     if len(entries) < 2:
         return None
@@ -155,8 +192,10 @@ def fetch_imported_movie_list(import_id: str) -> Optional[ImportedMovieList]:
         poster_url_map={entry["title"]: entry["poster_url"] for entry in entries if entry.get("poster_url")},
         rating_map={entry["title"]: int(entry["rating"]) for entry in entries if entry.get("rating") is not None},
         rated_at_map={entry["title"]: str(entry["rated_at"]) for entry in entries if entry.get("rated_at")},
+        media_type_map={entry["title"]: str(entry["media_type"]) for entry in entries if "media_type" in entry},
         has_rating_data=has_rating_data,
         has_rated_at_data=has_rated_at_data,
+        has_media_type_data=has_media_type_data,
         source=str(row.get("source") or "douban_bookmarklet"),
     )
 
@@ -225,12 +264,18 @@ def build_douban_bookmarklet() -> str:
   overlay.textContent = msg.preparing;
   document.body.appendChild(overlay);
   const update = (text) => {{ overlay.textContent = text; }};
-  const parsePage = (doc, seen) => {{
+  const subjectIdFromHref = (href) => {{
+    const match = String(href || "").match(/\\/subject\\/(\\d+)/);
+    return match ? match[1] : "";
+  }};
+  const parsePage = (doc, seen, mediaType) => {{
     const rows = Array.from(doc.querySelectorAll("div.item.comment-item, div.item"));
     const entries = [];
     for (const item of rows) {{
       const titleEl = item.querySelector(".title a em") || item.querySelector(".title a") || item.querySelector("a.nbgnbg");
       const imgEl = item.querySelector("div.pic img") || item.querySelector("img");
+      const linkEl = item.querySelector(".title a") || item.querySelector("a.nbgnbg");
+      const subject_id = subjectIdFromHref(linkEl && linkEl.getAttribute("href"));
       const ratingEl = item.querySelector('span[class*="rating"]');
       const ratingClass = ratingEl ? Array.from(ratingEl.classList).join(" ") : "";
       const ratingMatch = ratingClass.match(/rating([1-5])-t/);
@@ -244,18 +289,22 @@ def build_douban_bookmarklet() -> str:
         const year = (intro.match(/(?:19|20)\\d{{2}}/) || [""])[0];
         if (year && !seen.has(`${{title}} (${{year}})`)) title = `${{title}} (${{year}})`;
       }}
-      if (seen.has(title)) continue;
+      const dedupeKey = subject_id ? `id:${{subject_id}}` : `title:${{mediaType}}:${{title}}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
       seen.add(title);
       entries.push({{
         title,
+        subject_id,
         poster_url: (imgEl && (imgEl.getAttribute("src") || imgEl.getAttribute("data-src"))) || "",
         rating,
-        rated_at
+        rated_at,
+        media_type: mediaType
       }});
     }}
     return entries;
   }};
-  const pageUrl = (start) => `${{location.origin}}${{location.pathname}}?start=${{start}}&sort=time&type=all&filter=all&mode=grid`;
+  const pageUrl = (start, doubanType) => `${{location.origin}}${{location.pathname}}?start=${{start}}&sort=time&type=${{doubanType}}&filter=all&mode=grid`;
   (async () => {{
     try {{
       if (!/douban\\.com$/.test(location.hostname) || !collectPath()) {{
@@ -265,22 +314,26 @@ def build_douban_bookmarklet() -> str:
       }}
       const seen = new Set();
       const entries = [];
-      for (let start = 0; start < cfg.maxItems; start += cfg.pageSize) {{
-        update(`${{msg.readingPage}} ${{Math.floor(start / cfg.pageSize) + 1}} ${{msg.pageSuffix}} ${{entries.length}} ${{msg.movieSuffix}}`);
-        const response = await fetch(pageUrl(start), {{ credentials: "include" }});
-        if (!response.ok) throw new Error(`${{msg.fetchFailed}}${{response.status}}`);
-        const text = await response.text();
-        const doc = new DOMParser().parseFromString(text, "text/html");
-        const current = parsePage(doc, seen);
-        if (!current.length) break;
-        entries.push(...current);
-        if (entries.length >= cfg.maxItems) break;
-        if (!doc.querySelector("span.next a, .paginator .next a")) break;
-        await sleep(420 + Math.floor(Math.random() * 360));
+      const mediaTypes = [["movie", "movie"], ["tv", "series"]];
+      for (const [doubanType, mediaType] of mediaTypes) {{
+        for (let start = 0; start < cfg.maxItems; start += cfg.pageSize) {{
+          update(`${{msg.readingPage}} ${{doubanType === "movie" ? "\\u7535\\u5f71" : "\\u5267\\u96c6"}} ${{Math.floor(start / cfg.pageSize) + 1}} ${{msg.pageSuffix}} ${{entries.length}} ${{msg.movieSuffix}}`);
+          const response = await fetch(pageUrl(start, doubanType), {{ credentials: "include" }});
+          if (!response.ok) throw new Error(`${{msg.fetchFailed}}${{response.status}}`);
+          const text = await response.text();
+          const doc = new DOMParser().parseFromString(text, "text/html");
+          const current = parsePage(doc, seen, mediaType);
+          if (!current.length) break;
+          entries.push(...current);
+          if (!doc.querySelector("span.next a, .paginator .next a")) break;
+          await sleep(420 + Math.floor(Math.random() * 360));
+        }}
       }}
-      if (entries.length < 2) throw new Error(msg.notEnough);
+      entries.sort((a, b) => String(b.rated_at || "").localeCompare(String(a.rated_at || "")));
+      const savedEntries = entries.slice(0, cfg.maxItems);
+      if (savedEntries.length < 2) throw new Error(msg.notEnough);
       const importId = makeId();
-      update(`${{msg.creatingId}} ${{entries.length}} ${{msg.creatingIdSuffix}}${{importId}}`);
+      update(`${{msg.creatingId}} ${{savedEntries.length}} ${{msg.creatingIdSuffix}}${{importId}}`);
       const saveResponse = await fetch(`${{cfg.supabaseUrl}}/rest/v1/${{cfg.table}}`, {{
         method: "POST",
         headers: {{
@@ -292,8 +345,8 @@ def build_douban_bookmarklet() -> str:
         body: JSON.stringify({{
           id: importId,
           source: "douban_bookmarklet",
-          item_count: entries.length,
-          items: entries
+          item_count: savedEntries.length,
+          items: savedEntries
         }})
       }});
       if (!saveResponse.ok) throw new Error(`${{msg.saveFailed}}${{saveResponse.status}}`);
