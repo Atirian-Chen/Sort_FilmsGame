@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlencode
 
 import requests
 import streamlit as st
@@ -66,7 +67,7 @@ from analytics import (
     track_event,
     track_once,
 )
-from experiments import get_experiment_config, get_experiment_event_context
+from experiments import get_experiment_config, get_experiment_event_context, get_experiment_query_params
 from challenge_store import (
     Challenge,
     build_challenge_url,
@@ -592,12 +593,14 @@ def draw_medal_icon(draw: ImageDraw.ImageDraw, x: int, y: int, rank: int, font: 
     draw.text((cx - (bbox[2] - bbox[0]) / 2, cy - (bbox[3] - bbox[1]) / 2 - 1), label, font=font, fill=(255, 255, 255))
 
 
+@st.cache_data(show_spinner=False, max_entries=64)
 def image_file_data_uri(path: Path) -> Optional[str]:
     if not path.exists():
         return None
     try:
-        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-        return f"data:image/png;base64,{encoded}"
+        image_data = path.read_bytes()
+        encoded = base64.b64encode(image_data).decode("ascii")
+        return f"data:{image_mime_type(image_data)};base64,{encoded}"
     except OSError:
         return None
 
@@ -1096,6 +1099,27 @@ def render_app_styles() -> None:
             box-shadow: 0 0 0 3px rgba(155, 106, 88, 0.10);
             transform: translateY(-1px);
             text-decoration: none !important;
+        }
+        .challenge-card-header {
+            min-width: 0;
+        }
+        .challenge-card-header.has-poster {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 68px;
+            align-items: start;
+            gap: 10px;
+        }
+        .challenge-card-heading {
+            min-width: 0;
+        }
+        .challenge-card-poster {
+            width: 68px;
+            height: 96px;
+            border: 1px solid #ddd4ca;
+            border-radius: 5px;
+            background: #f3eee8;
+            object-fit: cover;
+            display: block;
         }
         .collect-spotlight {
             border: 1px solid #dccfc2;
@@ -1681,6 +1705,9 @@ def render_app_styles() -> None:
             }
             .challenge-grid {
                 grid-template-columns: 1fr;
+            }
+            .challenge-card-header.has-poster {
+                grid-template-columns: minmax(0, 1fr) 68px;
             }
             .home-collab-badge {
                 top: 50px;
@@ -3885,6 +3912,7 @@ def maybe_open_url_challenge() -> None:
             list_size=len(challenge.items),
             item_count=len(challenge.items),
             top_k=challenge.top_k,
+            entry_surface=get_query_param("entry_surface") or "direct_list_link",
         ),
     )
     start_challenge(challenge)
@@ -4851,6 +4879,10 @@ def admin_group_df(rows: List[Dict[str, Any]], label_key: str, label_name: str, 
         ]:
             if optional_key in row:
                 item[display_name] = row.get(optional_key, "")
+        if "home_exposure_sessions" in row:
+            item["首页曝光"] = int(row.get("home_exposure_sessions", 0))
+            item["内置片单打开"] = int(row.get("builtin_card_opened_sessions", 0))
+            item["卡片打开率"] = admin_percent(row.get("builtin_card_open_rate"))
         if include_winners:
             item["冠军 Top3"] = row.get("top_winners", "")
         display_rows.append(item)
@@ -6409,16 +6441,46 @@ def render_douban_collect_spotlight(homepage_cta_text: str = "开始整理") -> 
 
 
 def render_builtin_quick_start_lists() -> None:
+    poster_config = get_experiment_config(
+        get_session_id(),
+        "builtin_card_poster_v1",
+        {"show_builtin_card_posters": False},
+    )
+    show_card_posters = bool(poster_config.get("show_builtin_card_posters", False))
+    experiment_query = get_experiment_query_params(get_session_id())
     card_html = []
     for template in FILM_CHALLENGE_TEMPLATES:
-        template_id = html.escape(str(template["id"]), quote=True)
         recommendation = html.escape(str(template.get("recommendation", "")))
+        link_params = {
+            "list": str(template["id"]),
+            "entry_surface": "home_builtin_card",
+            **experiment_query,
+        }
+        card_href = html.escape(f"?{urlencode(link_params)}", quote=True)
+        poster_html = ""
+        header_class = "challenge-card-header"
+        if show_card_posters:
+            poster_asset = Path(str(template.get("card_poster_asset") or ""))
+            poster_path = Path(__file__).parent / poster_asset
+            poster_src = image_file_data_uri(poster_path)
+            poster_title = str(template.get("card_poster_title") or "")
+            if poster_src:
+                header_class += " has-poster"
+                poster_html = (
+                    f'<img class="challenge-card-poster" src="{html.escape(poster_src, quote=True)}" '
+                    f'alt="{html.escape(poster_title, quote=True)}海报" width="68" height="96" loading="eager">'
+                )
         card_html.append(
-            f'<a class="challenge-card" href="?list={template_id}" target="_self" aria-label="整理 {html.escape(str(template["name"]), quote=True)}">'
+            f'<a class="challenge-card" href="{card_href}" target="_self" aria-label="整理 {html.escape(str(template["name"]), quote=True)}">'
             f'<div>'
+            f'<div class="{header_class}">'
+            f'<div class="challenge-card-heading">'
             f'<span class="challenge-badge">{html.escape(str(template.get("badge", "电影片单")))}</span>'
             f'<div class="challenge-title">{html.escape(str(template["name"]))}</div>'
             f'<div class="challenge-copy">{html.escape(str(template.get("tagline", "")))}</div>'
+            f'</div>'
+            f'{poster_html}'
+            f'</div>'
             f'<div class="challenge-reason"><div class="challenge-reason-label">推荐理由</div>{recommendation}</div>'
             f'</div>'
             f'<div class="challenge-foot">'
@@ -6933,13 +6995,6 @@ def render_douban_bookmarklet_import(clean_user_id: str = "") -> None:
                 ),
                 unsafe_allow_html=True,
             )
-            with st.expander("拖不动？手动复制导入按钮代码", expanded=False):
-                st.caption("新建一个浏览器书签，名称填「导入我的豆瓣已看」，网址/URL 粘贴导入按钮代码。")
-                name_col, code_col = st.columns(2)
-                with name_col:
-                    render_copy_button("复制书签名称", bookmarklet_name, "copy_douban_bookmarklet_name", "书签名称")
-                with code_col:
-                    render_copy_button("复制导入按钮代码", bookmarklet, "copy_douban_bookmarklet", "导入按钮代码")
 
         with resume_tab:
             st.caption("电脑导入完成后，页面会显示一个 db- 开头的片单 ID。手机上输入它，就能打开同一份片单。")

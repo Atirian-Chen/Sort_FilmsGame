@@ -18,6 +18,8 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "source": "builtin",
         "badge": "初次整理",
         "recommendation": "适合第一次玩，或想从经典高分片里排出一份个人总榜的用户。",
+        "card_poster_title": "肖申克的救赎",
+        "card_poster_asset": "assets/builtin_list_thumbnails/douban-top50.webp",
         "items": [
             "肖申克的救赎", "霸王别姬", "阿甘正传", "泰坦尼克号", "这个杀手不太冷",
             "美丽人生", "千与千寻", "辛德勒的名单", "盗梦空间", "忠犬八公的故事",
@@ -41,6 +43,8 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "source": "builtin",
         "badge": "导演",
         "recommendation": "适合诺兰粉丝，想认真比较《盗梦空间》《星际穿越》和《奥本海默》的用户。",
+        "card_poster_title": "星际穿越",
+        "card_poster_asset": "assets/builtin_list_thumbnails/nolan.webp",
         "items": [
             "追随", "记忆碎片", "失眠症", "蝙蝠侠：侠影之谜", "致命魔术", "蝙蝠侠：黑暗骑士",
             "盗梦空间", "蝙蝠侠：黑暗骑士崛起", "星际穿越", "敦刻尔克", "信条", "奥本海默",
@@ -56,6 +60,8 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "source": "builtin",
         "badge": "动画",
         "recommendation": "适合宫崎骏粉丝，想把童年、飞行、温柔和冒险排出自己顺序的用户。",
+        "card_poster_title": "千与千寻",
+        "card_poster_asset": "assets/builtin_list_thumbnails/miyazaki.webp",
         "items": [
             "风之谷", "天空之城", "龙猫", "魔女宅急便", "红猪", "幽灵公主",
             "千与千寻", "哈尔的移动城堡", "悬崖上的金鱼姬", "起风了", "你想活出怎样的人生",
@@ -71,6 +77,8 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "source": "builtin",
         "badge": "动画",
         "recommendation": "适合新海诚粉丝，把从早期短长片到《铃芽之旅》的喜欢程度一次排清楚。",
+        "card_poster_title": "你的名字。",
+        "card_poster_asset": "assets/builtin_list_thumbnails/shinkai.webp",
         "items": [
             "星之声", "云之彼端，约定的地方", "秒速5厘米", "追逐繁星的孩子",
             "言叶之庭", "你的名字。", "天气之子", "铃芽之旅",
@@ -86,6 +94,8 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "source": "builtin",
         "badge": "华语",
         "recommendation": "适合华语电影爱好者，想排出自己的华语高分总榜或年度补片清单。",
+        "card_poster_title": "霸王别姬",
+        "card_poster_asset": "assets/builtin_list_thumbnails/chinese-highscore.webp",
         "items": [
             "霸王别姬", "活着", "无间道", "大话西游之大圣娶亲", "让子弹飞", "鬼子来了",
             "饮食男女", "牯岭街少年杀人事件", "阳光灿烂的日子", "花样年华", "一一",
@@ -103,6 +113,8 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "source": "builtin",
         "badge": "导演",
         "recommendation": "适合王家卫影迷，把《重庆森林》《花样年华》和《春光乍泄》等作品排成个人序列。",
+        "card_poster_title": "花样年华",
+        "card_poster_asset": "assets/builtin_list_thumbnails/wong-kar-wai.webp",
         "items": [
             "旺角卡门", "阿飞正传", "重庆森林", "东邪西毒", "堕落天使",
             "春光乍泄", "花样年华", "2046", "蓝莓之夜", "一代宗师",
@@ -118,6 +130,8 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "source": "builtin",
         "badge": "迪士尼",
         "recommendation": "适合迪士尼动画粉丝，只整理华特迪士尼动画工作室长片，不混入皮克斯和真人版。",
+        "card_poster_title": "疯狂动物城",
+        "card_poster_asset": "assets/builtin_list_thumbnails/disney-animation.webp",
         "items": [
             "白雪公主和七个小矮人", "灰姑娘", "睡美人", "小美人鱼", "美女与野兽",
             "阿拉丁", "狮子王", "花木兰", "星际宝贝", "公主与青蛙",
@@ -135,6 +149,8 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         "source": "builtin",
         "badge": "双人",
         "recommendation": "适合和朋友、伴侣一起玩，看同一批电影在两个人心里的差异。",
+        "card_poster_title": "泰坦尼克号",
+        "card_poster_asset": "assets/builtin_list_thumbnails/couple-debate.webp",
         "items": [
             "爱在黎明破晓前", "爱在日落黄昏时", "怦然心动", "花束般的恋爱", "消失的爱人",
             "婚姻故事", "泰坦尼克号", "时空恋旅人", "恋恋笔记本", "重庆森林", "春光乍泄",

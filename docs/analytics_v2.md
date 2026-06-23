@@ -159,7 +159,12 @@ payload 会屏蔽完整候选项、完整排名、用户名、手机号、邮箱
 - `variant_name`
 - `config`
 
-当前运行中的实验为 `home_layout_order_v1`，用于测试首页入口顺序：`control` 保持豆瓣已看主推在上，`builtin_first` 将豆瓣高分 / 诺兰等快速开始片单前置。`homepage_cta_v1` 已暂停，用来避免首页文案实验和布局实验互相干扰。匿名 session 会根据 `anonymous_session_id + experiment_id` 做稳定哈希分桶，因此同一个 session 会持续命中同一个版本。
+当前并行运行两个实验：
+
+- `home_layout_order_v1`：测试首页入口顺序，`control` 保持豆瓣已看主推在上，`builtin_first` 将内置快速片单前置。
+- `builtin_card_poster_v1`：测试内置轻量片单卡显示代表电影海报是否提升片单打开率，`control` 保持纯文字卡片，`poster` 显示预制海报，比例 1:1。
+
+两个实验分别用 `anonymous_session_id + experiment_id` 做稳定哈希分桶，形成独立的 2×2 组合。内置片单卡链接会携带所有 active 实验的已验证 variant 参数；打开 `?list=` 后，实验模块只接受配置中存在的 variant，并恢复原分桶，避免页面导航产生新 session 时实验版本漂移。
 
 事件中会记录 `experiment_id` 和 `variant_id`，后台可以按实验版本比较：
 
@@ -170,6 +175,14 @@ payload 会屏蔽完整候选项、完整排名、用户名、手机号、邮箱
 - 完成率
 - 复制分享数
 - 海报下载数
+
+`builtin_card_poster_v1` 额外展示：
+
+- 首页曝光：带该实验版本的 `home_content_rendered` session。
+- 内置片单打开：`entry_surface=home_builtin_card` 的 `list_opened` session。
+- 卡片打开率：内置片单打开 session / 首页曝光 session。
+
+海报实验主指标使用卡片打开率，次指标观察开始率和完成率。由于它与首页布局实验并行，分析时应同时查看 `payload.experiments` 中的两个实验版本，必要时按 2×2 组合复核。
 
 ## 如何新增一个实验
 

@@ -57,7 +57,7 @@ Sort_FilmsGame 是一个影视偏好排序 Web App。它把“手动给几十部
 
 ## A/B 实验框架
 
-实验配置位于 [experiments.py](experiments.py)。当前运行中的实验是 `home_layout_order_v1`，用于测试“快速开始片单前置”是否比“豆瓣已看主推前置”更能提升开始整理率。`homepage_cta_v1` 已暂停，避免首页文案实验和布局实验互相干扰。匿名 session 会通过稳定哈希分桶，因此同一个 session 会持续命中同一个实验版本。
+实验配置位于 [experiments.py](experiments.py)。当前并行运行 `home_layout_order_v1` 和 `builtin_card_poster_v1`：前者测试首页入口顺序，后者以 1:1 比例测试内置轻量片单卡显示预制代表电影海报是否能提升片单打开率。卡片链接会携带两个实验的已验证版本参数，使 `?list=` 页面继续沿用原分桶；匿名 session 仍通过稳定哈希进入实验。
 
 以后新增实验时，一般不需要改后台看板或埋点聚合逻辑。常规流程是：
 
@@ -306,11 +306,6 @@ https://movie.douban.com/people/123456/collect
 应用内的书签按钮下方提供“详细导入教程”小按钮，也可以直接打开[豆瓣详细导入教程](https://www.douban.com/doubanapp/dispatch?uri=%2Fgroup%2Ftopic%2F489801091&_spm_id=Mjk1Mzg4OTgz&_i=82214441c34a8be)。
 
 读取或导入成功后，可以先按电影 / 剧集类型、豆瓣评分和豆瓣标记年份筛选；开始前还能在预览列表里点 `×` 手动移除暂时不想排的条目。旧版本导入的片单如果没有类型、评分或日期信息，会显示为未识别类型或提示重新读取；重新读取 / 重新书签导入即可获得完整类型筛选能力。
-
-如果 Chrome 没有保留书签名称，可以手动新建书签：
-
-- 名称：`导入我的豆瓣已看`
-- 网址：复制页面里的“导入按钮代码”，必须以 `javascript:` 开头。
 
 ---
 
@@ -598,13 +593,24 @@ https://movie.douban.com/people/123456/collect
 
 ### v2.9 豆瓣导入详细教程入口
 
-覆盖提交：当前工作区，2026-06-23
+覆盖提交：`18132b2`，2026-06-23
 
 - 在“电脑导入助手 > 第一次导入”的书签按钮说明下方新增“详细导入教程”小按钮。
 - 按钮位于说明文字与“拖不动？手动复制导入按钮代码”折叠栏之间，不改变现有导入步骤。
 - 点击按钮会在新标签页打开豆瓣详细导入教程，并使用 `noopener noreferrer` 隔离原页面。
 - 教程按钮使用独立轻量样式，视觉层级低于“导入我的豆瓣已看”主按钮。
 - 新增 [docs/version_updates/version2.9.md](docs/version_updates/version2.9.md) 记录入口位置、目标链接和测试清单。
+
+### v2.10 轻量片单海报 A/B 实验
+
+覆盖提交：当前工作区，2026-06-23
+
+- 删除豆瓣电脑导入助手中“拖不动？手动复制导入按钮代码”整栏，保留主书签按钮和详细教程入口。
+- 为 8 份内置轻量片单固定代表电影，并提交 `136×192` WebP 缩略海报；运行时只读取仓库静态资源，不联网寻找海报。
+- 新增 `builtin_card_poster_v1` 实验，控制组保持纯文字卡片，实验组在卡片右上角显示代表电影海报，流量比例 1:1。
+- 海报实验与 `home_layout_order_v1` 并行运行；卡片链接携带两个实验版本和 `entry_surface=home_builtin_card`，进入片单后继续沿用原分桶。
+- 后台实验分析新增首页曝光、内置片单打开和卡片打开率，主指标为内置片单打开 session / 首页曝光 session。
+- 新增 [docs/version_updates/version2.10.md](docs/version_updates/version2.10.md)，并更新 [docs/analytics_v2.md](docs/analytics_v2.md) 的并行实验和指标口径。
 
 ---
 

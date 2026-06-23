@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional
 
 
-APP_VERSION = "v2.9"
-APP_RELEASE_ID = "v2.9-douban-import-tutorial-link"
-APP_RELEASE_NAME = "豆瓣导入详细教程入口"
-APP_RELEASED_AT = "2026-06-23T19:52:00+08:00"
+APP_VERSION = "v2.10"
+APP_RELEASE_ID = "v2.10-builtin-card-poster-experiment"
+APP_RELEASE_NAME = "轻量片单海报 A/B 实验"
+APP_RELEASED_AT = "2026-06-23T22:34:11+08:00"
 
 
 # Version starts are based on the first push/deploy commit of each feature phase
@@ -145,6 +145,13 @@ RELEASE_TIMELINE = [
         "release_name": "后台看板百万事件读取",
         "released_at": "2026-06-17T20:38:30+08:00",
         "commit": "de8a00d",
+    },
+    {
+        "app_version": "v2.9",
+        "release_id": "v2.9-douban-import-tutorial-link",
+        "release_name": "豆瓣导入详细教程入口",
+        "released_at": "2026-06-23T19:52:00+08:00",
+        "commit": "18132b2",
     },
     {
         "app_version": APP_VERSION,

@@ -62,6 +62,31 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                 },
             },
         ],
+    },
+    {
+        "experiment_id": "builtin_card_poster_v1",
+        "experiment_name": "首页内置片单卡片海报实验",
+        "status": "active",
+        "traffic_allocation": 1.0,
+        "description": "测试预制代表电影海报是否能提升内置轻量片单打开率。",
+        "variants": [
+            {
+                "variant_id": "control",
+                "variant_name": "纯文字卡片",
+                "weight": 1,
+                "config": {
+                    "show_builtin_card_posters": False,
+                },
+            },
+            {
+                "variant_id": "poster",
+                "variant_name": "大众电影海报",
+                "weight": 1,
+                "config": {
+                    "show_builtin_card_posters": True,
+                },
+            },
+        ],
     }
 ]
 
@@ -106,12 +131,53 @@ def _variant_bucket(variants: List[Dict[str, Any]], bucket: float) -> Dict[str, 
     return weighted[-1]
 
 
+def experiment_query_param_name(experiment_id: str) -> str:
+    safe_id = "".join(char for char in str(experiment_id) if char.isalnum() or char in {"_", "-"})
+    return f"exp_{safe_id}"
+
+
+def _query_param_value(name: str) -> str:
+    try:
+        value = st.query_params.get(name, "")
+    except Exception:
+        try:
+            value = st.experimental_get_query_params().get(name, [""])
+        except Exception:
+            value = ""
+    if isinstance(value, list):
+        value = value[0] if value else ""
+    return str(value or "").strip()
+
+
+def _variant_assignment(experiment: Dict[str, Any], variant: Dict[str, Any]) -> Dict[str, Any]:
+    experiment_id = str(experiment.get("experiment_id") or "")
+    return {
+        "experiment_id": experiment_id,
+        "experiment_name": str(experiment.get("experiment_name") or experiment_id),
+        "variant_id": str(variant.get("variant_id") or ""),
+        "variant_name": str(variant.get("variant_name") or variant.get("variant_id") or ""),
+        "config": dict(variant.get("config") or {}),
+    }
+
+
 def get_experiment_assignment(session_id: str, experiment_id: str) -> Dict[str, Any]:
     experiment = get_experiment(experiment_id)
     if not experiment or experiment.get("status") != "active":
         return {}
 
     state_key = f"experiment_assignment_{experiment_id}"
+    variants = [variant for variant in experiment.get("variants", []) if variant.get("variant_id")]
+    query_variant_id = _query_param_value(experiment_query_param_name(experiment_id))
+    if query_variant_id:
+        query_variant = next(
+            (variant for variant in variants if str(variant.get("variant_id")) == query_variant_id),
+            None,
+        )
+        if query_variant:
+            assignment = _variant_assignment(experiment, query_variant)
+            st.session_state[state_key] = assignment
+            return assignment
+
     cached = st.session_state.get(state_key)
     if isinstance(cached, dict) and cached.get("experiment_id") == experiment_id:
         return cached
@@ -122,18 +188,11 @@ def get_experiment_assignment(session_id: str, experiment_id: str) -> Dict[str, 
     if traffic_bucket >= allocation:
         return {}
 
-    variants = [variant for variant in experiment.get("variants", []) if variant.get("variant_id")]
     variant = _variant_bucket(variants, _stable_ratio(f"{experiment_id}:variant:{session_id}"))
     if not variant:
         return {}
 
-    assignment = {
-        "experiment_id": experiment_id,
-        "experiment_name": str(experiment.get("experiment_name") or experiment_id),
-        "variant_id": str(variant.get("variant_id")),
-        "variant_name": str(variant.get("variant_name") or variant.get("variant_id")),
-        "config": dict(variant.get("config") or {}),
-    }
+    assignment = _variant_assignment(experiment, variant)
     st.session_state[state_key] = assignment
     return assignment
 
@@ -161,6 +220,14 @@ def get_active_assignments(session_id: str, experiment_ids: Optional[Iterable[st
         if assignment:
             assignments.append(assignment)
     return assignments
+
+
+def get_experiment_query_params(session_id: str, experiment_ids: Optional[Iterable[str]] = None) -> Dict[str, str]:
+    return {
+        experiment_query_param_name(str(assignment["experiment_id"])): str(assignment["variant_id"])
+        for assignment in get_active_assignments(session_id, experiment_ids)
+        if assignment.get("experiment_id") and assignment.get("variant_id")
+    }
 
 
 def get_experiment_event_context(session_id: str, experiment_ids: Optional[Iterable[str]] = None) -> Dict[str, Any]:

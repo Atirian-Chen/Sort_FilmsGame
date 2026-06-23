@@ -1230,8 +1230,25 @@ def build_experiment_metrics(events: List[Dict[str, Any]], *, top_n: int = 100) 
 
     for (experiment_id, variant_id), group_events in grouped.items():
         row = _metric_row(f"{experiment_id}:{variant_id}", group_events, "experiment_variant")
+        home_exposure_sessions = _session_set(
+            event
+            for event in group_events
+            if _event_matches(event, EVENT_HOME_CONTENT_RENDERED) and _event_route(event) == "home"
+        )
+        builtin_card_opened_sessions = _session_set(
+            event
+            for event in group_events
+            if _event_matches(event, EVENT_LIST_OPENED)
+            and _safe_text(_payload(event).get("entry_surface")) == "home_builtin_card"
+        )
         row["experiment_id"] = experiment_id
         row["variant_id"] = variant_id
+        row["home_exposure_sessions"] = len(home_exposure_sessions)
+        row["builtin_card_opened_sessions"] = len(builtin_card_opened_sessions)
+        row["builtin_card_open_rate"] = _rate(
+            len(builtin_card_opened_sessions),
+            len(home_exposure_sessions),
+        )
         rows.append(row)
 
     rows.sort(key=lambda item: (str(item.get("experiment_id")), int(item.get("visits", 0)), int(item.get("started", 0))), reverse=False)
