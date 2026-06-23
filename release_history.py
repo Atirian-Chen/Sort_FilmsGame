@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional
 
 
-APP_VERSION = "v2.8"
-APP_RELEASE_ID = "v2.8-admin-million-event-history"
-APP_RELEASE_NAME = "后台看板百万事件读取"
-APP_RELEASED_AT = "2026-06-17T20:38:30+08:00"
+APP_VERSION = "v2.9"
+APP_RELEASE_ID = "v2.9-douban-import-tutorial-link"
+APP_RELEASE_NAME = "豆瓣导入详细教程入口"
+APP_RELEASED_AT = "2026-06-23T19:52:00+08:00"
 
 
 # Version starts are based on the first push/deploy commit of each feature phase
@@ -137,7 +137,14 @@ RELEASE_TIMELINE = [
         "release_id": "v2.7-douban-media-filter-edit-preview",
         "release_name": "豆瓣已看类型筛选与片单预编辑",
         "released_at": "2026-06-17T18:50:06+08:00",
-        "commit": "",
+        "commit": "b02bd84",
+    },
+    {
+        "app_version": "v2.8",
+        "release_id": "v2.8-admin-million-event-history",
+        "release_name": "后台看板百万事件读取",
+        "released_at": "2026-06-17T20:38:30+08:00",
+        "commit": "de8a00d",
     },
     {
         "app_version": APP_VERSION,

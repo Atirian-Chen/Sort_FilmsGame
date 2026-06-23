@@ -107,6 +107,12 @@ DOUBAN_COLLECT_URL_TEMPLATE = "https://movie.douban.com/people/{user_id}/collect
 DOUBAN_COLLECT_PAGE_SIZE = 15
 DOUBAN_COLLECT_MAX_ITEMS = 1200
 DOUBAN_SUGGEST_URL = "https://movie.douban.com/j/subject_suggest"
+DOUBAN_IMPORT_TUTORIAL_URL = (
+    "https://www.douban.com/doubanapp/dispatch?"
+    "uri=%2Fgroup%2Ftopic%2F489801091"
+    "&_spm_id=Mjk1Mzg4OTgz"
+    "&_i=82214441c34a8be"
+)
 IMDB_SUGGEST_URL = "https://v3.sg.media-imdb.com/suggestion"
 APP_TITLE = "电影审美名单"
 APP_SUBTITLE = HERO_SUBTITLE
@@ -1149,6 +1155,31 @@ def render_app_styles() -> None:
         }
         .bookmarklet-link:hover {
             background: #fff1e4;
+            text-decoration: none !important;
+        }
+        .import-tutorial-link-wrap {
+            margin: 4px 0 10px;
+        }
+        .import-tutorial-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 30px;
+            padding: 0 10px;
+            border: 1px solid #d7cec3;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #5f574f !important;
+            font-size: 12px;
+            font-weight: 750;
+            line-height: 1;
+            text-decoration: none !important;
+        }
+        .import-tutorial-link:hover,
+        .import-tutorial-link:focus-visible {
+            border-color: #a88b79;
+            background: #fffaf4;
+            color: #754d3e !important;
             text-decoration: none !important;
         }
         .import-helper {
@@ -6893,6 +6924,15 @@ def render_douban_bookmarklet_import(clean_user_id: str = "") -> None:
             bookmarklet_name = "导入我的豆瓣已看"
             render_bookmarklet_link(bookmarklet_name, bookmarklet, "douban_bookmarklet_link")
             st.caption("保存后可以在 Chrome 书签管理器里确认：名称是「导入我的豆瓣已看」，网址以 javascript: 开头。")
+            st.markdown(
+                (
+                    '<div class="import-tutorial-link-wrap">'
+                    f'<a class="import-tutorial-link" href="{html.escape(DOUBAN_IMPORT_TUTORIAL_URL, quote=True)}" '
+                    'target="_blank" rel="noopener noreferrer">详细导入教程</a>'
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
             with st.expander("拖不动？手动复制导入按钮代码", expanded=False):
                 st.caption("新建一个浏览器书签，名称填「导入我的豆瓣已看」，网址/URL 粘贴导入按钮代码。")
                 name_col, code_col = st.columns(2)
