@@ -1204,6 +1204,10 @@ def build_template_content_stats(events: List[Dict[str, Any]], *, top_n: int = 1
                 "champion_events": champion_events,
                 "top_winners": top_winners,
                 "top_winners_text": "，".join(f"{item['winner']}({item['count']})" for item in top_winners),
+                "winner_distribution": [
+                    {"winner": winner, "count": count}
+                    for winner, count in counter.most_common()
+                ],
                 "last_seen": last_seen.get(template_id, ""),
             }
         )

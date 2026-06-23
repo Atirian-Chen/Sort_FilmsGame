@@ -4171,6 +4171,145 @@ def fetch_template_content_poster_map(rows: List[Dict[str, Any]], limit: int = 8
         return dict(executor.map(fetch, titles))
 
 
+def template_distribution_slices(row: Dict[str, Any], limit: int = 5) -> List[Dict[str, Any]]:
+    distribution = row.get("winner_distribution") if isinstance(row.get("winner_distribution"), list) else []
+    clean_items: List[Dict[str, Any]] = []
+    for item in distribution:
+        if not isinstance(item, dict):
+            continue
+        winner = str(item.get("winner") or "").strip()
+        try:
+            count = int(item.get("count", 0) or 0)
+        except (TypeError, ValueError):
+            count = 0
+        if winner and count > 0:
+            clean_items.append({"winner": winner, "count": count})
+
+    top_items = clean_items[:limit]
+    other_count = sum(int(item.get("count", 0)) for item in clean_items[limit:])
+    if other_count > 0:
+        top_items.append({"winner": "其他", "count": other_count})
+    return top_items
+
+
+def draw_pie_chart(
+    draw: ImageDraw.ImageDraw,
+    box: Tuple[int, int, int, int],
+    slices: List[Dict[str, Any]],
+    colors: List[Tuple[int, int, int]],
+) -> None:
+    total = sum(int(item.get("count", 0) or 0) for item in slices)
+    if total <= 0:
+        draw.ellipse(box, fill=(234, 229, 219), outline=(210, 201, 188), width=2)
+        return
+
+    start = -90.0
+    for index, item in enumerate(slices):
+        count = int(item.get("count", 0) or 0)
+        extent = 360.0 * count / total
+        end = start + extent
+        draw.pieslice(box, start=start, end=end, fill=colors[index % len(colors)], outline=(250, 247, 238), width=3)
+        start = end
+    draw.ellipse(box, outline=(250, 247, 238), width=4)
+
+
+def generate_template_champion_distribution_poster_bytes(rows: List[Dict[str, Any]], date_label: str = "当前筛选范围") -> bytes:
+    ensure_pillow()
+    display_rows = rows[:4]
+    width, height = 1080, 1350
+    bg = (18, 32, 43)
+    panel = (250, 247, 238)
+    card_fill = (255, 252, 245)
+    ink = (31, 35, 40)
+    muted = (102, 110, 116)
+    line = (223, 215, 201)
+    coral = (231, 98, 73)
+    colors = [
+        (231, 98, 73),
+        (39, 142, 132),
+        (221, 170, 74),
+        (82, 128, 198),
+        (139, 105, 180),
+        (154, 162, 170),
+    ]
+
+    img = Image.new("RGB", (width, height), bg)
+    draw = ImageDraw.Draw(img)
+    title_font = load_font(58, bold=True)
+    subtitle_font = load_font(26)
+    card_title_font = load_font(27, bold=True)
+    label_font = load_font(20, bold=True)
+    small_font = load_font(18)
+    tiny_font = load_font(16)
+
+    draw.rounded_rectangle((42, 42, width - 42, height - 42), radius=34, fill=panel)
+    draw.rounded_rectangle((42, 42, width - 42, 250), radius=34, fill=bg)
+    draw.rectangle((42, 198, width - 42, 250), fill=bg)
+    draw.rounded_rectangle((72, 78, 244, 118), radius=20, fill=coral)
+    draw.text((92, 86), "WINNER SHARE", font=tiny_font, fill=(255, 252, 245))
+    draw.text((72, 142), "模板冠军分布", font=title_font, fill=(255, 252, 245))
+    draw.text((74, 210), f"完成数前 4 个模板片单 · {date_label}", font=subtitle_font, fill=(217, 225, 224))
+
+    total_completed = sum(int(row.get("completed", 0)) for row in rows[:4])
+    total_champions = sum(int(row.get("champion_events", 0)) for row in rows[:4])
+    stat_text = f"前 4 模板 · {total_completed} 次完成 · {total_champions} 冠军"
+    draw.rounded_rectangle((634, 80, width - 74, 132), radius=24, fill=(255, 252, 245))
+    draw.text((662, 96), stat_text, font=small_font, fill=ink)
+
+    card_w = 454
+    card_h = 440
+    x_positions = [72, 554]
+    y_positions = [300, 770]
+    for slot in range(4):
+        x = x_positions[slot % 2]
+        y = y_positions[slot // 2]
+        draw.rounded_rectangle((x, y, x + card_w, y + card_h), radius=28, fill=card_fill, outline=line, width=2)
+
+        if slot >= len(display_rows):
+            draw.text((x + 34, y + 178), "暂无数据", font=card_title_font, fill=muted)
+            draw.text((x + 34, y + 220), "当前筛选范围内没有更多模板片单。", font=small_font, fill=muted)
+            continue
+
+        row = display_rows[slot]
+        template_name = admin_template_display_name(str(row.get("template_id") or ""))
+        draw.text((x + 34, y + 30), fit_text_to_width(draw, template_name, card_title_font, card_w - 68), font=card_title_font, fill=ink)
+        subtitle = f"{int(row.get('completed', 0))} 次完成 · {int(row.get('champion_events', 0))} 条冠军"
+        draw.text((x + 34, y + 68), subtitle, font=small_font, fill=muted)
+
+        slices = template_distribution_slices(row, 5)
+        pie_box = (x + 42, y + 126, x + 252, y + 336)
+        draw_pie_chart(draw, pie_box, slices, colors)
+
+        total = sum(int(item.get("count", 0) or 0) for item in slices)
+        legend_x = x + 278
+        legend_y = y + 118
+        if not slices:
+            draw.text((legend_x, legend_y + 82), "暂无冠军数据", font=label_font, fill=muted)
+        for index, item in enumerate(slices):
+            color = colors[index % len(colors)]
+            item_y = legend_y + index * 44
+            count = int(item.get("count", 0) or 0)
+            rate = count / total if total else 0
+            draw.rounded_rectangle((legend_x, item_y + 5, legend_x + 18, item_y + 23), radius=5, fill=color)
+            winner = fit_text_to_width(draw, str(item.get("winner") or ""), label_font, 112)
+            draw.text((legend_x + 28, item_y), winner, font=label_font, fill=ink)
+            draw.text((legend_x + 28, item_y + 22), f"{count} 次 · {rate:.0%}", font=tiny_font, fill=muted)
+
+        top_label = "Top5 + 其他" if len(slices) > 5 or any(item.get("winner") == "其他" for item in slices) else "冠军分布"
+        draw.rounded_rectangle((x + 34, y + card_h - 58, x + 166, y + card_h - 26), radius=16, fill=(238, 247, 245))
+        draw.text((x + 52, y + card_h - 51), top_label, font=tiny_font, fill=(39, 142, 132))
+
+    note_y = height - 104
+    draw.line((72, note_y - 24, width - 72, note_y - 24), fill=line, width=2)
+    note = "口径：仅统计模板片单 winner；每个扇形图显示冠军次数 Top5，其余合并为其他。"
+    draw.text((72, note_y), note, font=small_font, fill=muted)
+    draw.text((72, note_y + 34), f"{APP_TITLE} · v3.1 内容统计", font=tiny_font, fill=muted)
+
+    out = io.BytesIO()
+    img.save(out, format="PNG")
+    return out.getvalue()
+
+
 def generate_template_content_stats_poster_bytes(
     rows: List[Dict[str, Any]],
     date_label: str = "当前筛选范围",
@@ -4323,6 +4462,23 @@ def render_admin_content_stats(events: List[Dict[str, Any]], start_date: date, e
             "template_content_stats_poster_v3_1.png",
             "image/png",
             "admin_download_template_content_stats_poster_v3_1",
+        )
+
+    safe_divider()
+    pie_poster_bytes = generate_template_champion_distribution_poster_bytes(rows, date_label)
+    pie_poster_col, pie_action_col = st.columns([1, 1])
+    with pie_poster_col:
+        st.markdown("**冠军分布扇形图海报**")
+        show_image_compat(pie_poster_bytes)
+    with pie_action_col:
+        st.markdown("**下载素材**")
+        st.caption("海报展示完成数最高的前 4 个模板片单，每个扇形图显示冠军次数 Top5，其余合并为“其他”。")
+        render_download_button_compat(
+            "下载冠军分布海报 PNG",
+            pie_poster_bytes,
+            "template_champion_distribution_poster_v3_1.png",
+            "image/png",
+            "admin_download_template_champion_distribution_poster_v3_1",
         )
 
 
