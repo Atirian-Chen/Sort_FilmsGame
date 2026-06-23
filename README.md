@@ -33,7 +33,7 @@ Sort_FilmsGame 是一个影视偏好排序 Web App。它把“手动给几十部
 - `qr_viewed`
 - `home_content_rendered`
 
-历史事件名会自动映射到新口径，因此旧数据仍然可以在后台看板中继续使用。事件 payload 会记录必要的产品上下文，例如页面路径、片单 ID、模式、渠道 / UTM 参数、片单规模、取舍次数、设备类型、实验 ID 和版本 ID。
+历史事件名会自动映射到新口径，因此旧数据仍然可以在后台看板中继续使用。事件 payload 会记录必要的产品上下文，例如页面路径、片单 ID、模式、渠道 / UTM 参数、片单规模、取舍次数、设备类型、实验 ID 和版本 ID。v3.1 起，豆瓣已看和非模板自备片单完成后会额外保存前 10 名 `top_items`，用于后续内容偏好分析；模板片单仍沿用原有 `winner` 字段。
 
 ## 后台数据看板 v2
 
@@ -51,6 +51,7 @@ Sort_FilmsGame 是一个影视偏好排序 Web App。它把“手动给几十部
 - 首页加载诊断：通过 `visit -> home_content_rendered -> list_opened/list_selected/sorting_started` 判断流失更可能发生在加载中还是渲染后。
 - 自动识别最大流失环节，并生成产品洞察文案。
 - 按 `list_id / template_id / mode` 查看片单维度表现。
+- 内容统计：只统计模板片单 `winner`，展示每个模板片单的完成数、冠军 Top3，并生成可下载的冠军榜宣传海报。
 - 按 `source / utm_source / utm_medium / utm_campaign` 查看渠道归因。
 - 按 `experiment_id / variant_id` 查看 A/B 实验表现。
 - 支持最近 7 天、最近 30 天、全部历史和自定义时间范围筛选。
@@ -167,7 +168,7 @@ python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py chal
 - 只使用随机 session id，不要求登录。
 - 匿名事件包括：`visit`、`list_opened`、`list_selected`、`sorting_started`、`comparison_made`、`ranking_completed`、`poster_downloaded`、`share_copied`、`result_viewed`、`qr_viewed`、`home_content_rendered`；历史事件名会在后台分析时自动兼容映射。
 - 默认不记录姓名、IP、联系方式。
-- 事件 payload 会过滤完整候选项、完整排名、自定义完整榜单等敏感字段。
+- 事件 payload 会过滤完整候选项、完整排名、自定义完整榜单等敏感字段；豆瓣已看和非模板自备片单仅额外保存完成结果前 10 名。
 - 自定义片单只有在用户主动生成片单链接时才会保存。
 - 豆瓣已看浏览器导入会保存到 `imported_movie_lists`，默认 7 天过期；其中包含标题、海报 URL、条目类型、评分和标记日期，用于跨设备继续和筛选。
 
@@ -318,6 +319,7 @@ https://movie.douban.com/people/123456/collect
 - [promo_assets/03_douban_collect_two_choice.png](promo_assets/03_douban_collect_two_choice.png)：豆瓣已看二选一界面。
 - [promo_assets/03_douban_collect_two_choice_guling_bawang.png](promo_assets/03_douban_collect_two_choice_guling_bawang.png)：豆瓣已看二选一界面补充素材。
 - [promo_assets/04_douban_collect_result_poster.png](promo_assets/04_douban_collect_result_poster.png)：豆瓣已看结果海报。
+- [promo_assets/content_stats_poster_preview_v3_1.png](promo_assets/content_stats_poster_preview_v3_1.png)：v3.1 模板片单冠军榜海报设计预览。
 - [promo_assets/generate_douban_collect_promo.py](promo_assets/generate_douban_collect_promo.py)：豆瓣已看宣传图生成脚本。
 - [promo_assets/live_screens/mobile_home.png](promo_assets/live_screens/mobile_home.png)：移动端首页实机截图；同目录下保留了连续滚动截图。
 - [promo_assets/social_copy_pack.md](promo_assets/social_copy_pack.md)：小红书、豆瓣等渠道的官方/路人视角发布文案。
@@ -611,6 +613,16 @@ https://movie.douban.com/people/123456/collect
 - 海报实验与 `home_layout_order_v1` 并行运行；卡片链接携带两个实验版本和 `entry_surface=home_builtin_card`，进入片单后继续沿用原分桶。
 - 后台实验分析新增首页曝光、内置片单打开和卡片打开率，主指标为内置片单打开 session / 首页曝光 session。
 - 新增 [docs/version_updates/version2.10.md](docs/version_updates/version2.10.md)，并更新 [docs/analytics_v2.md](docs/analytics_v2.md) 的并行实验和指标口径。
+
+### v3.1 模板内容统计与冠军榜海报
+
+覆盖提交：当前工作区，2026-06-24
+
+- 豆瓣已看和非模板自备片单完成后新增 `top_items` 埋点，只保存前 10 名，不保存完整排名。
+- 后台新增“内容统计”tab，只统计模板片单 `winner`，展示每个模板片单的完成数、可统计冠军数和冠军 Top3。
+- 后台可根据内容统计生成带前三名电影海报的模板片单冠军榜宣传海报，并提供 PNG 下载。
+- 新增 [promo_assets/content_stats_poster_preview_v3_1.png](promo_assets/content_stats_poster_preview_v3_1.png) 作为上线前设计预览。
+- 新增 [docs/version_updates/version3.1.md](docs/version_updates/version3.1.md)，并更新 [docs/analytics_v2.md](docs/analytics_v2.md) 的 `top_items` 和内容统计口径。
 
 ---
 

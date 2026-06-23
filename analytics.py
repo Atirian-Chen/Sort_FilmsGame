@@ -1165,6 +1165,60 @@ def build_list_metrics(events: List[Dict[str, Any]], *, sort_by: str = "complete
     return rows[:top_n]
 
 
+def build_template_content_stats(events: List[Dict[str, Any]], *, top_n: int = 100) -> List[Dict[str, Any]]:
+    completed_counts: Counter = Counter()
+    winner_counts: Dict[str, Counter] = defaultdict(Counter)
+    last_seen: Dict[str, str] = {}
+
+    for event in normalize_events(events):
+        if not _event_matches(event, EVENT_RANKING_COMPLETED):
+            continue
+        payload = _payload(event)
+        mode = _safe_text(event.get("mode")) or _safe_text(payload.get("mode"))
+        template_id = _safe_text(event.get("template_id")) or _safe_text(payload.get("template_id"))
+        if mode != "自备片单" or not template_id:
+            continue
+
+        completed_counts[template_id] += 1
+        created_at = str(event.get("created_at") or "")
+        if created_at and created_at > last_seen.get(template_id, ""):
+            last_seen[template_id] = created_at
+
+        winner = _safe_text(payload.get("winner"))
+        if winner:
+            winner_counts[template_id][winner] += 1
+
+    rows: List[Dict[str, Any]] = []
+    for template_id, counter in winner_counts.items():
+        champion_events = sum(counter.values())
+        if champion_events <= 0:
+            continue
+        top_winners = [
+            {"winner": winner, "count": count}
+            for winner, count in counter.most_common(3)
+        ]
+        rows.append(
+            {
+                "template_id": template_id,
+                "completed": int(completed_counts.get(template_id, 0)),
+                "champion_events": champion_events,
+                "top_winners": top_winners,
+                "top_winners_text": "，".join(f"{item['winner']}({item['count']})" for item in top_winners),
+                "last_seen": last_seen.get(template_id, ""),
+            }
+        )
+
+    rows.sort(
+        key=lambda item: (
+            int(item.get("completed", 0)),
+            int(item.get("champion_events", 0)),
+            str(item.get("last_seen") or ""),
+        ),
+        reverse=True,
+    )
+    return rows[:top_n]
+
+
 def build_channel_metrics(events: List[Dict[str, Any]], *, top_n: int = 100) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     grouped: Dict[Tuple[str, str, str, str], List[Dict[str, Any]]] = {}
@@ -1358,6 +1412,7 @@ def summarize_payload(payload: Dict[str, Any]) -> str:
         "blind_mode",
         "side_shuffle",
         "winner",
+        "top_items",
     ]
     parts = []
     for key in ordered_keys:

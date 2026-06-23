@@ -55,6 +55,7 @@ from analytics import (
     build_numeric_payload_histogram,
     build_payload_value_counts,
     build_setting_rows,
+    build_template_content_stats,
     build_top_k_distribution,
     build_version_metrics,
     fetch_all_events,
@@ -4091,6 +4092,240 @@ def render_admin_count_chart(rows: List[Dict[str, Any]], label_key: str, title: 
     render_admin_dataframe(frame)
 
 
+def admin_template_display_name(template_id: str) -> str:
+    template = get_template(str(template_id or ""))
+    if template:
+        return str(template.get("name") or template_id)
+    return str(template_id or "unknown")
+
+
+def admin_template_content_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(
+        [
+            {
+                "模板": admin_template_display_name(str(row.get("template_id") or "")),
+                "template_id": row.get("template_id", ""),
+                "完成数": int(row.get("completed", 0)),
+                "可统计冠军数": int(row.get("champion_events", 0)),
+                "冠军 Top3": row.get("top_winners_text", ""),
+                "最近完成": admin_short_time(row.get("last_seen")),
+            }
+            for row in rows
+        ]
+    )
+
+
+def _content_stats_winner_lines(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, width: int) -> List[str]:
+    lines = wrap_text(draw, text, font, width)
+    if len(lines) <= 2:
+        return lines
+    return [lines[0], lines[1][: max(1, len(lines[1]) - 1)] + "..."]
+
+
+def fit_text_to_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int) -> str:
+    clean = str(text or "").strip()
+    if not clean:
+        return ""
+    if draw.textbbox((0, 0), clean, font=font)[2] <= max_width:
+        return clean
+    suffix = "..."
+    available = max(1, max_width - draw.textbbox((0, 0), suffix, font=font)[2])
+    fitted = ""
+    for char in clean:
+        test = fitted + char
+        if draw.textbbox((0, 0), test, font=font)[2] > available:
+            break
+        fitted = test
+    return (fitted or clean[:1]) + suffix
+
+
+def template_content_winner_titles(rows: List[Dict[str, Any]], limit: int = 8) -> List[str]:
+    titles: List[str] = []
+    seen = set()
+    for row in rows[:limit]:
+        winners = row.get("top_winners") if isinstance(row.get("top_winners"), list) else []
+        for winner in winners[:3]:
+            if not isinstance(winner, dict):
+                continue
+            title = str(winner.get("winner") or "").strip()
+            if title and title not in seen:
+                seen.add(title)
+                titles.append(title)
+    return titles
+
+
+def fetch_template_content_poster_map(rows: List[Dict[str, Any]], limit: int = 8) -> Dict[str, Optional[bytes]]:
+    titles = template_content_winner_titles(rows, limit)
+    if not titles:
+        return {}
+
+    def fetch(title: str) -> Tuple[str, Optional[bytes]]:
+        try:
+            return title, get_best_poster_bytes(title)
+        except Exception:
+            return title, None
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        return dict(executor.map(fetch, titles))
+
+
+def generate_template_content_stats_poster_bytes(
+    rows: List[Dict[str, Any]],
+    date_label: str = "当前筛选范围",
+    poster_bytes_map: Optional[Dict[str, Optional[bytes]]] = None,
+) -> bytes:
+    ensure_pillow()
+    display_rows = rows[:8]
+    width = 1080
+    row_height = 158
+    row_gap = 14
+    height = 430 + max(1, len(display_rows)) * (row_height + row_gap) + 120
+
+    bg = (18, 32, 43)
+    panel = (250, 247, 238)
+    row_fill = (255, 252, 245)
+    ink = (31, 35, 40)
+    muted = (102, 110, 116)
+    coral = (231, 98, 73)
+    teal = (39, 142, 132)
+    gold = (221, 170, 74)
+    line = (223, 215, 201)
+
+    img = Image.new("RGB", (width, height), bg)
+    draw = ImageDraw.Draw(img)
+
+    title_font = load_font(64, bold=True)
+    subtitle_font = load_font(28)
+    small_font = load_font(22)
+    tiny_font = load_font(18)
+    row_title_font = load_font(25, bold=True)
+    winner_font = load_font(16, bold=True)
+    count_font = load_font(19)
+    poster_bytes_map = poster_bytes_map or {}
+
+    draw.rounded_rectangle((42, 42, width - 42, height - 42), radius=34, fill=panel)
+    draw.rounded_rectangle((42, 42, width - 42, 264), radius=34, fill=bg)
+    draw.rectangle((42, 210, width - 42, 264), fill=bg)
+    draw.rounded_rectangle((72, 78, 258, 118), radius=20, fill=coral)
+    draw.text((92, 86), "TEMPLATE STATS", font=tiny_font, fill=(255, 252, 245))
+    draw.text((72, 142), "电影审美冠军榜", font=title_font, fill=(255, 252, 245))
+    draw.text((74, 220), f"模板片单完成结果 · {date_label}", font=subtitle_font, fill=(217, 225, 224))
+
+    total_completed = sum(int(row.get("completed", 0)) for row in rows)
+    total_champions = sum(int(row.get("champion_events", 0)) for row in rows)
+    stat_text = f"{len(rows)} 个模板 · {total_completed} 次完成 · {total_champions} 冠军"
+    draw.rounded_rectangle((614, 80, width - 74, 132), radius=24, fill=(255, 252, 245))
+    draw.text((642, 96), stat_text, font=count_font, fill=ink)
+
+    y = 292
+    if not display_rows:
+        draw.text((96, y + 30), "当前筛选范围内暂无模板冠军数据", font=row_title_font, fill=ink)
+    for idx, row in enumerate(display_rows, 1):
+        row_bottom = y + row_height
+        draw.rounded_rectangle((72, y, width - 72, row_bottom), radius=24, fill=row_fill, outline=line, width=2)
+
+        marker = coral if idx % 2 else teal
+        draw.ellipse((96, y + 50, 146, y + 100), fill=marker)
+        rank_text = f"{idx}"
+        rank_box = draw.textbbox((0, 0), rank_text, font=winner_font)
+        draw.text((121 - (rank_box[2] - rank_box[0]) / 2, y + 62), rank_text, font=winner_font, fill=(255, 252, 245))
+
+        template_name = admin_template_display_name(str(row.get("template_id") or ""))
+        draw.text((166, y + 48), fit_text_to_width(draw, template_name, row_title_font, 238), font=row_title_font, fill=ink)
+        draw.text((166, y + 86), f"{int(row.get('completed', 0))} 次完成", font=count_font, fill=muted)
+
+        winners = row.get("top_winners") if isinstance(row.get("top_winners"), list) else []
+        pill_x = 430
+        pill_w = 186
+        thumb_size = (50, 74)
+        thumb_mask = make_rounded_rect_mask(thumb_size, 12)
+        for winner_index in range(3):
+            x = pill_x + winner_index * 192
+            fill = (255, 246, 226) if winner_index == 0 else (238, 247, 245)
+            outline = gold if winner_index == 0 else (187, 215, 210)
+            draw.rounded_rectangle((x, y + 18, x + pill_w, y + 140), radius=18, fill=fill, outline=outline, width=2)
+            if winner_index < len(winners) and isinstance(winners[winner_index], dict):
+                winner = str(winners[winner_index].get("winner") or "")
+                count = int(winners[winner_index].get("count", 0) or 0)
+                medal = f"{winner_index + 1}"
+                thumb_x = x + 14
+                thumb_y = y + 40
+                poster_thumb = render_poster_thumb(poster_bytes_map.get(winner), thumb_size, (231, 226, 216))
+                if poster_bytes_map.get(winner):
+                    img.paste(poster_thumb, (thumb_x, thumb_y), thumb_mask)
+                else:
+                    draw.rounded_rectangle(
+                        (thumb_x, thumb_y, thumb_x + thumb_size[0], thumb_y + thumb_size[1]),
+                        radius=12,
+                        fill=(231, 226, 216),
+                        outline=line,
+                        width=1,
+                    )
+                    draw.text((thumb_x + 11, thumb_y + 29), "暂无\n海报", font=tiny_font, fill=muted, spacing=3)
+                draw.ellipse((thumb_x - 7, thumb_y - 8, thumb_x + 23, thumb_y + 22), fill=gold if winner_index == 0 else teal)
+                medal_box = draw.textbbox((0, 0), medal, font=tiny_font)
+                draw.text((thumb_x + 8 - (medal_box[2] - medal_box[0]) / 2, thumb_y - 1), medal, font=tiny_font, fill=(255, 255, 255))
+                label_x = x + 74
+                draw.text((label_x, y + 42), fit_text_to_width(draw, winner, winner_font, pill_w - 88), font=winner_font, fill=ink)
+                draw.text((label_x, y + 72), f"{count} 次冠军", font=tiny_font, fill=muted)
+                draw.line((label_x, y + 104, x + pill_w - 18, y + 104), fill=outline, width=2)
+            else:
+                draw.text((x + 24, y + 64), "暂无", font=winner_font, fill=muted)
+        y = row_bottom + row_gap
+
+    note_y = height - 106
+    draw.line((72, note_y - 24, width - 72, note_y - 24), fill=line, width=2)
+    note = "口径：仅统计模板片单，冠军来自 winner 字段；展示完成数前 8。"
+    for line_index, line_text in enumerate(wrap_text(draw, note, small_font, width - 144)[:2]):
+        draw.text((72, note_y + line_index * 30), line_text, font=small_font, fill=muted)
+    draw.text((72, note_y + 38), f"{APP_TITLE} · v3.1 内容统计", font=tiny_font, fill=muted)
+
+    out = io.BytesIO()
+    img.save(out, format="PNG")
+    return out.getvalue()
+
+
+def render_admin_content_stats(events: List[Dict[str, Any]], start_date: date, end_date: date) -> None:
+    rows = build_template_content_stats(events, top_n=100)
+    st.markdown("**模板片单冠军统计**")
+    st.caption("只统计模板片单完成事件：mode=自备片单、template_id 非空，冠军来自 payload.winner。")
+    if not rows:
+        st.info("当前筛选范围内没有可统计的模板片单冠军数据。")
+        return
+
+    metric_cols = st.columns(3)
+    with metric_cols[0]:
+        st.metric("模板片单", admin_int(len(rows)))
+    with metric_cols[1]:
+        st.metric("完成数", admin_int(sum(int(row.get("completed", 0)) for row in rows)))
+    with metric_cols[2]:
+        st.metric("冠军记录", admin_int(sum(int(row.get("champion_events", 0)) for row in rows)))
+
+    render_admin_dataframe(admin_template_content_df(rows))
+    safe_divider()
+
+    date_label = f"{start_date.isoformat()} 至 {end_date.isoformat()}"
+    with st.spinner("正在准备冠军电影海报..."):
+        poster_bytes_map = fetch_template_content_poster_map(rows)
+    poster_bytes = generate_template_content_stats_poster_bytes(rows, date_label, poster_bytes_map=poster_bytes_map)
+    poster_col, action_col = st.columns([1, 1])
+    with poster_col:
+        st.markdown("**宣传海报预览**")
+        show_image_compat(poster_bytes)
+    with action_col:
+        st.markdown("**下载素材**")
+        st.caption("海报展示完成数最高的前 8 个模板片单，每行列出冠军次数最多的前三名。")
+        render_download_button_compat(
+            "下载内容统计海报 PNG",
+            poster_bytes,
+            "template_content_stats_poster_v3_1.png",
+            "image/png",
+            "admin_download_template_content_stats_poster_v3_1",
+        )
+
+
 def render_admin_trends(events: List[Dict[str, Any]]) -> None:
     daily_rows = build_daily_metrics(events)
     if not daily_rows:
@@ -5088,8 +5323,8 @@ def render_admin_dashboard() -> None:
     render_admin_insights(build_admin_insights(events))
     safe_divider()
 
-    funnel_tab, load_tab, version_tab, trend_tab, list_tab, channel_tab, experiment_tab, behavior_tab, share_tab, event_tab = st.tabs(
-        ["漏斗分析", "首页加载诊断", "版本分析", "每日趋势", "片单分析", "渠道归因", "实验分析", "行为质量", "分享素材", "最近事件"]
+    funnel_tab, load_tab, version_tab, trend_tab, list_tab, content_tab, channel_tab, experiment_tab, behavior_tab, share_tab, event_tab = st.tabs(
+        ["漏斗分析", "首页加载诊断", "版本分析", "每日趋势", "片单分析", "内容统计", "渠道归因", "实验分析", "行为质量", "分享素材", "最近事件"]
     )
 
     with funnel_tab:
@@ -5136,6 +5371,9 @@ def render_admin_dashboard() -> None:
         render_admin_group_section("片单维度表现", build_list_metrics(events, sort_by=sort_map[sort_label], top_n=100), "list_id", "list_id")
         safe_divider()
         render_admin_group_section("模式维度表现", build_group_metrics(events, "mode", label_key="mode", include_unknown=True, top_n=30), "mode", "mode")
+
+    with content_tab:
+        render_admin_content_stats(events, start_date, end_date)
 
     with channel_tab:
         render_admin_group_section("渠道归因表现", build_channel_metrics(events, top_n=100), "source", "source")
@@ -5911,6 +6149,14 @@ def upcoming_poster_candidates(current: str, opponent: str) -> List[str]:
     return candidates
 
 
+def should_store_completion_top_items(mode: str, template_id: str) -> bool:
+    return mode == MODE_DOUBAN_COLLECT or (mode == MODE_CUSTOM and not str(template_id or "").strip())
+
+
+def completion_top_items(ranked: List[str], limit: int = 10) -> List[str]:
+    return [str(item).strip() for item in ranked[:limit] if str(item).strip()]
+
+
 # =========================
 # 排序页面渲染
 # =========================
@@ -5951,10 +6197,13 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
         )
         if template_id and ranked:
             payload["winner"] = ranked[0]
+        current_mode = st.session_state.get(k("mode"), MODE_CUSTOM)
+        if ranked and should_store_completion_top_items(current_mode, template_id):
+            payload["top_items"] = completion_top_items(ranked)
         track_event(
             EVENT_RANKING_COMPLETED,
             challenge_id=challenge_id,
-            mode=st.session_state.get(k("mode"), MODE_CUSTOM),
+            mode=current_mode,
             template_id=template_id,
             source_channel=source_channel,
             payload=payload,
