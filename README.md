@@ -53,19 +53,19 @@ Sort_FilmsGame 是一个影视偏好排序 Web App。它把“手动给几十部
 - 按 `list_id / template_id / mode` 查看片单维度表现。
 - 内容统计：只统计模板片单 `winner`，展示每个模板片单的完成数、冠军 Top3，并生成可下载的冠军榜宣传海报。
 - 按 `source / utm_source / utm_medium / utm_campaign` 查看渠道归因。
-- 按 `experiment_id / variant_id` 查看 A/B 实验表现。
+- 实验分析：按已停止实验 / 正在进行的实验两栏查看实验比例、起止时间、收口版本和历史分版本指标。
 - 支持最近 7 天、最近 30 天、全部历史和自定义时间范围筛选。
 
 ## A/B 实验框架
 
-实验配置位于 [experiments.py](experiments.py)。当前并行运行 `home_layout_order_v1` 和 `builtin_card_poster_v1`：前者测试首页入口顺序，后者以 1:1 比例测试内置轻量片单卡显示预制代表电影海报是否能提升片单打开率。卡片链接会携带两个实验的已验证版本参数，使 `?list=` 页面继续沿用原分桶；匿名 session 仍通过稳定哈希进入实验。
+实验配置位于 [experiments.py](experiments.py)。当前没有 active 实验；`home_layout_order_v1` 和 `builtin_card_poster_v1` 已停止并全量收口，首页默认先展示内置快速片单，内置片单卡默认显示预制代表电影海报。历史实验配置和事件 payload 仍保留在后台，用于继续复盘分版本表现。
 
 以后新增实验时，一般不需要改后台看板或埋点聚合逻辑。常规流程是：
 
 1. 在 [experiments.py](experiments.py) 里新增一个实验配置块，设置 `experiment_id`、`status`、`traffic_allocation` 和 `variants`。
-2. 如果实验只需要被记录和分析，保持 `status = "active"` 即可，事件会自动带上当前 session 命中的实验版本。
+2. 如果实验只需要被记录和分析，保持 `status = "active"` 即可，事件会自动带上当前 session 命中的实验版本；实验结束后改为 `paused`，并记录 `ended_at` 和 `decision_variant_id`。
 3. 如果实验要改变页面或功能表现，在对应业务代码里调用 `get_experiment_config(session_id, experiment_id)` 读取配置，并把配置应用到文案、按钮、默认片单或展示模块。
-4. 打开后台数据看板 v2 的 “A/B 实验表现” tab，按 `experiment_id / variant_id` 查看开始率、完成率、分享和海报下载表现。
+4. 打开后台数据看板 v2 的 “实验分析” tab，按已停止 / 正在进行查看实验配置，并按 `experiment_id / variant_id` 复盘开始率、完成率、分享和海报下载表现。
 
 ## 产品案例与复盘
 
@@ -82,7 +82,7 @@ streamlit run merged_douban_ranker_v3.py
 语法检查：
 
 ```bash
-python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py
+python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py release_history.py
 ```
 
 ## 隐私说明
@@ -236,7 +236,7 @@ streamlit run merged_douban_ranker_v3.py
 常用检查：
 
 ```bash
-python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py
+python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py release_history.py
 ```
 
 没有配置 Supabase 时，应用仍然可以运行；公开统计、短片单链接、豆瓣已看跨设备导入会自动降级或隐藏。
@@ -623,6 +623,16 @@ https://movie.douban.com/people/123456/collect
 - 后台可根据内容统计生成带前三名电影海报的模板片单冠军榜宣传海报，并提供 PNG 下载。
 - 新增 [promo_assets/content_stats_poster_preview_v3_1.png](promo_assets/content_stats_poster_preview_v3_1.png) 作为上线前设计预览。
 - 新增 [docs/version_updates/version3.1.md](docs/version_updates/version3.1.md)，并更新 [docs/analytics_v2.md](docs/analytics_v2.md) 的 `top_items` 和内容统计口径。
+
+### v3.2 实验收口与后台分析优化
+
+覆盖提交：当前工作区，2026-06-25
+
+- 结束 `home_layout_order_v1` 和 `builtin_card_poster_v1` 两个 A/B 实验，保留历史 variants、比例和分版本事件用于复盘。
+- 首页布局全量收口到 `builtin_first`，默认先展示内置快速片单，再展示豆瓣已看主推。
+- 内置轻量片单卡全量收口到 `poster`，默认显示预制代表电影海报。
+- 后台 “实验分析” tab 改为已停止实验 / 正在进行的实验两栏，展示实验比例、起止时间、收口版本和历史分版本指标。
+- 新增 [docs/version_updates/version3.2.md](docs/version_updates/version3.2.md)，并更新 [docs/analytics_v2.md](docs/analytics_v2.md) 的实验收口和后台分析口径。
 
 ---
 

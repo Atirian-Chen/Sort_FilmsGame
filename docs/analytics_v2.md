@@ -155,17 +155,20 @@ payload 会屏蔽完整候选项、完整排名、用户名、手机号、邮箱
 - `experiment_id`
 - `status`
 - `traffic_allocation`
+- `started_at`
+- `ended_at`
+- `decision_variant_id`
 - `variants`
 - `variant_id`
 - `variant_name`
 - `config`
 
-当前并行运行两个实验：
+当前没有正在运行的 active 实验；最近两个实验已经停止并全量收口：
 
-- `home_layout_order_v1`：测试首页入口顺序，`control` 保持豆瓣已看主推在上，`builtin_first` 将内置快速片单前置。
-- `builtin_card_poster_v1`：测试内置轻量片单卡显示代表电影海报是否提升片单打开率，`control` 保持纯文字卡片，`poster` 显示预制海报，比例 1:1。
+- `home_layout_order_v1`：已收口到 `builtin_first`，首页默认先展示内置快速片单，再展示豆瓣已看主推。
+- `builtin_card_poster_v1`：已收口到 `poster`，内置轻量片单卡默认显示预制代表电影海报。
 
-两个实验分别用 `anonymous_session_id + experiment_id` 做稳定哈希分桶，形成独立的 2×2 组合。内置片单卡链接会携带所有 active 实验的已验证 variant 参数；打开 `?list=` 后，实验模块只接受配置中存在的 variant，并恢复原分桶，避免页面导航产生新 session 时实验版本漂移。
+实验处于 `active` 时，会用 `anonymous_session_id + experiment_id` 做稳定哈希分桶；内置片单卡链接会携带所有 active 实验的已验证 variant 参数。实验停止后不再为新事件写入分桶上下文，旧链接里的实验 query 参数也不会改变当前默认体验。
 
 事件中会记录 `experiment_id` 和 `variant_id`，后台可以按实验版本比较：
 
@@ -183,7 +186,7 @@ payload 会屏蔽完整候选项、完整排名、用户名、手机号、邮箱
 - 内置片单打开：`entry_surface=home_builtin_card` 的 `list_opened` session。
 - 卡片打开率：内置片单打开 session / 首页曝光 session。
 
-海报实验主指标使用卡片打开率，次指标观察开始率和完成率。由于它与首页布局实验并行，分析时应同时查看 `payload.experiments` 中的两个实验版本，必要时按 2×2 组合复核。
+后台 “实验分析” tab 会按配置分成两栏：已停止实验和正在进行的实验。每个实验展示状态、总流量比例、variant 权重比例、开始时间、结束时间和收口版本；分版本指标继续来自当前筛选时间范围内的历史事件 payload，因此已停止实验仍可复盘历史表现。
 
 ## 内容统计与冠军榜海报
 

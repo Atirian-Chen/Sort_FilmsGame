@@ -41,8 +41,11 @@ EXPERIMENTS: List[Dict[str, Any]] = [
     {
         "experiment_id": "home_layout_order_v1",
         "experiment_name": "首页片单入口顺序实验",
-        "status": "active",
+        "status": "paused",
         "traffic_allocation": 1.0,
+        "started_at": "2026-06-12T02:12:39+08:00",
+        "ended_at": "2026-06-25T18:22:38+08:00",
+        "decision_variant_id": "builtin_first",
         "description": "测试快速开始片单前置是否比豆瓣已看主推前置更能提升开始整理率。",
         "variants": [
             {
@@ -66,8 +69,11 @@ EXPERIMENTS: List[Dict[str, Any]] = [
     {
         "experiment_id": "builtin_card_poster_v1",
         "experiment_name": "首页内置片单卡片海报实验",
-        "status": "active",
+        "status": "paused",
         "traffic_allocation": 1.0,
+        "started_at": "2026-06-23T22:34:11+08:00",
+        "ended_at": "2026-06-25T18:22:38+08:00",
+        "decision_variant_id": "poster",
         "description": "测试预制代表电影海报是否能提升内置轻量片单打开率。",
         "variants": [
             {

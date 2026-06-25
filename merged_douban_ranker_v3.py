@@ -68,7 +68,7 @@ from analytics import (
     track_event,
     track_once,
 )
-from experiments import get_experiment_config, get_experiment_event_context, get_experiment_query_params
+from experiments import get_experiment_config, get_experiment_event_context, get_experiment_query_params, list_experiments
 from challenge_store import (
     Challenge,
     build_challenge_url,
@@ -89,6 +89,7 @@ from import_store import (
     clean_import_id,
     fetch_imported_movie_list,
 )
+from release_history import APP_VERSION
 from launch_copy import (
     FILM_CHALLENGE_TEMPLATES,
     HERO_SUBTITLE,
@@ -4303,7 +4304,7 @@ def generate_template_champion_distribution_poster_bytes(rows: List[Dict[str, An
     draw.line((72, note_y - 24, width - 72, note_y - 24), fill=line, width=2)
     note = "口径：仅统计模板片单 winner；每个扇形图显示冠军次数 Top5，其余合并为其他。"
     draw.text((72, note_y), note, font=small_font, fill=muted)
-    draw.text((72, note_y + 34), f"{APP_TITLE} · v3.1 内容统计", font=tiny_font, fill=muted)
+    draw.text((72, note_y + 34), f"{APP_TITLE} · {APP_VERSION} 内容统计", font=tiny_font, fill=muted)
 
     out = io.BytesIO()
     img.save(out, format="PNG")
@@ -4419,7 +4420,7 @@ def generate_template_content_stats_poster_bytes(
     note = "口径：仅统计模板片单，冠军来自 winner 字段；展示完成数前 8。"
     for line_index, line_text in enumerate(wrap_text(draw, note, small_font, width - 144)[:2]):
         draw.text((72, note_y + line_index * 30), line_text, font=small_font, fill=muted)
-    draw.text((72, note_y + 38), f"{APP_TITLE} · v3.1 内容统计", font=tiny_font, fill=muted)
+    draw.text((72, note_y + 38), f"{APP_TITLE} · {APP_VERSION} 内容统计", font=tiny_font, fill=muted)
 
     out = io.BytesIO()
     img.save(out, format="PNG")
@@ -5302,6 +5303,118 @@ def render_admin_group_section(
         render_admin_dataframe(display)
 
 
+def admin_experiment_variant_ratio_text(experiment: Dict[str, Any]) -> str:
+    variants = [variant for variant in experiment.get("variants", []) if variant.get("variant_id")]
+    total_weight = sum(max(0.0, float(variant.get("weight", 1) or 0)) for variant in variants)
+    if not variants or total_weight <= 0:
+        return "未配置"
+    parts = []
+    for variant in variants:
+        weight = max(0.0, float(variant.get("weight", 1) or 0))
+        variant_id = str(variant.get("variant_id") or "")
+        parts.append(f"{variant_id} {admin_percent(weight / total_weight)}")
+    return " / ".join(parts)
+
+
+def admin_experiment_decision_text(experiment: Dict[str, Any]) -> str:
+    decision_id = str(experiment.get("decision_variant_id") or "").strip()
+    if not decision_id:
+        return "未收口"
+    for variant in experiment.get("variants", []):
+        if str(variant.get("variant_id") or "") == decision_id:
+            variant_name = str(variant.get("variant_name") or "").strip()
+            return f"{decision_id}（{variant_name}）" if variant_name else decision_id
+    return decision_id
+
+
+def admin_experiment_config_df(experiment: Dict[str, Any]) -> pd.DataFrame:
+    ended_at = admin_short_time(experiment.get("ended_at"))
+    if not ended_at:
+        ended_at = "进行中" if experiment.get("status") == "active" else "未记录"
+    return pd.DataFrame(
+        [
+            {
+                "实验": experiment.get("experiment_name") or experiment.get("experiment_id") or "",
+                "实验 ID": experiment.get("experiment_id") or "",
+                "状态": experiment.get("status") or "unknown",
+                "总流量": admin_percent(experiment.get("traffic_allocation")),
+                "版本比例": admin_experiment_variant_ratio_text(experiment),
+                "开始时间": admin_short_time(experiment.get("started_at")) or "未记录",
+                "结束时间": ended_at,
+                "收口版本": admin_experiment_decision_text(experiment),
+            }
+        ]
+    )
+
+
+def render_admin_experiment_column(
+    title: str,
+    experiments: List[Dict[str, Any]],
+    metrics_by_experiment: Dict[str, List[Dict[str, Any]]],
+    *,
+    empty_message: str,
+) -> None:
+    st.markdown(f"**{title}**")
+    if not experiments:
+        st.info(empty_message)
+        return
+
+    for index, experiment in enumerate(experiments):
+        experiment_id = str(experiment.get("experiment_id") or "")
+        st.markdown(f"**{experiment.get('experiment_name') or experiment_id}**")
+        description = str(experiment.get("description") or "").strip()
+        if description:
+            st.caption(description)
+        render_admin_dataframe(admin_experiment_config_df(experiment))
+
+        variant_rows = metrics_by_experiment.get(experiment_id, [])
+        if variant_rows:
+            st.caption("当前筛选时间范围内的分版本指标")
+            render_admin_dataframe(admin_group_df(variant_rows, "experiment_variant", "实验版本"))
+        else:
+            st.info("当前筛选范围内没有这个实验的历史事件。")
+
+        if index < len(experiments) - 1:
+            safe_divider()
+
+
+def render_admin_experiment_analysis(events: List[Dict[str, Any]]) -> None:
+    experiments = list_experiments()
+    active_experiments = sorted(
+        [experiment for experiment in experiments if experiment.get("status") == "active"],
+        key=lambda item: str(item.get("started_at") or ""),
+        reverse=True,
+    )
+    stopped_experiments = sorted(
+        [experiment for experiment in experiments if experiment.get("status") != "active"],
+        key=lambda item: str(item.get("ended_at") or item.get("started_at") or ""),
+        reverse=True,
+    )
+
+    metrics_by_experiment: Dict[str, List[Dict[str, Any]]] = {}
+    for row in build_experiment_metrics(events, top_n=200):
+        experiment_id = str(row.get("experiment_id") or "")
+        metrics_by_experiment.setdefault(experiment_id, []).append(row)
+
+    stopped_col, active_col = st.columns(2)
+    with stopped_col:
+        render_admin_experiment_column(
+            "已停止实验",
+            stopped_experiments,
+            metrics_by_experiment,
+            empty_message="当前没有已停止实验。",
+        )
+    with active_col:
+        render_admin_experiment_column(
+            "正在进行的实验",
+            active_experiments,
+            metrics_by_experiment,
+            empty_message="当前没有正在进行的实验。",
+        )
+
+    st.caption("说明：实验配置来自 experiments.py；分版本指标来自当前筛选时间范围内已有事件 payload，因此已停止实验仍可继续复盘历史表现。")
+
+
 def render_admin_trends(events: List[Dict[str, Any]]) -> None:
     daily_rows = build_daily_metrics(events)
     if not daily_rows:
@@ -5535,7 +5648,7 @@ def render_admin_dashboard() -> None:
         render_admin_group_section("渠道归因表现", build_channel_metrics(events, top_n=100), "source", "source")
 
     with experiment_tab:
-        render_admin_group_section("A/B 实验表现", build_experiment_metrics(events, top_n=100), "experiment_variant", "experiment_variant")
+        render_admin_experiment_analysis(events)
 
     with behavior_tab:
         q1, q2, q3, q4 = st.columns(4)
@@ -6849,7 +6962,7 @@ def render_builtin_quick_start_lists() -> None:
     poster_config = get_experiment_config(
         get_session_id(),
         "builtin_card_poster_v1",
-        {"show_builtin_card_posters": False},
+        {"show_builtin_card_posters": True},
     )
     show_card_posters = bool(poster_config.get("show_builtin_card_posters", False))
     experiment_query = get_experiment_query_params(get_session_id())
@@ -6932,9 +7045,9 @@ def render_mode_selection_page() -> None:
     layout_config = get_experiment_config(
         get_session_id(),
         "home_layout_order_v1",
-        {"home_layout_order": "current"},
+        {"home_layout_order": "builtin_first"},
     )
-    home_layout_order = str(layout_config.get("home_layout_order") or "current")
+    home_layout_order = str(layout_config.get("home_layout_order") or "builtin_first")
     st.session_state["home_layout_order"] = home_layout_order
     render_step_header(
         1,
