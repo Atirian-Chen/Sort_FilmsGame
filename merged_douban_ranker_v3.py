@@ -4569,6 +4569,272 @@ def render_admin_recent_events(events: List[Dict[str, Any]]) -> None:
     )
 
 
+def admin_export_escape(value: Any) -> str:
+    return html.escape(str(value if value is not None else ""), quote=True)
+
+
+def admin_export_table(frame: Any, empty_message: str = "No data in the current filter.") -> str:
+    if frame is None:
+        return f'<p class="empty">{admin_export_escape(empty_message)}</p>'
+    if isinstance(frame, list):
+        frame = pd.DataFrame(frame)
+    if not hasattr(frame, "empty") or frame.empty:
+        return f'<p class="empty">{admin_export_escape(empty_message)}</p>'
+    return frame.to_html(index=False, escape=True, classes="report-table", border=0)
+
+
+def admin_export_metric_cards(items: List[Tuple[str, Any]]) -> str:
+    cards = []
+    for label, value in items:
+        cards.append(
+            '<div class="metric-card">'
+            f'<div class="metric-label">{admin_export_escape(label)}</div>'
+            f'<div class="metric-value">{admin_export_escape(value)}</div>'
+            '</div>'
+        )
+    return f'<div class="metric-grid">{"".join(cards)}</div>'
+
+
+def admin_export_section(title: str, *parts: str) -> str:
+    body = "\n".join(part for part in parts if part)
+    return f'<section class="chapter"><h2>{admin_export_escape(title)}</h2>{body}</section>'
+
+
+def admin_export_subsection(title: str, content: str) -> str:
+    return f'<h3>{admin_export_escape(title)}</h3>{content}'
+
+
+def admin_export_paragraph(text: str, class_name: str = "note") -> str:
+    return f'<p class="{admin_export_escape(class_name)}">{admin_export_escape(text)}</p>'
+
+
+def admin_export_event_distribution_df(events: List[Dict[str, Any]]) -> pd.DataFrame:
+    counts: Dict[str, int] = {}
+    for event in events:
+        name = str(event.get("event_name") or "unknown")
+        counts[name] = counts.get(name, 0) + 1
+    rows = [{"event_name": name, "event_count": count} for name, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))]
+    return pd.DataFrame(rows)
+
+
+def build_admin_export_html(events: List[Dict[str, Any]], summary: Dict[str, Any], start_date: date, end_date: date) -> bytes:
+    ensure_pandas()
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    date_range = f"{start_date.isoformat()} to {end_date.isoformat()}"
+    unique_sessions = len({str(event.get("session_id") or "") for event in events if event.get("session_id")})
+
+    overview_cards = [
+        ("Events", admin_int(summary.get("total_events"))),
+        ("Unique sessions", admin_int(summary.get("unique_sessions"))),
+        ("Visits", admin_int(summary.get("visits"))),
+        ("List opens/selections", admin_int(summary.get("open_or_select_list"))),
+        ("Sorting starts", admin_int(summary.get("started"))),
+        ("Rankings completed", admin_int(summary.get("completed"))),
+        ("Share copies", admin_int(summary.get("copied"))),
+        ("Poster downloads", admin_int(summary.get("posters"))),
+        ("Start rate", admin_percent(summary.get("start_rate"))),
+        ("Completion rate", admin_percent(summary.get("completion_rate"))),
+        ("Share / completion", admin_percent(summary.get("share_rate"))),
+        ("Poster / completion", admin_percent(summary.get("poster_rate"))),
+        ("Avg comparisons", admin_float(summary.get("avg_comparisons"))),
+        ("Avg list size", admin_float(summary.get("avg_list_size"))),
+    ]
+    overview_section = admin_export_section(
+        "1. Overview",
+        admin_export_metric_cards(overview_cards),
+        admin_export_paragraph(
+            "This report uses the current Admin date filter and contains aggregated analytics only. Recent event row details, raw session IDs, raw payloads, credentials, and admin tokens are not exported."
+        ),
+    )
+
+    insights = build_admin_insights(events)
+    insights_html = "<ul>" + "".join(f"<li>{admin_export_escape(item)}</li>" for item in insights) + "</ul>" if insights else admin_export_paragraph("No insights available.")
+    insights_section = admin_export_section("2. Insights", insights_html)
+
+    instrumentation = build_funnel_instrumentation_summary(events)
+    funnel_section = admin_export_section(
+        "3. Funnel Analysis",
+        admin_export_subsection(
+            "Instrumentation Summary",
+            admin_export_metric_cards(
+                [
+                    ("Current instrumentation events", admin_int(instrumentation.get("current_events"))),
+                    ("Legacy compatible events", admin_int(instrumentation.get("legacy_events"))),
+                    ("Home rendered sessions", admin_int(instrumentation.get("home_rendered_sessions"))),
+                    ("Heavy entry sessions", admin_int(instrumentation.get("heavy_entry_sessions"))),
+                ]
+            ),
+        ),
+        admin_export_subsection("Current Total Funnel", admin_export_table(admin_session_funnel_df(build_current_total_funnel_rows(events)))),
+        admin_export_subsection("Light List Funnel", admin_export_table(admin_session_funnel_df(build_light_list_funnel_rows(events)))),
+        admin_export_subsection("Heavy Path Funnel", admin_export_table(admin_session_funnel_df(build_heavy_list_funnel_rows(events)))),
+        admin_export_subsection("Legacy Event Count Funnel", admin_export_table(admin_funnel_df(build_funnel_rows(events, MAIN_FUNNEL_STEPS)))),
+    )
+
+    home_metrics = build_home_load_metrics(events)
+    home_cards = [
+        ("Home visit sessions", admin_int(home_metrics.get("home_visit_sessions"))),
+        ("Rendered sessions", admin_int(home_metrics.get("home_rendered_sessions"))),
+        ("Pre-render lost sessions", admin_int(home_metrics.get("pre_render_lost_sessions"))),
+        ("Rendered no-action sessions", admin_int(home_metrics.get("post_render_no_action_sessions"))),
+        ("Render completion rate", admin_percent(home_metrics.get("render_completion_rate"))),
+        ("Post-render action rate", admin_percent(home_metrics.get("post_render_action_rate"))),
+        ("Avg render elapsed", f"{float(home_metrics.get('avg_render_elapsed_ms', 0.0)):.0f} ms"),
+        ("P75 render elapsed", f"{float(home_metrics.get('p75_render_elapsed_ms', 0.0)):.0f} ms"),
+        ("P90 render elapsed", f"{float(home_metrics.get('p90_render_elapsed_ms', 0.0)):.0f} ms"),
+    ]
+    load_section = admin_export_section(
+        "4. Home Load Diagnostics",
+        admin_export_metric_cards(home_cards),
+        admin_export_paragraph(build_home_load_insight(home_metrics)),
+    )
+
+    version_rows = build_version_metrics(events)
+    version_section = admin_export_section(
+        "5. Version Analysis",
+        admin_export_subsection("Version Overview", admin_export_table(pd.DataFrame(build_version_overview_display(version_rows)))),
+        admin_export_subsection("Adjacent Version Comparison", admin_export_table(pd.DataFrame(build_version_comparison_display(version_rows)))),
+    )
+
+    daily_rows = build_daily_metrics(events)
+    daily_display = pd.DataFrame()
+    if daily_rows:
+        daily_display = pd.DataFrame(daily_rows).rename(columns={"date": "date", **EVENT_LABELS})
+    trend_section = admin_export_section("6. Daily Trends", admin_export_table(daily_display))
+
+    list_section = admin_export_section(
+        "7. List Analysis",
+        admin_export_subsection("List Performance", admin_export_table(admin_group_df(build_list_metrics(events, sort_by="completed", top_n=100), "list_id", "list_id"))),
+        admin_export_subsection("Mode Performance", admin_export_table(admin_group_df(build_group_metrics(events, "mode", label_key="mode", include_unknown=True, top_n=30), "mode", "mode"))),
+    )
+
+    content_section = admin_export_section(
+        "8. Content Stats",
+        admin_export_table(admin_template_content_df(build_template_content_stats(events, top_n=100))),
+    )
+
+    channel_section = admin_export_section(
+        "9. Channel Attribution",
+        admin_export_table(admin_group_df(build_channel_metrics(events, top_n=100), "source", "source")),
+    )
+
+    experiment_rows = build_experiment_metrics(events, top_n=200)
+    experiment_configs = [admin_experiment_config_df(experiment) for experiment in list_experiments()]
+    experiment_config_df = pd.concat(experiment_configs, ignore_index=True) if experiment_configs else pd.DataFrame()
+    experiment_section = admin_export_section(
+        "10. Experiment Analysis",
+        admin_export_subsection("Experiment Configuration", admin_export_table(experiment_config_df)),
+        admin_export_subsection("Variant Metrics", admin_export_table(admin_group_df(experiment_rows, "experiment_variant", "experiment_variant"))),
+    )
+
+    setting_rows = build_setting_rows(events)
+    behavior_section = admin_export_section(
+        "11. Behavior Quality",
+        admin_export_metric_cards(
+            [
+                ("Median comparisons", admin_float(summary.get("median_comparisons"))),
+                ("P75 comparisons", admin_float(summary.get("p75_comparisons"))),
+                ("P90 comparisons", admin_float(summary.get("p90_comparisons"))),
+                ("Average defers", admin_float(summary.get("avg_defers"))),
+            ]
+        ),
+        admin_export_subsection(
+            "Comparison Count Distribution",
+            admin_export_table(pd.DataFrame(build_numeric_payload_histogram(events, EVENT_RANKING_COMPLETED, "comparisons", [10, 20, 40, 80, 120, 200], label_key="comparison_count"))),
+        ),
+        admin_export_subsection(
+            "List Size Distribution",
+            admin_export_table(pd.DataFrame(build_numeric_payload_histogram(events, EVENT_RANKING_COMPLETED, "total", [10, 20, 50, 100, 250, 500, 1000], label_key="list_size"))),
+        ),
+        admin_export_subsection("Top K Distribution", admin_export_table(pd.DataFrame(build_top_k_distribution(events)))),
+        admin_export_subsection("Settings Usage", admin_export_table(pd.DataFrame(setting_rows))),
+    )
+
+    share_section = admin_export_section(
+        "12. Share Assets",
+        admin_export_subsection(
+            "Share Copy Surface",
+            admin_export_table(pd.DataFrame(build_payload_value_counts(events, EVENT_SHARE_LINK_COPIED, "surface", label_key="surface", include_empty=True))),
+        ),
+        admin_export_subsection(
+            "Poster Download Type",
+            admin_export_table(pd.DataFrame(build_payload_value_counts(events, EVENT_POSTER_DOWNLOADED, "poster_type", label_key="poster_type", include_empty=True))),
+        ),
+    )
+
+    event_times = [str(event.get("created_at") or "") for event in events if event.get("created_at")]
+    recent_aggregate_section = admin_export_section(
+        "13. Recent Events Aggregate",
+        admin_export_metric_cards(
+            [
+                ("Filtered events", admin_int(len(events))),
+                ("Distinct sessions", admin_int(unique_sessions)),
+                ("First event time", admin_short_time(min(event_times) if event_times else "")),
+                ("Last event time", admin_short_time(max(event_times) if event_times else "")),
+            ]
+        ),
+        admin_export_subsection("Event Type Distribution", admin_export_table(admin_export_event_distribution_df(events))),
+        admin_export_paragraph("Row-level recent events are intentionally excluded from this export to avoid raw session IDs and payload details."),
+    )
+
+    css = """
+    body { margin: 0; background: #f7f8fa; color: #1f2328; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { max-width: 1120px; margin: 0 auto; padding: 32px 20px 56px; }
+    header { margin-bottom: 28px; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    h2 { margin: 0 0 16px; padding-bottom: 8px; border-bottom: 1px solid #d8dee4; font-size: 22px; }
+    h3 { margin: 22px 0 10px; font-size: 16px; }
+    .chapter { background: #fff; border: 1px solid #d8dee4; border-radius: 8px; padding: 22px; margin: 18px 0; }
+    .meta, .note, .empty { color: #57606a; line-height: 1.55; }
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 12px 0; }
+    .metric-card { border: 1px solid #d8dee4; border-radius: 8px; padding: 12px; background: #f6f8fa; }
+    .metric-label { color: #57606a; font-size: 12px; margin-bottom: 6px; }
+    .metric-value { color: #1f2328; font-size: 20px; font-weight: 700; }
+    .report-table { width: 100%; border-collapse: collapse; margin: 10px 0 18px; font-size: 13px; }
+    .report-table th, .report-table td { border: 1px solid #d8dee4; padding: 7px 9px; text-align: left; vertical-align: top; }
+    .report-table th { background: #f6f8fa; }
+    ul { padding-left: 22px; }
+    """
+    sections = [
+        overview_section,
+        insights_section,
+        funnel_section,
+        load_section,
+        version_section,
+        trend_section,
+        list_section,
+        content_section,
+        channel_section,
+        experiment_section,
+        behavior_section,
+        share_section,
+        recent_aggregate_section,
+    ]
+    document = f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Film Sort Admin Analytics Report</title>
+  <style>{css}</style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Film Sort Admin Analytics Report</h1>
+      <p class="meta">Date range: {admin_export_escape(date_range)} · Generated at: {admin_export_escape(generated_at)}</p>
+    </header>
+    {''.join(sections)}
+  </main>
+</body>
+</html>"""
+    return document.encode("utf-8")
+
+
+def admin_export_filename(start_date: date, end_date: date) -> str:
+    return f"film_sort_admin_report_{start_date.isoformat()}_to_{end_date.isoformat()}.html"
+
+
 def render_admin_dashboard() -> None:
     ensure_pandas()
     token = get_query_param("admin")
@@ -5587,6 +5853,13 @@ def render_admin_dashboard() -> None:
         return
 
     summary = build_admin_summary(events)
+    render_download_button_compat(
+        "导出当前 Admin HTML 报告",
+        build_admin_export_html(events, summary, start_date, end_date),
+        admin_export_filename(start_date, end_date),
+        "text/html",
+        "admin_download_html_report_v2",
+    )
     render_admin_metric_grid(summary)
     safe_divider()
     render_admin_insights(build_admin_insights(events))

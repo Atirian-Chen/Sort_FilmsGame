@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 .streamlit/
 cache/
+analytics/sample_data/analytics_events_sanitized_sample.csv

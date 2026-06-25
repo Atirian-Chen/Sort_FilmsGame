@@ -8,6 +8,17 @@ Sort_FilmsGame 是一个影视偏好排序 Web App。它把“手动给几十部
 
 [https://sortfilmsgamegit.streamlit.app](https://sortfilmsgamegit.streamlit.app)
 
+## Analytics and Product Insights
+
+Film Sort has anonymous product analytics backed by Supabase `analytics_events`.
+Current confirmed events include visits, list opens/selections, sorting starts, pairwise comparisons, ranking completions, result views, QR views, poster downloads, and share-copy actions.
+Current analysis can support basic funnels, list/template performance, source and device splits, and list-size/comparison summaries.
+The project does not require login for analytics and does not intentionally collect phone numbers, emails, IP addresses, raw user agents, or complete custom rankings in event payloads.
+Event taxonomy and data inventory live in [docs/event_taxonomy.md](docs/event_taxonomy.md) and [docs/data_inventory.md](docs/data_inventory.md).
+Read-only quality checks live in [analytics/sql/01_data_quality.sql](analytics/sql/01_data_quality.sql), with a safe inspection helper in [analytics/scripts/inspect_analytics.py](analytics/scripts/inspect_analytics.py).
+Future analytics work should add only minimal missing fields/events for abandonment, test-traffic isolation, and experiment exposure.
+No unverified traffic volume, conversion result, or experiment conclusion is claimed here.
+
 ## 核心功能
 
 - 1v1 电影偏好排序，支持 Top N 和完整排序。
