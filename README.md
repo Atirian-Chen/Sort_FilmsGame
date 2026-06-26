@@ -19,6 +19,14 @@ Read-only quality checks live in [analytics/sql/01_data_quality.sql](analytics/s
 Future analytics work should add only minimal missing fields/events for abandonment, test-traffic isolation, and experiment exposure.
 No unverified traffic volume, conversion result, or experiment conclusion is claimed here.
 
+## Product Analytics Case Study
+
+This repository includes a product analytics case study based on real anonymous behavior data.
+Read it at [docs/film_sort_product_analytics_case_study.md](docs/film_sort_product_analytics_case_study.md).
+Metric definitions are documented in [docs/metrics_contract.md](docs/metrics_contract.md).
+Data inventory and event taxonomy live in [docs/data_inventory.md](docs/data_inventory.md) and [docs/event_taxonomy.md](docs/event_taxonomy.md).
+The case study publishes aggregate findings only, not raw user events, session identifiers, admin tokens, or sensitive configuration.
+
 ## 核心功能
 
 - 1v1 电影偏好排序，支持 Top N 和完整排序。

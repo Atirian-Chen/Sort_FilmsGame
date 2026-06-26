@@ -1,0 +1,4063 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Film Sort Admin Analytics Report</title>
+  <style>
+    body { margin: 0; background: #f7f8fa; color: #1f2328; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { max-width: 1120px; margin: 0 auto; padding: 32px 20px 56px; }
+    header { margin-bottom: 28px; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    h2 { margin: 0 0 16px; padding-bottom: 8px; border-bottom: 1px solid #d8dee4; font-size: 22px; }
+    h3 { margin: 22px 0 10px; font-size: 16px; }
+    .chapter { background: #fff; border: 1px solid #d8dee4; border-radius: 8px; padding: 22px; margin: 18px 0; }
+    .meta, .note, .empty { color: #57606a; line-height: 1.55; }
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 12px 0; }
+    .metric-card { border: 1px solid #d8dee4; border-radius: 8px; padding: 12px; background: #f6f8fa; }
+    .metric-label { color: #57606a; font-size: 12px; margin-bottom: 6px; }
+    .metric-value { color: #1f2328; font-size: 20px; font-weight: 700; }
+    .report-table { width: 100%; border-collapse: collapse; margin: 10px 0 18px; font-size: 13px; }
+    .report-table th, .report-table td { border: 1px solid #d8dee4; padding: 7px 9px; text-align: left; vertical-align: top; }
+    .report-table th { background: #f6f8fa; }
+    ul { padding-left: 22px; }
+    </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Film Sort Admin Analytics Report</h1>
+      <p class="meta">Date range: 2026-06-01 to 2026-06-25 · Generated at: 2026-06-25 19:37:48</p>
+    </header>
+    <section class="chapter"><h2>1. Overview</h2><div class="metric-grid"><div class="metric-card"><div class="metric-label">Events</div><div class="metric-value">102,885</div></div><div class="metric-card"><div class="metric-label">Unique sessions</div><div class="metric-value">9,576</div></div><div class="metric-card"><div class="metric-label">Visits</div><div class="metric-value">9,576</div></div><div class="metric-card"><div class="metric-label">List opens/selections</div><div class="metric-value">2,921</div></div><div class="metric-card"><div class="metric-label">Sorting starts</div><div class="metric-value">1,752</div></div><div class="metric-card"><div class="metric-label">Rankings completed</div><div class="metric-value">612</div></div><div class="metric-card"><div class="metric-label">Share copies</div><div class="metric-value">110</div></div><div class="metric-card"><div class="metric-label">Poster downloads</div><div class="metric-value">187</div></div><div class="metric-card"><div class="metric-label">Start rate</div><div class="metric-value">18.3%</div></div><div class="metric-card"><div class="metric-label">Completion rate</div><div class="metric-value">34.9%</div></div><div class="metric-card"><div class="metric-label">Share / completion</div><div class="metric-value">18.0%</div></div><div class="metric-card"><div class="metric-label">Poster / completion</div><div class="metric-value">30.6%</div></div><div class="metric-card"><div class="metric-label">Avg comparisons</div><div class="metric-value">224.3</div></div><div class="metric-card"><div class="metric-label">Avg list size</div><div class="metric-value">107.4</div></div></div>
+<p class="note">This report uses the current Admin date filter and contains aggregated analytics only. Recent event row details, raw session IDs, raw payloads, credentials, and admin tokens are not exported.</p></section><section class="chapter"><h2>2. Insights</h2><ul><li>当前开始率为 18.3%，完成率为 34.9%。</li><li>当前最大流失环节为 访问 -&gt; 打开/选择片单，单步转化率为 30.5%，说明用户可能在该环节存在认知、入口或操作成本阻力。</li><li>完成率最高的渠道是「direct / unknown」，完成率 35.9%。</li><li>完成率最高的片单是「nolan」，完成 74 次。</li><li>完成用户平均作出 224.3 次取舍，平均整理规模 107.4 部。</li><li>海报下载率高于复制分享率，说明视觉化结果可能比纯链接分享更有传播吸引力。</li></ul></section><section class="chapter"><h2>3. Funnel Analysis</h2><h3>Instrumentation Summary</h3><div class="metric-grid"><div class="metric-card"><div class="metric-label">Current instrumentation events</div><div class="metric-value">97,222</div></div><div class="metric-card"><div class="metric-label">Legacy compatible events</div><div class="metric-value">5,663</div></div><div class="metric-card"><div class="metric-label">Home rendered sessions</div><div class="metric-value">3,457</div></div><div class="metric-card"><div class="metric-label">Heavy entry sessions</div><div class="metric-value">1,675</div></div></div>
+<h3>Current Total Funnel</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>步骤</th>
+      <th>埋点</th>
+      <th>session 数</th>
+      <th>单步转化率</th>
+      <th>总体转化率</th>
+      <th>相邻流失 session</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>首页内容已渲染</td>
+      <td>home_content_rendered</td>
+      <td>3457</td>
+      <td>100.0%</td>
+      <td>100.0%</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>打开/选择片单</td>
+      <td>list_opened / list_selected</td>
+      <td>1571</td>
+      <td>45.4%</td>
+      <td>45.4%</td>
+      <td>1886</td>
+    </tr>
+    <tr>
+      <td>实际开始整理</td>
+      <td>sorting_started</td>
+      <td>256</td>
+      <td>16.3%</td>
+      <td>7.4%</td>
+      <td>1315</td>
+    </tr>
+    <tr>
+      <td>完成名单</td>
+      <td>ranking_completed</td>
+      <td>37</td>
+      <td>14.5%</td>
+      <td>1.1%</td>
+      <td>219</td>
+    </tr>
+    <tr>
+      <td>分享/下载海报</td>
+      <td>share_copied / poster_downloaded</td>
+      <td>13</td>
+      <td>35.1%</td>
+      <td>0.4%</td>
+      <td>24</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Light List Funnel</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>步骤</th>
+      <th>埋点</th>
+      <th>session 数</th>
+      <th>单步转化率</th>
+      <th>总体转化率</th>
+      <th>相邻流失 session</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>打开轻量片单</td>
+      <td>list_opened</td>
+      <td>760</td>
+      <td>100.0%</td>
+      <td>100.0%</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>实际开始整理</td>
+      <td>sorting_started</td>
+      <td>760</td>
+      <td>100.0%</td>
+      <td>100.0%</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>完成名单</td>
+      <td>ranking_completed</td>
+      <td>167</td>
+      <td>22.0%</td>
+      <td>22.0%</td>
+      <td>593</td>
+    </tr>
+    <tr>
+      <td>分享/下载海报</td>
+      <td>share_copied / poster_downloaded</td>
+      <td>33</td>
+      <td>19.8%</td>
+      <td>4.3%</td>
+      <td>134</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Heavy Path Funnel</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>步骤</th>
+      <th>埋点</th>
+      <th>session 数</th>
+      <th>单步转化率</th>
+      <th>总体转化率</th>
+      <th>相邻流失 session</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>进入填参数/配置页</td>
+      <td>list_selected</td>
+      <td>1675</td>
+      <td>100.0%</td>
+      <td>100.0%</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>实际开始整理</td>
+      <td>sorting_started</td>
+      <td>210</td>
+      <td>12.5%</td>
+      <td>12.5%</td>
+      <td>1465</td>
+    </tr>
+    <tr>
+      <td>完成名单</td>
+      <td>ranking_completed</td>
+      <td>27</td>
+      <td>12.9%</td>
+      <td>1.6%</td>
+      <td>183</td>
+    </tr>
+    <tr>
+      <td>分享/下载海报</td>
+      <td>share_copied / poster_downloaded</td>
+      <td>12</td>
+      <td>44.4%</td>
+      <td>0.7%</td>
+      <td>15</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Legacy Event Count Funnel</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>步骤</th>
+      <th>事件</th>
+      <th>事件数</th>
+      <th>单步转化率</th>
+      <th>总体转化率</th>
+      <th>相邻流失数</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>访问</td>
+      <td>visit</td>
+      <td>9576</td>
+      <td>100.0%</td>
+      <td>100.0%</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>打开/选择片单</td>
+      <td>list_opened / list_selected</td>
+      <td>2921</td>
+      <td>30.5%</td>
+      <td>30.5%</td>
+      <td>6655</td>
+    </tr>
+    <tr>
+      <td>开始整理</td>
+      <td>sorting_started</td>
+      <td>1752</td>
+      <td>60.0%</td>
+      <td>18.3%</td>
+      <td>1169</td>
+    </tr>
+    <tr>
+      <td>完成名单</td>
+      <td>ranking_completed</td>
+      <td>612</td>
+      <td>34.9%</td>
+      <td>6.4%</td>
+      <td>1140</td>
+    </tr>
+    <tr>
+      <td>复制分享/下载海报</td>
+      <td>share_copied / poster_downloaded</td>
+      <td>297</td>
+      <td>48.5%</td>
+      <td>3.1%</td>
+      <td>315</td>
+    </tr>
+  </tbody>
+</table></section><section class="chapter"><h2>4. Home Load Diagnostics</h2><div class="metric-grid"><div class="metric-card"><div class="metric-label">Home visit sessions</div><div class="metric-value">3,817</div></div><div class="metric-card"><div class="metric-label">Rendered sessions</div><div class="metric-value">3,337</div></div><div class="metric-card"><div class="metric-label">Pre-render lost sessions</div><div class="metric-value">307</div></div><div class="metric-card"><div class="metric-label">Rendered no-action sessions</div><div class="metric-value">1,870</div></div><div class="metric-card"><div class="metric-label">Render completion rate</div><div class="metric-value">87.4%</div></div><div class="metric-card"><div class="metric-label">Post-render action rate</div><div class="metric-value">44.0%</div></div><div class="metric-card"><div class="metric-label">Avg render elapsed</div><div class="metric-value">53 ms</div></div><div class="metric-card"><div class="metric-label">P75 render elapsed</div><div class="metric-value">13 ms</div></div><div class="metric-card"><div class="metric-label">P90 render elapsed</div><div class="metric-value">16 ms</div></div></div>
+<p class="note">当前主要流失更像发生在看到首页内容之后：56.0% 的已渲染 session 没有继续打开/选择片单或开始整理，建议优先检查首屏价值表达、入口顺序和 CTA 成本。</p></section><section class="chapter"><h2>5. Version Analysis</h2><h3>Version Overview</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>版本</th>
+      <th>上线时间</th>
+      <th>事件窗口</th>
+      <th>事件数</th>
+      <th>session</th>
+      <th>首页访问</th>
+      <th>加载中流失</th>
+      <th>首页渲染完成率</th>
+      <th>加载中流失率</th>
+      <th>渲染后行动率</th>
+      <th>打开/选择率</th>
+      <th>开始率</th>
+      <th>完成率</th>
+      <th>分享率</th>
+      <th>P90 渲染耗时</th>
+      <th>commit</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>v3.2 · 实验收口与后台分析优化</td>
+      <td>2026-06-25 18:22:38</td>
+      <td>2026-06-25 12:29:46 ~ 2026-06-25 19:35:22</td>
+      <td>1607</td>
+      <td>73</td>
+      <td>73</td>
+      <td>1</td>
+      <td>98.2%</td>
+      <td>1.8%</td>
+      <td>26.8%</td>
+      <td>41.1%</td>
+      <td>24.7%</td>
+      <td>27.8%</td>
+      <td>0.0%</td>
+      <td>18 ms</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>v3.1 · 模板内容统计与冠军榜海报</td>
+      <td>2026-06-24 02:00:01</td>
+      <td>2026-06-23 18:38:39 ~ 2026-06-25 12:29:22</td>
+      <td>6691</td>
+      <td>396</td>
+      <td>396</td>
+      <td>0</td>
+      <td>99.7%</td>
+      <td>0.0%</td>
+      <td>38.9%</td>
+      <td>54.3%</td>
+      <td>28.0%</td>
+      <td>35.1%</td>
+      <td>20.5%</td>
+      <td>16 ms</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>v2.10 · 轻量片单海报 A/B 实验</td>
+      <td>2026-06-23 22:34:11</td>
+      <td>2026-06-23 14:55:25 ~ 2026-06-23 18:20:05</td>
+      <td>1416</td>
+      <td>40</td>
+      <td>40</td>
+      <td>0</td>
+      <td>100.0%</td>
+      <td>0.0%</td>
+      <td>53.1%</td>
+      <td>60.0%</td>
+      <td>27.5%</td>
+      <td>27.3%</td>
+      <td>66.7%</td>
+      <td>26 ms</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>v2.9 · 豆瓣导入详细教程入口</td>
+      <td>2026-06-23 19:52:00</td>
+      <td>2026-06-23 13:01:00 ~ 2026-06-23 14:54:57</td>
+      <td>1649</td>
+      <td>35</td>
+      <td>35</td>
+      <td>0</td>
+      <td>100.0%</td>
+      <td>0.0%</td>
+      <td>52.2%</td>
+      <td>65.7%</td>
+      <td>37.1%</td>
+      <td>38.5%</td>
+      <td>40.0%</td>
+      <td>32 ms</td>
+      <td>18132b2</td>
+    </tr>
+    <tr>
+      <td>v2.8 · 后台看板百万事件读取</td>
+      <td>2026-06-17 20:38:30</td>
+      <td>2026-06-17 12:50:10 ~ 2026-06-23 13:00:02</td>
+      <td>39253</td>
+      <td>2082</td>
+      <td>2082</td>
+      <td>1</td>
+      <td>99.8%</td>
+      <td>0.1%</td>
+      <td>43.8%</td>
+      <td>54.9%</td>
+      <td>22.3%</td>
+      <td>38.6%</td>
+      <td>25.7%</td>
+      <td>14 ms</td>
+      <td>de8a00d</td>
+    </tr>
+    <tr>
+      <td>v2.6 · 结果页好友推荐入口优化</td>
+      <td>2026-06-14 01:10:20</td>
+      <td>2026-06-13 17:23:54 ~ 2026-06-17 12:49:32</td>
+      <td>32134</td>
+      <td>1286</td>
+      <td>1286</td>
+      <td>0</td>
+      <td>99.9%</td>
+      <td>0.0%</td>
+      <td>48.0%</td>
+      <td>58.7%</td>
+      <td>24.4%</td>
+      <td>38.5%</td>
+      <td>19.0%</td>
+      <td>15 ms</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>v2.5 · 后台缺失值修正与同好联系方式</td>
+      <td>2026-06-13 23:43:43</td>
+      <td>2026-06-13 15:43:44 ~ 2026-06-13 17:22:40</td>
+      <td>772</td>
+      <td>70</td>
+      <td>67</td>
+      <td>0</td>
+      <td>100.0%</td>
+      <td>0.0%</td>
+      <td>45.1%</td>
+      <td>58.2%</td>
+      <td>26.9%</td>
+      <td>55.6%</td>
+      <td>0.0%</td>
+      <td>15 ms</td>
+      <td>5294b59</td>
+    </tr>
+    <tr>
+      <td>v2.4 · 后台看板版本数据分析</td>
+      <td>2026-06-13 22:14:02</td>
+      <td>2026-06-13 14:14:13 ~ 2026-06-13 15:43:42</td>
+      <td>958</td>
+      <td>61</td>
+      <td>59</td>
+      <td>0</td>
+      <td>100.0%</td>
+      <td>0.0%</td>
+      <td>24.4%</td>
+      <td>44.1%</td>
+      <td>23.7%</td>
+      <td>21.4%</td>
+      <td>0.0%</td>
+      <td>15 ms</td>
+      <td>abb13d0</td>
+    </tr>
+    <tr>
+      <td>v2.3 · 首页加载优化与版本分析</td>
+      <td>2026-06-13 21:42:19</td>
+      <td>2026-06-13 13:43:32 ~ 2026-06-13 14:13:57</td>
+      <td>119</td>
+      <td>28</td>
+      <td>28</td>
+      <td>0</td>
+      <td>100.0%</td>
+      <td>0.0%</td>
+      <td>40.9%</td>
+      <td>53.6%</td>
+      <td>25.0%</td>
+      <td>57.1%</td>
+      <td>0.0%</td>
+      <td>13 ms</td>
+      <td>5508735</td>
+    </tr>
+    <tr>
+      <td>v2.2 · 新增王家卫/新海诚/迪士尼片单</td>
+      <td>2026-06-13 15:03:41</td>
+      <td>2026-06-13 07:03:41 ~ 2026-06-13 13:38:04</td>
+      <td>3169</td>
+      <td>185</td>
+      <td>183</td>
+      <td>9</td>
+      <td>94.3%</td>
+      <td>5.7%</td>
+      <td>36.9%</td>
+      <td>43.7%</td>
+      <td>14.2%</td>
+      <td>57.7%</td>
+      <td>13.3%</td>
+      <td>1221 ms</td>
+      <td>6133044</td>
+    </tr>
+    <tr>
+      <td>v2.1 · 新版埋点与后台看板优化</td>
+      <td>2026-06-13 14:01:48</td>
+      <td>2026-06-13 06:01:48 ~ 2026-06-13 07:03:27</td>
+      <td>1091</td>
+      <td>27</td>
+      <td>23</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>39.1%</td>
+      <td>21.7%</td>
+      <td>20.0%</td>
+      <td>100.0%</td>
+      <td>---</td>
+      <td>4e7b66e</td>
+    </tr>
+    <tr>
+      <td>v2.0 · 后台看板 v2 与 A/B 实验基础设施</td>
+      <td>2026-06-12 02:12:39</td>
+      <td>2026-06-11 18:13:34 ~ 2026-06-13 06:01:42</td>
+      <td>8105</td>
+      <td>512</td>
+      <td>512</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>43.8%</td>
+      <td>15.6%</td>
+      <td>28.7%</td>
+      <td>47.8%</td>
+      <td>---</td>
+      <td>0c8352b</td>
+    </tr>
+    <tr>
+      <td>v1.9 · 首页与结果页转化优化</td>
+      <td>2026-06-11 14:56:14</td>
+      <td>2026-06-11 06:56:39 ~ 2026-06-11 18:11:59</td>
+      <td>578</td>
+      <td>448</td>
+      <td>447</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>7.6%</td>
+      <td>12.8%</td>
+      <td>35.1%</td>
+      <td>45.0%</td>
+      <td>---</td>
+      <td>c731491</td>
+    </tr>
+    <tr>
+      <td>v1.8 · 豆瓣已看标记年份筛选与推广素材</td>
+      <td>2026-06-09 20:45:46</td>
+      <td>2026-06-09 12:46:39 ~ 2026-06-11 06:56:01</td>
+      <td>960</td>
+      <td>750</td>
+      <td>750</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>5.9%</td>
+      <td>13.6%</td>
+      <td>37.3%</td>
+      <td>26.3%</td>
+      <td>---</td>
+      <td>6ec8572</td>
+    </tr>
+    <tr>
+      <td>v1.7 · 后台数据看板 v1</td>
+      <td>2026-06-08 03:59:31</td>
+      <td>2026-06-07 20:00:34 ~ 2026-06-09 12:41:31</td>
+      <td>1155</td>
+      <td>946</td>
+      <td>946</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>4.1%</td>
+      <td>11.2%</td>
+      <td>32.1%</td>
+      <td>44.1%</td>
+      <td>---</td>
+      <td>1aa917b</td>
+    </tr>
+    <tr>
+      <td>v1.6 · 豆瓣已看评分筛选与 README 重写</td>
+      <td>2026-06-07 06:44:10</td>
+      <td>2026-06-06 22:45:31 ~ 2026-06-07 19:58:37</td>
+      <td>772</td>
+      <td>654</td>
+      <td>654</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>2.6%</td>
+      <td>9.8%</td>
+      <td>37.5%</td>
+      <td>29.2%</td>
+      <td>---</td>
+      <td>3e0f9c8</td>
+    </tr>
+    <tr>
+      <td>v1.5 · 豆瓣已看书签导入</td>
+      <td>2026-06-05 03:10:17</td>
+      <td>2026-06-04 19:12:56 ~ 2026-06-06 22:29:05</td>
+      <td>1865</td>
+      <td>1549</td>
+      <td>1549</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>3.5%</td>
+      <td>10.6%</td>
+      <td>32.9%</td>
+      <td>25.9%</td>
+      <td>---</td>
+      <td>a5ad774</td>
+    </tr>
+    <tr>
+      <td>v1.4 · 浏览器本地自动保存</td>
+      <td>2026-06-03 13:45:25</td>
+      <td>2026-06-03 05:47:21 ~ 2026-06-04 19:03:42</td>
+      <td>387</td>
+      <td>325</td>
+      <td>325</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>5.5%</td>
+      <td>9.8%</td>
+      <td>31.2%</td>
+      <td>10.0%</td>
+      <td>---</td>
+      <td>0056f77</td>
+    </tr>
+    <tr>
+      <td>v1.3 · 豆瓣已看总榜</td>
+      <td>2026-06-02 16:29:39</td>
+      <td>2026-06-02 08:34:50 ~ 2026-06-03 05:43:40</td>
+      <td>104</td>
+      <td>69</td>
+      <td>68</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>8.8%</td>
+      <td>27.9%</td>
+      <td>15.8%</td>
+      <td>33.3%</td>
+      <td>---</td>
+      <td>935e610</td>
+    </tr>
+    <tr>
+      <td>v1.2 · 首页和宣传素材优化</td>
+      <td>2026-06-02 00:08:18</td>
+      <td>2026-06-01 16:14:16 ~ 2026-06-02 08:14:54</td>
+      <td>58</td>
+      <td>33</td>
+      <td>33</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>33.3%</td>
+      <td>36.4%</td>
+      <td>8.3%</td>
+      <td>100.0%</td>
+      <td>---</td>
+      <td>543732a</td>
+    </tr>
+    <tr>
+      <td>v1.1 · 海报、二维码和移动端优化</td>
+      <td>2026-06-01 03:01:59</td>
+      <td>2026-06-01 08:45:43 ~ 2026-06-01 15:59:23</td>
+      <td>42</td>
+      <td>20</td>
+      <td>20</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>20.0%</td>
+      <td>50.0%</td>
+      <td>60.0%</td>
+      <td>16.7%</td>
+      <td>---</td>
+      <td>80b9556</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Adjacent Version Comparison</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>版本对比</th>
+      <th>当前版本</th>
+      <th>上一版本</th>
+      <th>首页渲染完成率变化</th>
+      <th>加载中流失率变化</th>
+      <th>渲染后行动率变化</th>
+      <th>开始率变化</th>
+      <th>完成率变化</th>
+      <th>分享率变化</th>
+      <th>P90 渲染耗时变化</th>
+      <th>当前首页访问</th>
+      <th>当前开始</th>
+      <th>当前完成</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>v3.1 -&gt; v3.2</td>
+      <td>v3.2 · 实验收口与后台分析优化</td>
+      <td>v3.1 · 模板内容统计与冠军榜海报</td>
+      <td>-1.4 pp</td>
+      <td>+1.8 pp</td>
+      <td>-12.1 pp</td>
+      <td>-3.4 pp</td>
+      <td>-7.4 pp</td>
+      <td>-20.5 pp</td>
+      <td>+2 ms</td>
+      <td>73</td>
+      <td>18</td>
+      <td>5</td>
+    </tr>
+    <tr>
+      <td>v2.10 -&gt; v3.1</td>
+      <td>v3.1 · 模板内容统计与冠军榜海报</td>
+      <td>v2.10 · 轻量片单海报 A/B 实验</td>
+      <td>-0.3 pp</td>
+      <td>+0.0 pp</td>
+      <td>-14.3 pp</td>
+      <td>+0.5 pp</td>
+      <td>+7.9 pp</td>
+      <td>-46.2 pp</td>
+      <td>-10 ms</td>
+      <td>396</td>
+      <td>111</td>
+      <td>39</td>
+    </tr>
+    <tr>
+      <td>v2.9 -&gt; v2.10</td>
+      <td>v2.10 · 轻量片单海报 A/B 实验</td>
+      <td>v2.9 · 豆瓣导入详细教程入口</td>
+      <td>+0.0 pp</td>
+      <td>+0.0 pp</td>
+      <td>+1.0 pp</td>
+      <td>-9.6 pp</td>
+      <td>-11.2 pp</td>
+      <td>+26.7 pp</td>
+      <td>-6 ms</td>
+      <td>40</td>
+      <td>11</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>v2.8 -&gt; v2.9</td>
+      <td>v2.9 · 豆瓣导入详细教程入口</td>
+      <td>v2.8 · 后台看板百万事件读取</td>
+      <td>+0.2 pp</td>
+      <td>-0.1 pp</td>
+      <td>+8.4 pp</td>
+      <td>+14.9 pp</td>
+      <td>-0.1 pp</td>
+      <td>+14.3 pp</td>
+      <td>+18 ms</td>
+      <td>35</td>
+      <td>13</td>
+      <td>5</td>
+    </tr>
+    <tr>
+      <td>v2.6 -&gt; v2.8</td>
+      <td>v2.8 · 后台看板百万事件读取</td>
+      <td>v2.6 · 结果页好友推荐入口优化</td>
+      <td>-0.1 pp</td>
+      <td>+0.1 pp</td>
+      <td>-4.2 pp</td>
+      <td>-2.1 pp</td>
+      <td>+0.0 pp</td>
+      <td>+6.7 pp</td>
+      <td>-1 ms</td>
+      <td>2082</td>
+      <td>464</td>
+      <td>179</td>
+    </tr>
+    <tr>
+      <td>v2.5 -&gt; v2.6</td>
+      <td>v2.6 · 结果页好友推荐入口优化</td>
+      <td>v2.5 · 后台缺失值修正与同好联系方式</td>
+      <td>-0.1 pp</td>
+      <td>+0.0 pp</td>
+      <td>+2.9 pp</td>
+      <td>-2.4 pp</td>
+      <td>-17.0 pp</td>
+      <td>+19.0 pp</td>
+      <td>+0 ms</td>
+      <td>1286</td>
+      <td>314</td>
+      <td>121</td>
+    </tr>
+    <tr>
+      <td>v2.4 -&gt; v2.5</td>
+      <td>v2.5 · 后台缺失值修正与同好联系方式</td>
+      <td>v2.4 · 后台看板版本数据分析</td>
+      <td>+0.0 pp</td>
+      <td>+0.0 pp</td>
+      <td>+20.7 pp</td>
+      <td>+3.1 pp</td>
+      <td>+34.1 pp</td>
+      <td>+0.0 pp</td>
+      <td>+0 ms</td>
+      <td>67</td>
+      <td>18</td>
+      <td>10</td>
+    </tr>
+    <tr>
+      <td>v2.3 -&gt; v2.4</td>
+      <td>v2.4 · 后台看板版本数据分析</td>
+      <td>v2.3 · 首页加载优化与版本分析</td>
+      <td>+0.0 pp</td>
+      <td>+0.0 pp</td>
+      <td>-16.5 pp</td>
+      <td>-1.3 pp</td>
+      <td>-35.7 pp</td>
+      <td>+0.0 pp</td>
+      <td>+2 ms</td>
+      <td>59</td>
+      <td>14</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>v2.2 -&gt; v2.3</td>
+      <td>v2.3 · 首页加载优化与版本分析</td>
+      <td>v2.2 · 新增王家卫/新海诚/迪士尼片单</td>
+      <td>+5.7 pp</td>
+      <td>-5.7 pp</td>
+      <td>+4.0 pp</td>
+      <td>+10.8 pp</td>
+      <td>-0.5 pp</td>
+      <td>-13.3 pp</td>
+      <td>-1208 ms</td>
+      <td>28</td>
+      <td>7</td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <td>v2.1 -&gt; v2.2</td>
+      <td>v2.2 · 新增王家卫/新海诚/迪士尼片单</td>
+      <td>v2.1 · 新版埋点与后台看板优化</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>-7.5 pp</td>
+      <td>+37.7 pp</td>
+      <td>-86.7 pp</td>
+      <td>---</td>
+      <td>183</td>
+      <td>26</td>
+      <td>15</td>
+    </tr>
+    <tr>
+      <td>v2.0 -&gt; v2.1</td>
+      <td>v2.1 · 新版埋点与后台看板优化</td>
+      <td>v2.0 · 后台看板 v2 与 A/B 实验基础设施</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>+6.1 pp</td>
+      <td>-8.7 pp</td>
+      <td>+52.2 pp</td>
+      <td>---</td>
+      <td>23</td>
+      <td>5</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td>v1.9 -&gt; v2.0</td>
+      <td>v2.0 · 后台看板 v2 与 A/B 实验基础设施</td>
+      <td>v1.9 · 首页与结果页转化优化</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>+2.9 pp</td>
+      <td>-6.3 pp</td>
+      <td>+2.8 pp</td>
+      <td>---</td>
+      <td>512</td>
+      <td>80</td>
+      <td>23</td>
+    </tr>
+    <tr>
+      <td>v1.8 -&gt; v1.9</td>
+      <td>v1.9 · 首页与结果页转化优化</td>
+      <td>v1.8 · 豆瓣已看标记年份筛选与推广素材</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>-0.8 pp</td>
+      <td>-2.2 pp</td>
+      <td>+18.7 pp</td>
+      <td>---</td>
+      <td>447</td>
+      <td>57</td>
+      <td>20</td>
+    </tr>
+    <tr>
+      <td>v1.7 -&gt; v1.8</td>
+      <td>v1.8 · 豆瓣已看标记年份筛选与推广素材</td>
+      <td>v1.7 · 后台数据看板 v1</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>+2.4 pp</td>
+      <td>+5.2 pp</td>
+      <td>-17.8 pp</td>
+      <td>---</td>
+      <td>750</td>
+      <td>102</td>
+      <td>38</td>
+    </tr>
+    <tr>
+      <td>v1.6 -&gt; v1.7</td>
+      <td>v1.7 · 后台数据看板 v1</td>
+      <td>v1.6 · 豆瓣已看评分筛选与 README 重写</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>+1.4 pp</td>
+      <td>-5.4 pp</td>
+      <td>+15.0 pp</td>
+      <td>---</td>
+      <td>946</td>
+      <td>106</td>
+      <td>34</td>
+    </tr>
+    <tr>
+      <td>v1.5 -&gt; v1.6</td>
+      <td>v1.6 · 豆瓣已看评分筛选与 README 重写</td>
+      <td>v1.5 · 豆瓣已看书签导入</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>-0.8 pp</td>
+      <td>+4.6 pp</td>
+      <td>+3.2 pp</td>
+      <td>---</td>
+      <td>654</td>
+      <td>64</td>
+      <td>24</td>
+    </tr>
+    <tr>
+      <td>v1.4 -&gt; v1.5</td>
+      <td>v1.5 · 豆瓣已看书签导入</td>
+      <td>v1.4 · 浏览器本地自动保存</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>+0.7 pp</td>
+      <td>+1.7 pp</td>
+      <td>+15.9 pp</td>
+      <td>---</td>
+      <td>1549</td>
+      <td>164</td>
+      <td>54</td>
+    </tr>
+    <tr>
+      <td>v1.3 -&gt; v1.4</td>
+      <td>v1.4 · 浏览器本地自动保存</td>
+      <td>v1.3 · 豆瓣已看总榜</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>-18.1 pp</td>
+      <td>+15.5 pp</td>
+      <td>-23.3 pp</td>
+      <td>---</td>
+      <td>325</td>
+      <td>32</td>
+      <td>10</td>
+    </tr>
+    <tr>
+      <td>v1.2 -&gt; v1.3</td>
+      <td>v1.3 · 豆瓣已看总榜</td>
+      <td>v1.2 · 首页和宣传素材优化</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>-8.4 pp</td>
+      <td>+7.5 pp</td>
+      <td>-66.7 pp</td>
+      <td>---</td>
+      <td>68</td>
+      <td>19</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>v1.1 -&gt; v1.2</td>
+      <td>v1.2 · 首页和宣传素材优化</td>
+      <td>v1.1 · 海报、二维码和移动端优化</td>
+      <td>---</td>
+      <td>---</td>
+      <td>---</td>
+      <td>-13.6 pp</td>
+      <td>-51.7 pp</td>
+      <td>+83.3 pp</td>
+      <td>---</td>
+      <td>33</td>
+      <td>12</td>
+      <td>1</td>
+    </tr>
+  </tbody>
+</table></section><section class="chapter"><h2>6. Daily Trends</h2><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>date</th>
+      <th>访问</th>
+      <th>打开片单</th>
+      <th>选择片单</th>
+      <th>开始整理</th>
+      <th>完成名单</th>
+      <th>复制分享</th>
+      <th>下载海报</th>
+      <th>首页内容已渲染</th>
+      <th>start_rate</th>
+      <th>completion_rate</th>
+      <th>share_rate</th>
+      <th>poster_rate</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2026-06-01</td>
+      <td>33</td>
+      <td>7</td>
+      <td>0</td>
+      <td>15</td>
+      <td>7</td>
+      <td>0</td>
+      <td>3</td>
+      <td>0</td>
+      <td>0.454545</td>
+      <td>0.466667</td>
+      <td>0.000000</td>
+      <td>0.428571</td>
+    </tr>
+    <tr>
+      <td>2026-06-02</td>
+      <td>61</td>
+      <td>13</td>
+      <td>0</td>
+      <td>27</td>
+      <td>3</td>
+      <td>3</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.442623</td>
+      <td>0.111111</td>
+      <td>1.000000</td>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <td>2026-06-03</td>
+      <td>89</td>
+      <td>4</td>
+      <td>0</td>
+      <td>16</td>
+      <td>1</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0.179775</td>
+      <td>0.062500</td>
+      <td>0.000000</td>
+      <td>1.000000</td>
+    </tr>
+    <tr>
+      <td>2026-06-04</td>
+      <td>314</td>
+      <td>17</td>
+      <td>0</td>
+      <td>26</td>
+      <td>11</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.082803</td>
+      <td>0.423077</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <td>2026-06-05</td>
+      <td>686</td>
+      <td>37</td>
+      <td>0</td>
+      <td>81</td>
+      <td>37</td>
+      <td>17</td>
+      <td>7</td>
+      <td>0</td>
+      <td>0.118076</td>
+      <td>0.456790</td>
+      <td>0.459459</td>
+      <td>0.189189</td>
+    </tr>
+    <tr>
+      <td>2026-06-06</td>
+      <td>819</td>
+      <td>15</td>
+      <td>0</td>
+      <td>88</td>
+      <td>17</td>
+      <td>6</td>
+      <td>7</td>
+      <td>0</td>
+      <td>0.107448</td>
+      <td>0.193182</td>
+      <td>0.352941</td>
+      <td>0.411765</td>
+    </tr>
+    <tr>
+      <td>2026-06-07</td>
+      <td>667</td>
+      <td>17</td>
+      <td>0</td>
+      <td>70</td>
+      <td>26</td>
+      <td>0</td>
+      <td>8</td>
+      <td>0</td>
+      <td>0.104948</td>
+      <td>0.371429</td>
+      <td>0.000000</td>
+      <td>0.307692</td>
+    </tr>
+    <tr>
+      <td>2026-06-08</td>
+      <td>609</td>
+      <td>28</td>
+      <td>0</td>
+      <td>81</td>
+      <td>25</td>
+      <td>1</td>
+      <td>14</td>
+      <td>0</td>
+      <td>0.133005</td>
+      <td>0.308642</td>
+      <td>0.040000</td>
+      <td>0.560000</td>
+    </tr>
+    <tr>
+      <td>2026-06-09</td>
+      <td>556</td>
+      <td>29</td>
+      <td>0</td>
+      <td>64</td>
+      <td>26</td>
+      <td>0</td>
+      <td>5</td>
+      <td>0</td>
+      <td>0.115108</td>
+      <td>0.406250</td>
+      <td>0.000000</td>
+      <td>0.192308</td>
+    </tr>
+    <tr>
+      <td>2026-06-10</td>
+      <td>401</td>
+      <td>17</td>
+      <td>0</td>
+      <td>59</td>
+      <td>12</td>
+      <td>7</td>
+      <td>5</td>
+      <td>0</td>
+      <td>0.147132</td>
+      <td>0.203390</td>
+      <td>0.583333</td>
+      <td>0.416667</td>
+    </tr>
+    <tr>
+      <td>2026-06-11</td>
+      <td>590</td>
+      <td>47</td>
+      <td>8</td>
+      <td>82</td>
+      <td>30</td>
+      <td>5</td>
+      <td>16</td>
+      <td>0</td>
+      <td>0.138983</td>
+      <td>0.365854</td>
+      <td>0.166667</td>
+      <td>0.533333</td>
+    </tr>
+    <tr>
+      <td>2026-06-12</td>
+      <td>370</td>
+      <td>54</td>
+      <td>124</td>
+      <td>64</td>
+      <td>19</td>
+      <td>1</td>
+      <td>9</td>
+      <td>0</td>
+      <td>0.172973</td>
+      <td>0.296875</td>
+      <td>0.052632</td>
+      <td>0.473684</td>
+    </tr>
+    <tr>
+      <td>2026-06-13</td>
+      <td>598</td>
+      <td>137</td>
+      <td>177</td>
+      <td>156</td>
+      <td>51</td>
+      <td>32</td>
+      <td>12</td>
+      <td>362</td>
+      <td>0.260870</td>
+      <td>0.326923</td>
+      <td>0.627451</td>
+      <td>0.235294</td>
+    </tr>
+    <tr>
+      <td>2026-06-14</td>
+      <td>444</td>
+      <td>72</td>
+      <td>190</td>
+      <td>91</td>
+      <td>26</td>
+      <td>2</td>
+      <td>7</td>
+      <td>384</td>
+      <td>0.204955</td>
+      <td>0.285714</td>
+      <td>0.076923</td>
+      <td>0.269231</td>
+    </tr>
+    <tr>
+      <td>2026-06-15</td>
+      <td>290</td>
+      <td>51</td>
+      <td>107</td>
+      <td>60</td>
+      <td>23</td>
+      <td>4</td>
+      <td>9</td>
+      <td>244</td>
+      <td>0.206897</td>
+      <td>0.383333</td>
+      <td>0.173913</td>
+      <td>0.391304</td>
+    </tr>
+    <tr>
+      <td>2026-06-16</td>
+      <td>293</td>
+      <td>70</td>
+      <td>116</td>
+      <td>81</td>
+      <td>44</td>
+      <td>6</td>
+      <td>3</td>
+      <td>234</td>
+      <td>0.276451</td>
+      <td>0.543210</td>
+      <td>0.136364</td>
+      <td>0.068182</td>
+    </tr>
+    <tr>
+      <td>2026-06-17</td>
+      <td>230</td>
+      <td>45</td>
+      <td>96</td>
+      <td>52</td>
+      <td>22</td>
+      <td>0</td>
+      <td>7</td>
+      <td>189</td>
+      <td>0.226087</td>
+      <td>0.423077</td>
+      <td>0.000000</td>
+      <td>0.318182</td>
+    </tr>
+    <tr>
+      <td>2026-06-18</td>
+      <td>220</td>
+      <td>40</td>
+      <td>93</td>
+      <td>44</td>
+      <td>20</td>
+      <td>0</td>
+      <td>8</td>
+      <td>183</td>
+      <td>0.200000</td>
+      <td>0.454545</td>
+      <td>0.000000</td>
+      <td>0.400000</td>
+    </tr>
+    <tr>
+      <td>2026-06-19</td>
+      <td>217</td>
+      <td>39</td>
+      <td>75</td>
+      <td>46</td>
+      <td>19</td>
+      <td>0</td>
+      <td>1</td>
+      <td>181</td>
+      <td>0.211982</td>
+      <td>0.413043</td>
+      <td>0.000000</td>
+      <td>0.052632</td>
+    </tr>
+    <tr>
+      <td>2026-06-20</td>
+      <td>213</td>
+      <td>35</td>
+      <td>81</td>
+      <td>51</td>
+      <td>17</td>
+      <td>2</td>
+      <td>6</td>
+      <td>183</td>
+      <td>0.239437</td>
+      <td>0.333333</td>
+      <td>0.117647</td>
+      <td>0.352941</td>
+    </tr>
+    <tr>
+      <td>2026-06-21</td>
+      <td>530</td>
+      <td>96</td>
+      <td>196</td>
+      <td>114</td>
+      <td>43</td>
+      <td>12</td>
+      <td>14</td>
+      <td>444</td>
+      <td>0.215094</td>
+      <td>0.377193</td>
+      <td>0.279070</td>
+      <td>0.325581</td>
+    </tr>
+    <tr>
+      <td>2026-06-22</td>
+      <td>546</td>
+      <td>129</td>
+      <td>198</td>
+      <td>148</td>
+      <td>49</td>
+      <td>1</td>
+      <td>17</td>
+      <td>434</td>
+      <td>0.271062</td>
+      <td>0.331081</td>
+      <td>0.020408</td>
+      <td>0.346939</td>
+    </tr>
+    <tr>
+      <td>2026-06-23</td>
+      <td>353</td>
+      <td>88</td>
+      <td>125</td>
+      <td>104</td>
+      <td>40</td>
+      <td>7</td>
+      <td>21</td>
+      <td>271</td>
+      <td>0.294618</td>
+      <td>0.384615</td>
+      <td>0.175000</td>
+      <td>0.525000</td>
+    </tr>
+    <tr>
+      <td>2026-06-24</td>
+      <td>303</td>
+      <td>83</td>
+      <td>101</td>
+      <td>98</td>
+      <td>35</td>
+      <td>4</td>
+      <td>6</td>
+      <td>228</td>
+      <td>0.323432</td>
+      <td>0.357143</td>
+      <td>0.114286</td>
+      <td>0.171429</td>
+    </tr>
+    <tr>
+      <td>2026-06-25</td>
+      <td>144</td>
+      <td>27</td>
+      <td>37</td>
+      <td>34</td>
+      <td>9</td>
+      <td>0</td>
+      <td>1</td>
+      <td>120</td>
+      <td>0.236111</td>
+      <td>0.264706</td>
+      <td>0.000000</td>
+      <td>0.111111</td>
+    </tr>
+  </tbody>
+</table></section><section class="chapter"><h2>7. List Analysis</h2><h3>List Performance</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>list_id</th>
+      <th>访问</th>
+      <th>打开</th>
+      <th>选择</th>
+      <th>开始</th>
+      <th>完成</th>
+      <th>复制分享</th>
+      <th>下载海报</th>
+      <th>开始率</th>
+      <th>完成率</th>
+      <th>分享率</th>
+      <th>海报下载率</th>
+      <th>平均取舍</th>
+      <th>平均规模</th>
+      <th>最近活跃</th>
+      <th>template_id</th>
+      <th>mode</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>douban-top50</td>
+      <td>0</td>
+      <td>578</td>
+      <td>0</td>
+      <td>581</td>
+      <td>160</td>
+      <td>9</td>
+      <td>32</td>
+      <td>0.0%</td>
+      <td>27.5%</td>
+      <td>5.6%</td>
+      <td>20.0%</td>
+      <td>92.3</td>
+      <td>50.0</td>
+      <td>2026-06-25 18:28:03</td>
+      <td>douban-top50</td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>douban-collect</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>611</td>
+      <td>149</td>
+      <td>29</td>
+      <td>87</td>
+      <td>0.0%</td>
+      <td>24.4%</td>
+      <td>19.5%</td>
+      <td>58.4%</td>
+      <td>599.9</td>
+      <td>269.8</td>
+      <td>2026-06-25 18:25:19</td>
+      <td>douban-collect</td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>chinese-highscore</td>
+      <td>0</td>
+      <td>97</td>
+      <td>0</td>
+      <td>97</td>
+      <td>86</td>
+      <td>0</td>
+      <td>5</td>
+      <td>0.0%</td>
+      <td>88.7%</td>
+      <td>0.0%</td>
+      <td>5.8%</td>
+      <td>36.5</td>
+      <td>20.0</td>
+      <td>2026-06-25 18:13:24</td>
+      <td>chinese-highscore</td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>nolan</td>
+      <td>0</td>
+      <td>78</td>
+      <td>0</td>
+      <td>81</td>
+      <td>74</td>
+      <td>1</td>
+      <td>11</td>
+      <td>0.0%</td>
+      <td>91.4%</td>
+      <td>1.4%</td>
+      <td>14.9%</td>
+      <td>22.6</td>
+      <td>12.0</td>
+      <td>2026-06-24 14:12:32</td>
+      <td>nolan</td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>自备片单</td>
+      <td>0</td>
+      <td>0</td>
+      <td>65</td>
+      <td>130</td>
+      <td>57</td>
+      <td>26</td>
+      <td>15</td>
+      <td>0.0%</td>
+      <td>43.8%</td>
+      <td>45.6%</td>
+      <td>26.3%</td>
+      <td>443.2</td>
+      <td>231.9</td>
+      <td>2026-06-25 14:52:39</td>
+      <td></td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>miyazaki</td>
+      <td>0</td>
+      <td>39</td>
+      <td>0</td>
+      <td>46</td>
+      <td>23</td>
+      <td>7</td>
+      <td>22</td>
+      <td>0.0%</td>
+      <td>50.0%</td>
+      <td>30.4%</td>
+      <td>95.7%</td>
+      <td>20.8</td>
+      <td>11.0</td>
+      <td>2026-06-24 06:11:37</td>
+      <td>miyazaki</td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>couple-debate</td>
+      <td>0</td>
+      <td>63</td>
+      <td>0</td>
+      <td>63</td>
+      <td>19</td>
+      <td>29</td>
+      <td>7</td>
+      <td>0.0%</td>
+      <td>30.2%</td>
+      <td>152.6%</td>
+      <td>36.8%</td>
+      <td>28.1</td>
+      <td>15.0</td>
+      <td>2026-06-25 14:10:01</td>
+      <td>couple-debate</td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>disney-animation</td>
+      <td>0</td>
+      <td>59</td>
+      <td>0</td>
+      <td>59</td>
+      <td>17</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>28.8%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>36.7</td>
+      <td>20.0</td>
+      <td>2026-06-24 22:28:11</td>
+      <td>disney-animation</td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>wong-kar-wai</td>
+      <td>0</td>
+      <td>43</td>
+      <td>0</td>
+      <td>43</td>
+      <td>17</td>
+      <td>0</td>
+      <td>6</td>
+      <td>0.0%</td>
+      <td>39.5%</td>
+      <td>0.0%</td>
+      <td>35.3%</td>
+      <td>18.3</td>
+      <td>10.0</td>
+      <td>2026-06-24 22:22:26</td>
+      <td>wong-kar-wai</td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>shinkai</td>
+      <td>0</td>
+      <td>14</td>
+      <td>0</td>
+      <td>14</td>
+      <td>4</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>28.6%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>14.8</td>
+      <td>8.0</td>
+      <td>2026-06-25 12:30:05</td>
+      <td>shinkai</td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>mv-948754532a</td>
+      <td>0</td>
+      <td>7</td>
+      <td>0</td>
+      <td>7</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>28.6%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>20.5</td>
+      <td>10.0</td>
+      <td>2026-06-24 06:26:37</td>
+      <td></td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>douban-live</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>4</td>
+      <td>2</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0.0%</td>
+      <td>50.0%</td>
+      <td>0.0%</td>
+      <td>50.0%</td>
+      <td>351.0</td>
+      <td>250.0</td>
+      <td>2026-06-21 15:59:10</td>
+      <td>douban-live</td>
+      <td>豆瓣高分</td>
+    </tr>
+    <tr>
+      <td>mv-0eddc5eb79</td>
+      <td>0</td>
+      <td>7</td>
+      <td>0</td>
+      <td>7</td>
+      <td>1</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>14.3%</td>
+      <td>200.0%</td>
+      <td>0.0%</td>
+      <td>88.0</td>
+      <td>59.0</td>
+      <td>2026-06-16 08:30:49</td>
+      <td></td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>mv-cba3942929</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>1</td>
+      <td>2</td>
+      <td>1</td>
+      <td>0.0%</td>
+      <td>100.0%</td>
+      <td>200.0%</td>
+      <td>100.0%</td>
+      <td>210.0</td>
+      <td>52.0</td>
+      <td>2026-06-25 06:29:54</td>
+      <td></td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>mv-27927b1a7e</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 08:22:45</td>
+      <td></td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>mv-18f455c081</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-06 15:43:57</td>
+      <td></td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>mv-6a45e13df6</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-12 11:17:04</td>
+      <td></td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>mv-6a0cfb42f3</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-05 19:29:22</td>
+      <td></td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>mv-5f6ca8aaa2</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-05 15:36:24</td>
+      <td></td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>mv-9192c9d31c</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-05 13:15:28</td>
+      <td></td>
+      <td>自备片单</td>
+    </tr>
+    <tr>
+      <td>豆瓣已看</td>
+      <td>0</td>
+      <td>0</td>
+      <td>1647</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-25 19:35:22</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>unknown</td>
+      <td>9576</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-25 19:35:22</td>
+      <td></td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>db-1fac06e772650461</td>
+      <td>0</td>
+      <td>3</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-25 17:54:29</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-764474871db164f1</td>
+      <td>0</td>
+      <td>7</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-25 06:27:59</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-277aa2922ffb8a40</td>
+      <td>0</td>
+      <td>5</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-25 03:49:10</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>豆瓣高分</td>
+      <td>0</td>
+      <td>0</td>
+      <td>12</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 22:32:03</td>
+      <td></td>
+      <td>豆瓣高分</td>
+    </tr>
+    <tr>
+      <td>db-2f356058639aa791</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 17:57:24</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-907dbbba057e8d82</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 15:41:47</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-7f9069ced7232b85</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 15:24:47</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-a2a53cf12e668893</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 14:16:03</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-5823863c179498bf</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 12:23:32</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-7dfa2c44f472a7fa</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 12:12:37</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-b0f3fb8ac3f0b3f1</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 11:30:07</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-98c88a3abc7f36f7</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 08:50:06</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-1f0e3d10936a9efe</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 08:13:35</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-11f99c7fc0ec3b63</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 07:37:58</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-8c10f25e8ba07947</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 06:23:58</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-a23c91bae12eb3e3</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 06:05:44</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-4fe091be0ba57071</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 05:52:04</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-801c6a3730503760</td>
+      <td>0</td>
+      <td>4</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 05:11:22</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-96fb16adf6895bce</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-24 02:56:33</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-c1c01edad4146e6b</td>
+      <td>0</td>
+      <td>4</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 18:07:35</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-041593726a5450ed</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 17:47:10</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-6d04c3cdc3db9c18</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 13:58:46</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-84810f291d6b348b</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 13:15:40</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-6ba395b6df94a477</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 13:07:29</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-6abb7f3525a1c40c</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 09:30:50</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-175cc9fc8175375c</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 08:51:09</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-bd48ac8bb41791ce</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 08:37:55</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-b42c15f8b0aed269</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 08:26:51</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-35e58223d28285ab</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 06:59:39</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-a72504408e4538dc</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 06:51:45</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-cba377e9a98d2b9f</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 06:13:23</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-88de9254a0072890</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 05:27:15</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-84e43edad3f0843b</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 05:19:22</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-88a4efc643bad70e</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 05:19:00</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-0b13e4a75f04b95e</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 03:38:13</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-1e0df54939676e83</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 03:16:32</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-0dd46a9092dbaecb</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 01:24:01</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-1aca5ee688f5c4b2</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 01:06:36</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-e818e9c5f84e908d</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-23 00:24:29</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-87e9eac0981f4d3e</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 18:05:27</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-ef2a22656a973f2b</td>
+      <td>0</td>
+      <td>3</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 16:30:00</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-45a092c40717b8df</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 16:02:55</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-7ae46f0ac5258b70</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 15:48:56</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-f56766d2681bd971</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 14:51:35</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-7cb3017dbefa9bdb</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 14:48:33</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-0291ced21b35c739</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 14:46:20</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-4ef78479100f64a5</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 14:34:14</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-a48aed6fd5c15f17</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 13:46:08</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-996b28184e0636f7</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 13:42:06</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-158ea0ed4d28d664</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 13:38:18</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-d58fb82df8bb7081</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 12:28:47</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-41cdd163eb55f0cf</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 12:18:19</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-705423aba30b2c4a</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 11:33:38</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-0dd408d5f1b9adc9</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 11:32:04</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-b51bf31ade7453f4</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 11:13:48</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-020192a55b066a9b</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 09:57:56</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-eab9227833f4e68e</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 09:50:35</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-bb5ffd4a3562bb0e</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 06:35:33</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-bc4f249ab2ed5b5a</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 06:34:25</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-2f29700ec0cffaf8</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 06:30:02</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-64971505f86eced1</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 05:26:58</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-6cb17fe1f36dc1b5</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 03:51:38</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-0d5915456645b351</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-22 01:46:01</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-6dd1682b84f44b32</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-21 23:39:22</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-52198eb42cc96fa3</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-21 23:34:02</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-62e45f6b8ee6edb4</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-21 21:03:58</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-8f063fce2d6bbce7</td>
+      <td>0</td>
+      <td>4</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-21 19:45:38</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-c195703ef09cb877</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-21 15:42:54</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-a5e5d4c401772bbb</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-21 15:38:39</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-1a0f21dc9b926a18</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-21 15:23:55</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-361efce68b7ab9f1</td>
+      <td>0</td>
+      <td>2</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-21 13:51:31</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-3f06c3c71ab843e1</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-21 13:24:15</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-b705bedde0f12ca3</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-21 13:16:39</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-4ae241ac9181d8c2</td>
+      <td>0</td>
+      <td>4</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-21 13:14:31</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-8acf5f2f92ddf7c5</td>
+      <td>0</td>
+      <td>7</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-21 13:12:55</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-95a39dc4e0881e16</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-21 13:07:16</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-d02e1a1d771223d4</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-21 12:57:24</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+    <tr>
+      <td>db-558cbbbe220d2f7c</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-20 14:30:47</td>
+      <td></td>
+      <td>豆瓣已看</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Mode Performance</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>mode</th>
+      <th>访问</th>
+      <th>打开</th>
+      <th>选择</th>
+      <th>开始</th>
+      <th>完成</th>
+      <th>复制分享</th>
+      <th>下载海报</th>
+      <th>开始率</th>
+      <th>完成率</th>
+      <th>分享率</th>
+      <th>海报下载率</th>
+      <th>平均取舍</th>
+      <th>平均规模</th>
+      <th>最近活跃</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>自备片单</td>
+      <td>0</td>
+      <td>987</td>
+      <td>65</td>
+      <td>1137</td>
+      <td>461</td>
+      <td>81</td>
+      <td>99</td>
+      <td>0.0%</td>
+      <td>40.5%</td>
+      <td>17.6%</td>
+      <td>21.5%</td>
+      <td>102.4</td>
+      <td>54.3</td>
+      <td>2026-06-25 18:28:03</td>
+    </tr>
+    <tr>
+      <td>豆瓣已看</td>
+      <td>0</td>
+      <td>210</td>
+      <td>1647</td>
+      <td>611</td>
+      <td>149</td>
+      <td>29</td>
+      <td>87</td>
+      <td>0.0%</td>
+      <td>24.4%</td>
+      <td>19.5%</td>
+      <td>58.4%</td>
+      <td>599.9</td>
+      <td>269.8</td>
+      <td>2026-06-25 19:35:22</td>
+    </tr>
+    <tr>
+      <td>豆瓣高分</td>
+      <td>0</td>
+      <td>0</td>
+      <td>12</td>
+      <td>4</td>
+      <td>2</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0.0%</td>
+      <td>50.0%</td>
+      <td>0.0%</td>
+      <td>50.0%</td>
+      <td>351.0</td>
+      <td>250.0</td>
+      <td>2026-06-24 22:32:03</td>
+    </tr>
+    <tr>
+      <td>unknown</td>
+      <td>9576</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-25 19:35:22</td>
+    </tr>
+  </tbody>
+</table></section><section class="chapter"><h2>8. Content Stats</h2><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>模板</th>
+      <th>template_id</th>
+      <th>完成数</th>
+      <th>可统计冠军数</th>
+      <th>冠军 Top3</th>
+      <th>最近完成</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>豆瓣高分片单</td>
+      <td>douban-top50</td>
+      <td>160</td>
+      <td>160</td>
+      <td>霸王别姬(14)，控方证人(14)，泰坦尼克号(13)</td>
+      <td>2026-06-25 18:09:44</td>
+    </tr>
+    <tr>
+      <td>华语高分片单</td>
+      <td>chinese-highscore</td>
+      <td>86</td>
+      <td>86</td>
+      <td>一一(19)，霸王别姬(16)，牯岭街少年杀人事件(13)</td>
+      <td>2026-06-25 18:13:24</td>
+    </tr>
+    <tr>
+      <td>诺兰作品序列</td>
+      <td>nolan</td>
+      <td>74</td>
+      <td>74</td>
+      <td>星际穿越(16)，蝙蝠侠：黑暗骑士(13)，奥本海默(11)</td>
+      <td>2026-06-24 05:35:30</td>
+    </tr>
+    <tr>
+      <td>宫崎骏动画手记</td>
+      <td>miyazaki</td>
+      <td>23</td>
+      <td>23</td>
+      <td>千与千寻(8)，哈尔的移动城堡(5)，幽灵公主(3)</td>
+      <td>2026-06-24 05:05:44</td>
+    </tr>
+    <tr>
+      <td>两个人的观影名单</td>
+      <td>couple-debate</td>
+      <td>19</td>
+      <td>19</td>
+      <td>重庆森林(9)，泰坦尼克号(4)，爱在日落黄昏时(3)</td>
+      <td>2026-06-24 22:31:04</td>
+    </tr>
+    <tr>
+      <td>迪士尼动画长片榜</td>
+      <td>disney-animation</td>
+      <td>17</td>
+      <td>17</td>
+      <td>疯狂动物城(5)，美女与野兽(4)，冰雪奇缘(3)</td>
+      <td>2026-06-24 22:28:11</td>
+    </tr>
+    <tr>
+      <td>王家卫电影榜</td>
+      <td>wong-kar-wai</td>
+      <td>17</td>
+      <td>17</td>
+      <td>花样年华(7)，重庆森林(6)，东邪西毒(2)</td>
+      <td>2026-06-24 22:21:02</td>
+    </tr>
+    <tr>
+      <td>新海诚动画电影榜</td>
+      <td>shinkai</td>
+      <td>4</td>
+      <td>4</td>
+      <td>铃芽之旅(3)，秒速5厘米(1)</td>
+      <td>2026-06-24 05:08:34</td>
+    </tr>
+  </tbody>
+</table></section><section class="chapter"><h2>9. Channel Attribution</h2><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>source</th>
+      <th>访问</th>
+      <th>打开</th>
+      <th>选择</th>
+      <th>开始</th>
+      <th>完成</th>
+      <th>复制分享</th>
+      <th>下载海报</th>
+      <th>开始率</th>
+      <th>完成率</th>
+      <th>分享率</th>
+      <th>海报下载率</th>
+      <th>平均取舍</th>
+      <th>平均规模</th>
+      <th>最近活跃</th>
+      <th>utm_source</th>
+      <th>utm_medium</th>
+      <th>utm_campaign</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>direct</td>
+      <td>4793</td>
+      <td>227</td>
+      <td>0</td>
+      <td>0</td>
+      <td>194</td>
+      <td>39</td>
+      <td>65</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>20.1%</td>
+      <td>33.5%</td>
+      <td>306.9</td>
+      <td>170.0</td>
+      <td>2026-06-11 18:13:34</td>
+      <td>direct</td>
+      <td>unknown</td>
+      <td>unknown</td>
+    </tr>
+    <tr>
+      <td>direct / unknown</td>
+      <td>4749</td>
+      <td>970</td>
+      <td>1704</td>
+      <td>1148</td>
+      <td>412</td>
+      <td>71</td>
+      <td>122</td>
+      <td>24.2%</td>
+      <td>35.9%</td>
+      <td>17.2%</td>
+      <td>29.6%</td>
+      <td>188.5</td>
+      <td>79.3</td>
+      <td>2026-06-25 19:35:22</td>
+      <td>direct / unknown</td>
+      <td>unknown</td>
+      <td>unknown</td>
+    </tr>
+    <tr>
+      <td>doumail</td>
+      <td>17</td>
+      <td>0</td>
+      <td>11</td>
+      <td>0</td>
+      <td>6</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>15.0</td>
+      <td>18.5</td>
+      <td>2026-06-22 15:13:37</td>
+      <td>doumail</td>
+      <td>unknown</td>
+      <td>unknown</td>
+    </tr>
+    <tr>
+      <td>timeline</td>
+      <td>17</td>
+      <td>0</td>
+      <td>9</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-16 19:04:40</td>
+      <td>timeline</td>
+      <td>unknown</td>
+      <td>unknown</td>
+    </tr>
+    <tr>
+      <td>shared</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>507</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-11 18:05:47</td>
+      <td>shared</td>
+      <td>unknown</td>
+      <td>unknown</td>
+    </tr>
+    <tr>
+      <td>custom</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>97</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>2026-06-09 06:31:43</td>
+      <td>custom</td>
+      <td>unknown</td>
+      <td>unknown</td>
+    </tr>
+  </tbody>
+</table></section><section class="chapter"><h2>10. Experiment Analysis</h2><h3>Experiment Configuration</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>实验</th>
+      <th>实验 ID</th>
+      <th>状态</th>
+      <th>总流量</th>
+      <th>版本比例</th>
+      <th>开始时间</th>
+      <th>结束时间</th>
+      <th>收口版本</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>首页首屏标题与 CTA 实验</td>
+      <td>homepage_cta_v1</td>
+      <td>paused</td>
+      <td>100.0%</td>
+      <td>control 50.0% / quick_start 50.0%</td>
+      <td>未记录</td>
+      <td>未记录</td>
+      <td>未收口</td>
+    </tr>
+    <tr>
+      <td>首页片单入口顺序实验</td>
+      <td>home_layout_order_v1</td>
+      <td>paused</td>
+      <td>100.0%</td>
+      <td>control 50.0% / builtin_first 50.0%</td>
+      <td>2026-06-12 02:12:39</td>
+      <td>2026-06-25 18:22:38</td>
+      <td>builtin_first（快速片单前置）</td>
+    </tr>
+    <tr>
+      <td>首页内置片单卡片海报实验</td>
+      <td>builtin_card_poster_v1</td>
+      <td>paused</td>
+      <td>100.0%</td>
+      <td>control 50.0% / poster 50.0%</td>
+      <td>2026-06-23 22:34:11</td>
+      <td>2026-06-25 18:22:38</td>
+      <td>poster（大众电影海报）</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Variant Metrics</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>experiment_variant</th>
+      <th>访问</th>
+      <th>打开</th>
+      <th>选择</th>
+      <th>开始</th>
+      <th>完成</th>
+      <th>复制分享</th>
+      <th>下载海报</th>
+      <th>开始率</th>
+      <th>完成率</th>
+      <th>分享率</th>
+      <th>海报下载率</th>
+      <th>平均取舍</th>
+      <th>平均规模</th>
+      <th>最近活跃</th>
+      <th>experiment_id</th>
+      <th>variant_id</th>
+      <th>首页曝光</th>
+      <th>内置片单打开</th>
+      <th>卡片打开率</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>builtin_card_poster_v1:poster</td>
+      <td>215</td>
+      <td>59</td>
+      <td>64</td>
+      <td>68</td>
+      <td>19</td>
+      <td>3</td>
+      <td>4</td>
+      <td>31.6%</td>
+      <td>27.9%</td>
+      <td>15.8%</td>
+      <td>21.1%</td>
+      <td>111.4</td>
+      <td>48.5</td>
+      <td>2026-06-25 12:29:22</td>
+      <td>builtin_card_poster_v1</td>
+      <td>poster</td>
+      <td>163</td>
+      <td>33</td>
+      <td>20.2%</td>
+    </tr>
+    <tr>
+      <td>builtin_card_poster_v1:control</td>
+      <td>221</td>
+      <td>48</td>
+      <td>76</td>
+      <td>63</td>
+      <td>23</td>
+      <td>1</td>
+      <td>6</td>
+      <td>28.5%</td>
+      <td>36.5%</td>
+      <td>4.3%</td>
+      <td>26.1%</td>
+      <td>127.1</td>
+      <td>57.4</td>
+      <td>2026-06-25 11:59:56</td>
+      <td>builtin_card_poster_v1</td>
+      <td>control</td>
+      <td>175</td>
+      <td>25</td>
+      <td>14.3%</td>
+    </tr>
+    <tr>
+      <td>home_layout_order_v1:builtin_first</td>
+      <td>2310</td>
+      <td>444</td>
+      <td>706</td>
+      <td>522</td>
+      <td>186</td>
+      <td>51</td>
+      <td>59</td>
+      <td>22.6%</td>
+      <td>35.6%</td>
+      <td>27.4%</td>
+      <td>31.7%</td>
+      <td>177.8</td>
+      <td>71.2</td>
+      <td>2026-06-25 12:25:21</td>
+      <td>home_layout_order_v1</td>
+      <td>builtin_first</td>
+      <td>1699</td>
+      <td>34</td>
+      <td>2.0%</td>
+    </tr>
+    <tr>
+      <td>home_layout_order_v1:control</td>
+      <td>2400</td>
+      <td>510</td>
+      <td>1001</td>
+      <td>608</td>
+      <td>227</td>
+      <td>20</td>
+      <td>63</td>
+      <td>25.3%</td>
+      <td>37.3%</td>
+      <td>8.8%</td>
+      <td>27.8%</td>
+      <td>192.9</td>
+      <td>84.7</td>
+      <td>2026-06-25 12:29:22</td>
+      <td>home_layout_order_v1</td>
+      <td>control</td>
+      <td>1699</td>
+      <td>24</td>
+      <td>1.4%</td>
+    </tr>
+  </tbody>
+</table></section><section class="chapter"><h2>11. Behavior Quality</h2><div class="metric-grid"><div class="metric-card"><div class="metric-label">Median comparisons</div><div class="metric-value">59.5</div></div><div class="metric-card"><div class="metric-label">P75 comparisons</div><div class="metric-value">170.2</div></div><div class="metric-card"><div class="metric-label">P90 comparisons</div><div class="metric-value">682.5</div></div><div class="metric-card"><div class="metric-label">Average defers</div><div class="metric-value">5.6</div></div></div>
+<h3>Comparison Count Distribution</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>comparison_count</th>
+      <th>count</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0-9</td>
+      <td>36</td>
+    </tr>
+    <tr>
+      <td>10-19</td>
+      <td>69</td>
+    </tr>
+    <tr>
+      <td>20-39</td>
+      <td>131</td>
+    </tr>
+    <tr>
+      <td>40-79</td>
+      <td>91</td>
+    </tr>
+    <tr>
+      <td>80-119</td>
+      <td>79</td>
+    </tr>
+    <tr>
+      <td>120-199</td>
+      <td>62</td>
+    </tr>
+    <tr>
+      <td>200+</td>
+      <td>144</td>
+    </tr>
+  </tbody>
+</table>
+<h3>List Size Distribution</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>list_size</th>
+      <th>count</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0-9</td>
+      <td>21</td>
+    </tr>
+    <tr>
+      <td>10-19</td>
+      <td>151</td>
+    </tr>
+    <tr>
+      <td>20-49</td>
+      <td>116</td>
+    </tr>
+    <tr>
+      <td>50-99</td>
+      <td>187</td>
+    </tr>
+    <tr>
+      <td>100-249</td>
+      <td>56</td>
+    </tr>
+    <tr>
+      <td>250-499</td>
+      <td>43</td>
+    </tr>
+    <tr>
+      <td>500-999</td>
+      <td>33</td>
+    </tr>
+    <tr>
+      <td>1000+</td>
+      <td>5</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Top K Distribution</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>top_k</th>
+      <th>count</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Top 10</td>
+      <td>821</td>
+    </tr>
+    <tr>
+      <td>Top 20</td>
+      <td>385</td>
+    </tr>
+    <tr>
+      <td>Top 8</td>
+      <td>204</td>
+    </tr>
+    <tr>
+      <td>完整排序</td>
+      <td>142</td>
+    </tr>
+    <tr>
+      <td>Top 50</td>
+      <td>75</td>
+    </tr>
+    <tr>
+      <td>Top 30</td>
+      <td>43</td>
+    </tr>
+    <tr>
+      <td>Top 100</td>
+      <td>37</td>
+    </tr>
+    <tr>
+      <td>Top 25</td>
+      <td>9</td>
+    </tr>
+    <tr>
+      <td>Top 21</td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <td>Top 15</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>Top 7</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>Top 5</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>Top 250</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>Top 9</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <td>Top 200</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <td>Top 150</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <td>Top 27</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td>Top 18</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td>Top 4</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td>Top 35</td>
+      <td>1</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Settings Usage</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>setting</th>
+      <th>count</th>
+      <th>rate</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>盲排开启</td>
+      <td>1100</td>
+      <td>0.627854</td>
+    </tr>
+    <tr>
+      <td>左右随机开启</td>
+      <td>1751</td>
+      <td>0.999429</td>
+    </tr>
+    <tr>
+      <td>使用顺序口令</td>
+      <td>1612</td>
+      <td>0.920091</td>
+    </tr>
+    <tr>
+      <td>共享片单入口</td>
+      <td>1622</td>
+      <td>0.925799</td>
+    </tr>
+  </tbody>
+</table></section><section class="chapter"><h2>12. Share Assets</h2><h3>Share Copy Surface</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>surface</th>
+      <th>count</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>result_link</td>
+      <td>42</td>
+    </tr>
+    <tr>
+      <td>guess_champion</td>
+      <td>28</td>
+    </tr>
+    <tr>
+      <td>result</td>
+      <td>22</td>
+    </tr>
+    <tr>
+      <td>custom_setup</td>
+      <td>9</td>
+    </tr>
+    <tr>
+      <td>caption</td>
+      <td>8</td>
+    </tr>
+    <tr>
+      <td>home_template</td>
+      <td>1</td>
+    </tr>
+  </tbody>
+</table>
+<h3>Poster Download Type</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>poster_type</th>
+      <th>count</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>result</td>
+      <td>159</td>
+    </tr>
+    <tr>
+      <td>contested_choice</td>
+      <td>25</td>
+    </tr>
+    <tr>
+      <td>challenge</td>
+      <td>3</td>
+    </tr>
+  </tbody>
+</table></section><section class="chapter"><h2>13. Recent Events Aggregate</h2><div class="metric-grid"><div class="metric-card"><div class="metric-label">Filtered events</div><div class="metric-value">102,885</div></div><div class="metric-card"><div class="metric-label">Distinct sessions</div><div class="metric-value">9,576</div></div><div class="metric-card"><div class="metric-label">First event time</div><div class="metric-value">2026-06-01 08:45:43</div></div><div class="metric-card"><div class="metric-label">Last event time</div><div class="metric-value">2026-06-25 19:35:22</div></div></div>
+<h3>Event Type Distribution</h3><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>event_name</th>
+      <th>event_count</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>comparison_made</td>
+      <td>83499</td>
+    </tr>
+    <tr>
+      <td>visit</td>
+      <td>9576</td>
+    </tr>
+    <tr>
+      <td>home_content_rendered</td>
+      <td>3457</td>
+    </tr>
+    <tr>
+      <td>sorting_started</td>
+      <td>1752</td>
+    </tr>
+    <tr>
+      <td>list_selected</td>
+      <td>1724</td>
+    </tr>
+    <tr>
+      <td>list_opened</td>
+      <td>1197</td>
+    </tr>
+    <tr>
+      <td>ranking_completed</td>
+      <td>612</td>
+    </tr>
+    <tr>
+      <td>result_viewed</td>
+      <td>420</td>
+    </tr>
+    <tr>
+      <td>qr_viewed</td>
+      <td>351</td>
+    </tr>
+    <tr>
+      <td>poster_downloaded</td>
+      <td>187</td>
+    </tr>
+    <tr>
+      <td>share_copied</td>
+      <td>110</td>
+    </tr>
+  </tbody>
+</table>
+<p class="note">Row-level recent events are intentionally excluded from this export to avoid raw session IDs and payload details.</p></section>
+  </main>
+</body>
+</html>
