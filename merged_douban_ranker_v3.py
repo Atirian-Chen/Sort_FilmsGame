@@ -23,6 +23,7 @@ from analytics import (
     EVENT_LABELS,
     EVENT_CHALLENGE_OPENED,
     EVENT_COMPARISON_MADE,
+    EVENT_EXPERIMENT_EXPOSED,
     EVENT_HOME_CONTENT_RENDERED,
     EVENT_LIST_SELECTED,
     EVENT_PAGE_VIEW,
@@ -681,6 +682,31 @@ def build_event_payload(**payload: Any) -> Dict[str, Any]:
         merged.update(experiment_context)
     merged.update({key: value for key, value in payload.items() if value is not None})
     return merged
+
+
+def track_experiment_exposure(surface: str, experiment_ids: List[str], *, route: str = "home") -> None:
+    for experiment_id in experiment_ids:
+        context = get_experiment_event_context(get_session_id(), [experiment_id])
+        experiments = context.get("experiments") if isinstance(context, dict) else {}
+        variant_id = ""
+        if isinstance(experiments, dict):
+            variant_id = str(experiments.get(experiment_id) or "")
+        variant_id = variant_id or str(context.get("variant_id") or "")
+        if not variant_id:
+            continue
+        track_once(
+            f"experiment_exposed_{surface}_{experiment_id}_{variant_id}",
+            EVENT_EXPERIMENT_EXPOSED,
+            source_channel=get_source_channel(),
+            payload=build_event_payload(
+                route=route,
+                experiment_id=experiment_id,
+                variant_id=variant_id,
+                experiments={experiment_id: variant_id},
+                surface=surface,
+                app_version=APP_VERSION,
+            ),
+        )
 
 
 def bordered_container():
@@ -3984,8 +4010,10 @@ def render_admin_metric_grid(summary: Dict[str, Any]) -> None:
     second_row = [
         ("开始率", admin_percent(summary.get("start_rate"))),
         ("完成率", admin_percent(summary.get("completion_rate"))),
-        ("复制/完成", admin_percent(summary.get("share_rate"))),
-        ("海报/完成", admin_percent(summary.get("poster_rate"))),
+        ("分享用户转化率", admin_percent(summary.get("share_user_conversion_rate"))),
+        ("海报下载用户转化率", admin_percent(summary.get("poster_download_user_conversion_rate"))),
+        ("平均分享动作次数", admin_float(summary.get("avg_share_actions_per_completed_session"))),
+        ("平均海报下载次数", admin_float(summary.get("avg_poster_downloads_per_completed_session"))),
         ("平均取舍", admin_float(summary.get("avg_comparisons"))),
         ("平均规模", admin_float(summary.get("avg_total"))),
     ]
@@ -3994,7 +4022,7 @@ def render_admin_metric_grid(summary: Dict[str, Any]) -> None:
         for column, (label, value) in zip(columns, row):
             with column:
                 st.metric(label, value)
-    st.caption("复制/完成、海报/完成按动作次数除以完成名单数计算；同一用户多次复制或下载时可能超过 100%。")
+    st.caption("分享/下载已拆成两类：用户转化率使用去重 session，平均动作次数使用 event count / 完成 session；二者不能混用。")
 
 
 def render_admin_insights(insights: List[str]) -> None:
@@ -4050,8 +4078,10 @@ def admin_group_df(rows: List[Dict[str, Any]], label_key: str, label_name: str, 
             "复制": int(row.get("copied", 0)),
             "海报": int(row.get("posters", 0)),
             "完成率": admin_percent(row.get("completion_rate")),
-            "复制/完成": admin_percent(row.get("share_rate")),
-            "海报/完成": admin_percent(row.get("poster_rate")),
+            "分享用户转化率": admin_percent(row.get("share_user_conversion_rate")),
+            "平均分享动作次数": admin_float(row.get("avg_share_actions_per_completed_session")),
+            "海报下载用户转化率": admin_percent(row.get("poster_download_user_conversion_rate")),
+            "平均海报下载次数": admin_float(row.get("avg_poster_downloads_per_completed_session")),
             "平均取舍": round(float(row.get("avg_comparisons", 0.0)), 1),
             "平均规模": round(float(row.get("avg_total", 0.0)), 1),
             "最近活跃": admin_short_time(row.get("last_seen")),
@@ -4496,14 +4526,21 @@ def render_admin_trends(events: List[Dict[str, Any]]) -> None:
         EVENT_SHARE_LINK_COPIED,
         EVENT_POSTER_DOWNLOADED,
     ]
-    rate_cols = ["start_rate", "completion_rate", "share_rate", "poster_rate"]
+    rate_cols = ["start_rate", "completion_rate", "share_user_conversion_rate", "poster_download_user_conversion_rate"]
+    action_cols = ["avg_share_actions_per_completed_session", "avg_poster_downloads_per_completed_session"]
     event_chart = daily[event_cols].rename(columns=EVENT_LABELS)
     rate_chart = (daily[rate_cols] * 100).rename(
         columns={
             "start_rate": "开始率",
             "completion_rate": "完成率",
-            "share_rate": "复制/完成",
-            "poster_rate": "海报/完成",
+            "share_user_conversion_rate": "分享用户转化率",
+            "poster_download_user_conversion_rate": "海报下载用户转化率",
+        }
+    )
+    action_chart = daily[action_cols].rename(
+        columns={
+            "avg_share_actions_per_completed_session": "平均分享动作次数",
+            "avg_poster_downloads_per_completed_session": "平均海报下载次数",
         }
     )
     event_tab, rate_tab, data_tab = st.tabs(["事件趋势", "转化趋势", "趋势数据"])
@@ -4511,7 +4548,9 @@ def render_admin_trends(events: List[Dict[str, Any]]) -> None:
         st.line_chart(event_chart)
     with rate_tab:
         st.line_chart(rate_chart)
-        st.caption("转化趋势以百分比数值展示。")
+        st.caption("转化趋势以去重 session 为分子，不能与动作次数混用。")
+        st.line_chart(action_chart)
+        st.caption("动作频次为 event count / 完成 session。")
     with data_tab:
         display = daily.reset_index().rename(columns={"date": "日期", **EVENT_LABELS})
         render_admin_dataframe(display)
@@ -4608,6 +4647,45 @@ def admin_export_paragraph(text: str, class_name: str = "note") -> str:
     return f'<p class="{admin_export_escape(class_name)}">{admin_export_escape(text)}</p>'
 
 
+def admin_funnel_scope_rows(funnel_key: str, date_range: str) -> List[Dict[str, str]]:
+    scopes = {
+        "current_total": {
+            "适用版本": "v2.3+；仅包含可确认 `home_content_rendered` 的 V2 canonical session",
+            "统计窗口": date_range,
+            "统计单位": "去重 session；按上一步 session 逐步收敛",
+            "是否只含该版本后事件": "是；缺少 `home_content_rendered` 的旧访问不会进入分母",
+            "是否可横向比较": "只能与同口径 Current Total Funnel 比较；不可与 Light / Heavy / Legacy 相加",
+        },
+        "light_list": {
+            "适用版本": "V2 canonical `list_opened` 轻量片单链路",
+            "统计窗口": date_range,
+            "统计单位": "去重 session；从 `list_opened` 起算",
+            "是否只含该版本后事件": "部分；只使用 canonical `list_opened`，不混入旧 `challenge_opened` 分母",
+            "是否可横向比较": "不可与 Heavy Path 相加；两者入口和用户意图不同",
+        },
+        "heavy_path": {
+            "适用版本": "V2 canonical `list_selected` 重链路配置/参数页",
+            "统计窗口": date_range,
+            "统计单位": "去重 session；从 `list_selected` 起算",
+            "是否只含该版本后事件": "部分；只使用 canonical heavy entry session",
+            "是否可横向比较": "不可与 Light List 做因果比较；只能作为路径诊断",
+        },
+        "legacy_event_count": {
+            "适用版本": "全历史兼容事件；包含 legacy alias 映射",
+            "统计窗口": date_range,
+            "统计单位": "event count；不是去重 session",
+            "是否只含该版本后事件": "否；用于兼容改埋点前后的历史趋势",
+            "是否可横向比较": "仅作历史参考；不能与任何 session funnel 相加或横向比较",
+        },
+    }
+    scope = scopes.get(funnel_key, {})
+    return [{"口径项": key, "说明": value} for key, value in scope.items()]
+
+
+def admin_funnel_scope_html(funnel_key: str, date_range: str) -> str:
+    return admin_export_table(pd.DataFrame(admin_funnel_scope_rows(funnel_key, date_range)))
+
+
 def admin_export_event_distribution_df(events: List[Dict[str, Any]]) -> pd.DataFrame:
     counts: Dict[str, int] = {}
     for event in events:
@@ -4634,8 +4712,10 @@ def build_admin_export_html(events: List[Dict[str, Any]], summary: Dict[str, Any
         ("Poster downloads", admin_int(summary.get("posters"))),
         ("Start rate", admin_percent(summary.get("start_rate"))),
         ("Completion rate", admin_percent(summary.get("completion_rate"))),
-        ("Share / completion", admin_percent(summary.get("share_rate"))),
-        ("Poster / completion", admin_percent(summary.get("poster_rate"))),
+        ("Share user conversion", admin_percent(summary.get("share_user_conversion_rate"))),
+        ("Poster download user conversion", admin_percent(summary.get("poster_download_user_conversion_rate"))),
+        ("Avg share actions / completed session", admin_float(summary.get("avg_share_actions_per_completed_session"))),
+        ("Avg poster downloads / completed session", admin_float(summary.get("avg_poster_downloads_per_completed_session"))),
         ("Avg comparisons", admin_float(summary.get("avg_comparisons"))),
         ("Avg list size", admin_float(summary.get("avg_list_size"))),
     ]
@@ -4665,10 +4745,26 @@ def build_admin_export_html(events: List[Dict[str, Any]], summary: Dict[str, Any
                 ]
             ),
         ),
-        admin_export_subsection("Current Total Funnel", admin_export_table(admin_session_funnel_df(build_current_total_funnel_rows(events)))),
-        admin_export_subsection("Light List Funnel", admin_export_table(admin_session_funnel_df(build_light_list_funnel_rows(events)))),
-        admin_export_subsection("Heavy Path Funnel", admin_export_table(admin_session_funnel_df(build_heavy_list_funnel_rows(events)))),
-        admin_export_subsection("Legacy Event Count Funnel", admin_export_table(admin_funnel_df(build_funnel_rows(events, MAIN_FUNNEL_STEPS)))),
+        admin_export_subsection(
+            "Current Total Funnel",
+            admin_funnel_scope_html("current_total", date_range)
+            + admin_export_table(admin_session_funnel_df(build_current_total_funnel_rows(events))),
+        ),
+        admin_export_subsection(
+            "Light List Funnel",
+            admin_funnel_scope_html("light_list", date_range)
+            + admin_export_table(admin_session_funnel_df(build_light_list_funnel_rows(events))),
+        ),
+        admin_export_subsection(
+            "Heavy Path Funnel",
+            admin_funnel_scope_html("heavy_path", date_range)
+            + admin_export_table(admin_session_funnel_df(build_heavy_list_funnel_rows(events))),
+        ),
+        admin_export_subsection(
+            "Legacy Event Count Funnel",
+            admin_funnel_scope_html("legacy_event_count", date_range)
+            + admin_export_table(admin_funnel_df(build_funnel_rows(events, MAIN_FUNNEL_STEPS))),
+        ),
     )
 
     home_metrics = build_home_load_metrics(events)
@@ -5055,8 +5151,10 @@ def render_admin_metric_grid(summary: Dict[str, Any]) -> None:
     second_row = [
         ("开始率", admin_percent(summary.get("start_rate"))),
         ("完成率", admin_percent(summary.get("completion_rate"))),
-        ("复制/完成", admin_percent(summary.get("share_rate"))),
-        ("海报/完成", admin_percent(summary.get("poster_rate"))),
+        ("分享用户转化率", admin_percent(summary.get("share_user_conversion_rate"))),
+        ("平均分享动作次数", admin_float(summary.get("avg_share_actions_per_completed_session"))),
+        ("海报下载用户转化率", admin_percent(summary.get("poster_download_user_conversion_rate"))),
+        ("平均海报下载次数", admin_float(summary.get("avg_poster_downloads_per_completed_session"))),
         ("平均取舍次数", admin_float(summary.get("avg_comparisons"))),
         ("平均整理规模", admin_float(summary.get("avg_list_size"))),
     ]
@@ -5065,7 +5163,7 @@ def render_admin_metric_grid(summary: Dict[str, Any]) -> None:
         for column, (label, value) in zip(columns, row):
             with column:
                 st.metric(label, value)
-    st.caption("复制/完成、海报/完成按动作次数除以完成名单数计算；同一匿名 session 多次复制或下载时可能超过 100%。")
+    st.caption("分享/下载已拆成用户转化率和平均动作次数；用户转化率用去重 session，动作次数用 event count / 完成 session。")
 
 
 def admin_funnel_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
@@ -5100,8 +5198,14 @@ def admin_session_funnel_df(rows: List[Dict[str, Any]]) -> pd.DataFrame:
     )
 
 
-def render_admin_funnel(title: str, rows: List[Dict[str, Any]], caption: str) -> None:
+def render_admin_scope_card(scope_rows: List[Dict[str, str]]) -> None:
+    if scope_rows:
+        render_admin_dataframe(pd.DataFrame(scope_rows))
+
+
+def render_admin_funnel(title: str, rows: List[Dict[str, Any]], caption: str, scope_rows: Optional[List[Dict[str, str]]] = None) -> None:
     st.markdown(f"**{title}**")
+    render_admin_scope_card(scope_rows or [])
     if not rows:
         st.info("当前筛选范围内没有漏斗数据。")
         return
@@ -5116,8 +5220,9 @@ def render_admin_funnel(title: str, rows: List[Dict[str, Any]], caption: str) ->
     st.caption(caption)
 
 
-def render_admin_session_funnel(title: str, rows: List[Dict[str, Any]], caption: str) -> None:
+def render_admin_session_funnel(title: str, rows: List[Dict[str, Any]], caption: str, scope_rows: Optional[List[Dict[str, str]]] = None) -> None:
     st.markdown(f"**{title}**")
+    render_admin_scope_card(scope_rows or [])
     if not rows or int(rows[0].get("count", 0)) == 0:
         st.info("当前筛选范围内没有符合当前埋点口径的 session。")
         st.caption(caption)
@@ -5233,6 +5338,17 @@ def version_percent_or_dash(row: Dict[str, Any], key: str, denominator_key: str,
         return VERSION_NO_DATA
 
 
+def version_float_or_dash(row: Dict[str, Any], key: str, denominator_key: str) -> str:
+    try:
+        if int(row.get(denominator_key, 0)) <= 0:
+            return VERSION_NO_DATA
+        if row.get(key) is None:
+            return VERSION_NO_DATA
+        return admin_float(row.get(key))
+    except (TypeError, ValueError):
+        return VERSION_NO_DATA
+
+
 def version_count_or_dash(row: Dict[str, Any], key: str, *, require_home_load: bool = False) -> str:
     if require_home_load and not version_has_home_load_data(row):
         return VERSION_NO_DATA
@@ -5300,7 +5416,10 @@ def build_version_overview_display(rows: List[Dict[str, Any]]) -> List[Dict[str,
                 "打开/选择率": version_percent_or_dash(row, "open_or_select_rate", "visit_sessions"),
                 "开始率": version_percent_or_dash(row, "start_rate", "visit_sessions"),
                 "完成率": version_percent_or_dash(row, "completion_rate", "started_sessions"),
-                "分享率": version_percent_or_dash(row, "share_rate", "completed_sessions"),
+                "分享用户转化率": version_percent_or_dash(row, "share_user_conversion_rate", "completed_sessions"),
+                "平均分享动作次数": version_float_or_dash(row, "avg_share_actions_per_completed_session", "completed_sessions"),
+                "海报下载用户转化率": version_percent_or_dash(row, "poster_download_user_conversion_rate", "completed_sessions"),
+                "平均海报下载次数": version_float_or_dash(row, "avg_poster_downloads_per_completed_session", "completed_sessions"),
                 "P90 渲染耗时": version_ms_or_dash(row, "p90_render_elapsed_ms", require_render_time=True),
                 "commit": row.get("commit", ""),
             }
@@ -5337,9 +5456,9 @@ def build_version_comparison_display(rows: List[Dict[str, Any]]) -> List[Dict[st
                     version_rate_value_or_none(current, "completion_rate", "started_sessions"),
                     version_rate_value_or_none(previous, "completion_rate", "started_sessions"),
                 ),
-                "分享率变化": admin_delta_pp(
-                    version_rate_value_or_none(current, "share_rate", "completed_sessions"),
-                    version_rate_value_or_none(previous, "share_rate", "completed_sessions"),
+                "分享用户转化率变化": admin_delta_pp(
+                    version_rate_value_or_none(current, "share_user_conversion_rate", "completed_sessions"),
+                    version_rate_value_or_none(previous, "share_user_conversion_rate", "completed_sessions"),
                 ),
                 "P90 渲染耗时变化": admin_delta_ms(
                     current.get("p90_render_elapsed_ms") if int(current.get("home_render_time_count", 0) or 0) > 0 else None,
@@ -5370,7 +5489,10 @@ def render_version_metric_definitions() -> None:
 | 打开/选择率 | `打开或选择片单 session / 首页访问 session` |
 | 开始率 | `开始整理 session / 首页访问 session` |
 | 完成率 | `完成名单 session / 开始整理 session` |
-| 分享率 | `复制链接或下载海报 session / 完成名单 session` |
+| 分享用户转化率 | `至少 share_copied 一次的完成 session / 完成名单 session` |
+| 平均分享动作次数 | `share_copied event count / 完成名单 session` |
+| 海报下载用户转化率 | `至少 poster_downloaded 一次的完成 session / 完成名单 session` |
+| 平均海报下载次数 | `poster_downloaded event count / 完成名单 session` |
 | P90 渲染耗时 | `home_content_rendered.payload.render_elapsed_ms` 的 P90 |
 | commit | `release_history.py` 里记录的版本起始 commit |
             """.strip()
@@ -5412,7 +5534,7 @@ def render_admin_version_metrics(events: List[Dict[str, Any]]) -> None:
             "加载中流失率": version_rate_value_or_none(row, "pre_render_loss_rate", "visit_sessions", require_home_load=True),
             "开始率": version_rate_value_or_none(row, "start_rate", "visit_sessions"),
             "完成率": version_rate_value_or_none(row, "completion_rate", "started_sessions"),
-            "分享率": version_rate_value_or_none(row, "share_rate", "completed_sessions"),
+            "分享用户转化率": version_rate_value_or_none(row, "share_user_conversion_rate", "completed_sessions"),
         }
         for row in chronological
     ]
@@ -5477,9 +5599,14 @@ def render_admin_version_metrics(events: List[Dict[str, Any]]) -> None:
             version_percent_or_dash(selected, "completion_rate", "started_sessions"),
         ),
         (
-            "分享/下载海报",
-            admin_int(selected.get("shared_sessions")),
-            version_percent_or_dash(selected, "share_rate", "completed_sessions"),
+            "分享用户转化",
+            admin_int(selected.get("completed_share_sessions")),
+            version_percent_or_dash(selected, "share_user_conversion_rate", "completed_sessions"),
+        ),
+        (
+            "海报下载用户转化",
+            admin_int(selected.get("completed_poster_sessions")),
+            version_percent_or_dash(selected, "poster_download_user_conversion_rate", "completed_sessions"),
         ),
     ]
     render_admin_dataframe(
@@ -5520,8 +5647,10 @@ def admin_group_df(rows: List[Dict[str, Any]], label_key: str, label_name: str, 
             "下载海报": int(row.get("posters", 0)),
             "开始率": admin_percent(row.get("start_rate")),
             "完成率": admin_percent(row.get("completion_rate")),
-            "分享率": admin_percent(row.get("share_rate")),
-            "海报下载率": admin_percent(row.get("poster_rate")),
+            "分享用户转化率": admin_percent(row.get("share_user_conversion_rate")),
+            "平均分享动作次数": admin_float(row.get("avg_share_actions_per_completed_session")),
+            "海报下载用户转化率": admin_percent(row.get("poster_download_user_conversion_rate")),
+            "平均海报下载次数": admin_float(row.get("avg_poster_downloads_per_completed_session")),
             "平均取舍": round(float(row.get("avg_comparisons", 0.0)), 1),
             "平均规模": round(float(row.get("avg_list_size", row.get("avg_total", 0.0))), 1),
             "最近活跃": admin_short_time(row.get("last_seen")),
@@ -5538,9 +5667,16 @@ def admin_group_df(rows: List[Dict[str, Any]], label_key: str, label_name: str, 
             if optional_key in row:
                 item[display_name] = row.get(optional_key, "")
         if "home_exposure_sessions" in row:
-            item["首页曝光"] = int(row.get("home_exposure_sessions", 0))
+            item["Assigned sessions"] = int(row.get("assigned_sessions", 0))
+            item["Exposed sessions"] = int(row.get("exposed_sessions", 0))
+            item["实验主指标"] = (
+                admin_percent(row.get("exposed_completion_rate"))
+                if int(row.get("exposed_sessions", 0) or 0) > 0
+                else "真实曝光分母不可用"
+            )
+            item["首页曝光 proxy"] = int(row.get("home_exposure_sessions", 0))
             item["内置片单打开"] = int(row.get("builtin_card_opened_sessions", 0))
-            item["卡片打开率"] = admin_percent(row.get("builtin_card_open_rate"))
+            item["卡片打开率 proxy"] = admin_percent(row.get("builtin_card_open_rate"))
         if include_winners:
             item["冠军 Top3"] = row.get("top_winners", "")
         display_rows.append(item)
@@ -5678,7 +5814,10 @@ def render_admin_experiment_analysis(events: List[Dict[str, Any]]) -> None:
             empty_message="当前没有正在进行的实验。",
         )
 
-    st.caption("说明：实验配置来自 experiments.py；分版本指标来自当前筛选时间范围内已有事件 payload，因此已停止实验仍可继续复盘历史表现。")
+    st.caption(
+        "说明：实验配置来自 experiments.py。Assigned sessions 只表示事件 payload 带有该 variant；"
+        "严格 A/B 主分母必须使用 experiment_exposed 的 Exposed sessions。历史实验没有真实曝光事件时，实验主指标显示为不可用。"
+    )
 
 
 def render_admin_trends(events: List[Dict[str, Any]]) -> None:
@@ -5698,12 +5837,20 @@ def render_admin_trends(events: List[Dict[str, Any]]) -> None:
         EVENT_HOME_CONTENT_RENDERED,
     ]
     event_chart = daily[[column for column in event_cols if column in daily.columns]].rename(columns=EVENT_LABELS)
-    rate_chart = (daily[["start_rate", "completion_rate", "share_rate", "poster_rate"]] * 100).rename(
+    rate_cols = ["start_rate", "completion_rate", "share_user_conversion_rate", "poster_download_user_conversion_rate"]
+    action_cols = ["avg_share_actions_per_completed_session", "avg_poster_downloads_per_completed_session"]
+    rate_chart = (daily[rate_cols] * 100).rename(
         columns={
             "start_rate": "开始率",
             "completion_rate": "完成率",
-            "share_rate": "复制/完成",
-            "poster_rate": "海报/完成",
+            "share_user_conversion_rate": "分享用户转化率",
+            "poster_download_user_conversion_rate": "海报下载用户转化率",
+        }
+    )
+    action_chart = daily[action_cols].rename(
+        columns={
+            "avg_share_actions_per_completed_session": "平均分享动作次数",
+            "avg_poster_downloads_per_completed_session": "平均海报下载次数",
         }
     )
     event_tab, rate_tab, data_tab = st.tabs(["事件趋势", "转化趋势", "趋势数据"])
@@ -5711,7 +5858,9 @@ def render_admin_trends(events: List[Dict[str, Any]]) -> None:
         st.line_chart(event_chart)
     with rate_tab:
         st.line_chart(rate_chart)
-        st.caption("转化趋势以百分比数值展示。")
+        st.caption("转化趋势以去重 session 为分子，不能与动作次数混用。")
+        st.line_chart(action_chart)
+        st.caption("动作频次为 event count / 完成 session。")
     with data_tab:
         display = daily.reset_index().rename(columns={"date": "日期", **EVENT_LABELS})
         render_admin_dataframe(display)
@@ -5870,12 +6019,14 @@ def render_admin_dashboard() -> None:
     )
 
     with funnel_tab:
+        funnel_date_range = f"{start_date.isoformat()} to {end_date.isoformat()}"
         render_admin_instrumentation_note(events)
         safe_divider()
         render_admin_session_funnel(
             "总漏斗（当前埋点，按 session）",
             build_current_total_funnel_rows(events),
             "从 home_content_rendered 起算，只统计能确认首页核心内容已渲染的当前埋点 session；旧埋点数据不进入这个漏斗分母。",
+            admin_funnel_scope_rows("current_total", funnel_date_range),
         )
         safe_divider()
         two_col_a, two_col_b = st.columns(2)
@@ -5884,18 +6035,21 @@ def render_admin_dashboard() -> None:
                 "轻量片单漏斗",
                 build_light_list_funnel_rows(events),
                 "轻量片单指从 ?list / ?challenge / ?payload 直接打开并开始整理的片单，当前口径从 list_opened 起算。",
+                admin_funnel_scope_rows("light_list", funnel_date_range),
             )
         with two_col_b:
             render_admin_session_funnel(
                 "重链路漏斗（豆瓣已看 / 自填 / 参数页）",
                 build_heavy_list_funnel_rows(events),
                 "重链路从 list_selected 起算；这里把它作为“进入填参数/配置页”的代理事件，再观察实际开始、完成和传播。",
+                admin_funnel_scope_rows("heavy_path", funnel_date_range),
             )
         safe_divider()
         render_admin_funnel(
             "历史兼容事件数漏斗（旧口径参考）",
             build_funnel_rows(events, MAIN_FUNNEL_STEPS),
             "这是事件总量口径，用于兼容改埋点前的数据；不建议用它判断新版分步漏斗的精确流失。",
+            admin_funnel_scope_rows("legacy_event_count", funnel_date_range),
         )
 
     with load_tab:
@@ -5987,6 +6141,7 @@ def render_admin_dashboard() -> None:
 
 def render_cover_header() -> None:
     experiment_config = get_experiment_config(get_session_id(), "homepage_cta_v1", {"hero_title": HERO_TITLE})
+    track_experiment_exposure("hero_cta", ["homepage_cta_v1"])
     hero_title = str(experiment_config.get("hero_title") or HERO_TITLE)
     hero_title_html = html.escape(hero_title).replace("你的电影审美名单", "你的<br>电影审美名单").replace("你的电影审美榜单", "你的<br>电影审美榜单")
     st.markdown(
@@ -7237,6 +7392,7 @@ def render_builtin_quick_start_lists() -> None:
         "builtin_card_poster_v1",
         {"show_builtin_card_posters": True},
     )
+    track_experiment_exposure("homepage_card", ["builtin_card_poster_v1"])
     show_card_posters = bool(poster_config.get("show_builtin_card_posters", False))
     experiment_query = get_experiment_query_params(get_session_id())
     card_html = []
@@ -7320,6 +7476,7 @@ def render_mode_selection_page() -> None:
         "home_layout_order_v1",
         {"home_layout_order": "builtin_first"},
     )
+    track_experiment_exposure("homepage_card", ["home_layout_order_v1"])
     home_layout_order = str(layout_config.get("home_layout_order") or "builtin_first")
     st.session_state["home_layout_order"] = home_layout_order
     render_step_header(

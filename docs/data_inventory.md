@@ -51,6 +51,7 @@ Code-inferred and sampled payload fields include:
 |---|---|---|
 | `visit` | implemented | Canonical page/app visit event. |
 | `home_content_rendered` | implemented | Home content render completion signal. |
+| `experiment_exposed` | implemented | True experiment UI exposure event added in v3.3; used as strict experiment denominator. |
 | `list_opened` | implemented | Canonical list-open event; may be called through legacy alias in app code. |
 | `list_selected` | implemented | Heavy-path/mode selection signal. |
 | `sorting_started` | implemented | Canonical sorting start event; may be called through legacy alias in app code. |
@@ -85,7 +86,7 @@ Code-inferred and sampled payload fields include:
 - No explicit abandonment event; abandonment stage must not be claimed precisely.
 - No general sorting duration field; only home render elapsed time exists.
 - No sanitized referrer/domain field; channel analysis is limited to explicit source/UTM parameters.
-- No dedicated experiment exposure event; assignment/variant payload is not the same as verified UI exposure.
+- Historical experiment rows may lack `experiment_exposed`; assignment/variant payload is not the same as verified UI exposure.
 - Payload fields are not guaranteed on every historical row.
 
 ## Immediate Analytics Scope
@@ -111,6 +112,6 @@ Code-inferred and sampled payload fields include:
 
 - Add minimal test-traffic isolation: `is_internal_test` in payload or a documented source convention.
 - Add `ranking_progress` or `ranking_abandoned` with only aggregate progress fields.
-- Add an explicit experiment exposure event for experiment-controlled UI surfaces.
+- Use `experiment_exposed` as the denominator for new experiments; keep historical assigned-session metrics diagnostic only.
 - Add sanitized `referrer_domain` if channel analysis needs non-UTM attribution.
 - Consider a privacy-reviewed `anonymous_user_id` only if retention becomes a required analysis goal.

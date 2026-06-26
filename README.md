@@ -13,10 +13,13 @@ Sort_FilmsGame 是一个影视偏好排序 Web App。它把“手动给几十部
 Film Sort has anonymous product analytics backed by Supabase `analytics_events`.
 Current confirmed events include visits, list opens/selections, sorting starts, pairwise comparisons, ranking completions, result views, QR views, poster downloads, and share-copy actions.
 Current analysis can support basic funnels, list/template performance, source and device splits, and list-size/comparison summaries.
+Funnel reports now state their applicable version, date window, statistical unit, and whether they can be compared horizontally.
+Share and poster metrics are split into session-level user conversion rates and event-count action frequency.
+A/B experiment analysis uses `experiment_exposed` sessions as the strict denominator; assigned variant sessions are diagnostic only.
 The project does not require login for analytics and does not intentionally collect phone numbers, emails, IP addresses, raw user agents, or complete custom rankings in event payloads.
 Event taxonomy and data inventory live in [docs/event_taxonomy.md](docs/event_taxonomy.md) and [docs/data_inventory.md](docs/data_inventory.md).
 Read-only quality checks live in [analytics/sql/01_data_quality.sql](analytics/sql/01_data_quality.sql), with a safe inspection helper in [analytics/scripts/inspect_analytics.py](analytics/scripts/inspect_analytics.py).
-Future analytics work should add only minimal missing fields/events for abandonment, test-traffic isolation, and experiment exposure.
+Future analytics work should add only minimal missing fields/events for abandonment and test-traffic isolation; new experiments should use `experiment_exposed` as the strict exposure denominator.
 No unverified traffic volume, conversion result, or experiment conclusion is claimed here.
 
 ## Product Analytics Case Study
@@ -64,7 +67,7 @@ The case study publishes aggregate findings only, not raw user events, session i
 
 后台数据看板 v2 包含：
 
-- 总览指标：访问数、独立 session、开始整理、完成名单、复制分享、下载海报、开始率、完成率、复制/完成、海报/完成、平均取舍次数、平均整理规模。
+- 总览指标：访问数、独立 session、开始整理、完成名单、复制分享、下载海报、开始率、完成率、分享用户转化率、平均分享动作次数、海报下载用户转化率、平均海报下载次数、平均取舍次数、平均整理规模。
 - 漏斗分析：同时展示当前埋点 session 总漏斗、轻量片单漏斗、重链路漏斗，以及历史兼容事件数漏斗。
 - 重链路漏斗：`list_selected -> sorting_started -> ranking_completed -> share_copied/poster_downloaded`，用于判断豆瓣已看 / 自备片单用户是否卡在填参数到实际开始之间。
 - 首页加载诊断：通过 `visit -> home_content_rendered -> list_opened/list_selected/sorting_started` 判断流失更可能发生在加载中还是渲染后。
@@ -84,7 +87,7 @@ The case study publishes aggregate findings only, not raw user events, session i
 1. 在 [experiments.py](experiments.py) 里新增一个实验配置块，设置 `experiment_id`、`status`、`traffic_allocation` 和 `variants`。
 2. 如果实验只需要被记录和分析，保持 `status = "active"` 即可，事件会自动带上当前 session 命中的实验版本；实验结束后改为 `paused`，并记录 `ended_at` 和 `decision_variant_id`。
 3. 如果实验要改变页面或功能表现，在对应业务代码里调用 `get_experiment_config(session_id, experiment_id)` 读取配置，并把配置应用到文案、按钮、默认片单或展示模块。
-4. 打开后台数据看板 v2 的 “实验分析” tab，按已停止 / 正在进行查看实验配置，并按 `experiment_id / variant_id` 复盘开始率、完成率、分享和海报下载表现。
+4. 打开后台数据看板 v2 的 “实验分析” tab，按已停止 / 正在进行查看实验配置；严格实验主分母使用 `experiment_exposed` 去重 session，assigned variant sessions 只作诊断。
 
 ## 产品案例与复盘
 
@@ -652,6 +655,13 @@ https://movie.douban.com/people/123456/collect
 - 内置轻量片单卡全量收口到 `poster`，默认显示预制代表电影海报。
 - 后台 “实验分析” tab 改为已停止实验 / 正在进行的实验两栏，展示实验比例、起止时间、收口版本和历史分版本指标。
 - 新增 [docs/version_updates/version3.2.md](docs/version_updates/version3.2.md)，并更新 [docs/analytics_v2.md](docs/analytics_v2.md) 的实验收口和后台分析口径。
+
+### v3.3 Analytics metric contract cleanup
+
+- 后台漏斗和 HTML 导出新增口径卡片，明确适用版本、统计窗口、统计单位和是否可横向比较。
+- 分享/下载指标拆成用户转化率与平均动作次数，不再用单一“分享率”混合表达。
+- 新增 `experiment_exposed` 事件，实验主分母改为真实曝光 session，assigned sessions 仅作诊断。
+- 新增 [docs/version_updates/version3.3.md](docs/version_updates/version3.3.md)，并更新 [docs/analytics_v2.md](docs/analytics_v2.md) 与 [docs/metrics_contract.md](docs/metrics_contract.md) 的指标口径。
 
 ---
 

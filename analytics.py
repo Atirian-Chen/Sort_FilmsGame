@@ -24,6 +24,7 @@ EVENT_SHARE_COPIED = "share_copied"
 EVENT_RESULT_VIEWED = "result_viewed"
 EVENT_QR_VIEWED = "qr_viewed"
 EVENT_HOME_CONTENT_RENDERED = "home_content_rendered"
+EVENT_EXPERIMENT_EXPOSED = "experiment_exposed"
 
 # Backward-compatible names used by older app code and historical rows.
 LEGACY_EVENT_PAGE_VIEW = "page_view"
@@ -55,6 +56,7 @@ TRACKED_EVENTS = [
     EVENT_RESULT_VIEWED,
     EVENT_QR_VIEWED,
     EVENT_HOME_CONTENT_RENDERED,
+    EVENT_EXPERIMENT_EXPOSED,
 ]
 LEGACY_TRACKED_EVENTS = list(LEGACY_EVENT_MAP)
 
@@ -75,6 +77,7 @@ EVENT_LABELS = {
     EVENT_RESULT_VIEWED: "查看结果",
     EVENT_QR_VIEWED: "查看二维码",
     EVENT_HOME_CONTENT_RENDERED: "首页内容已渲染",
+    EVENT_EXPERIMENT_EXPOSED: "实验真实曝光",
     LEGACY_EVENT_PAGE_VIEW: "访问",
     LEGACY_EVENT_CHALLENGE_OPENED: "打开片单",
     LEGACY_EVENT_RANKING_STARTED: "开始整理",
@@ -621,6 +624,11 @@ def build_admin_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     completed = counts.get(EVENT_RANKING_COMPLETED, 0)
     copied = counts.get(EVENT_SHARE_COPIED, 0)
     posters = counts.get(EVENT_POSTER_DOWNLOADED, 0)
+    completed_sessions = _session_set(event for event in events if _event_matches(event, EVENT_RANKING_COMPLETED))
+    share_sessions = _session_set(event for event in events if _event_matches(event, EVENT_SHARE_COPIED))
+    poster_sessions = _session_set(event for event in events if _event_matches(event, EVENT_POSTER_DOWNLOADED))
+    completed_share_sessions = completed_sessions & share_sessions
+    completed_poster_sessions = completed_sessions & poster_sessions
 
     comparisons = _payload_numbers(events, EVENT_RANKING_COMPLETED, "comparison_count", "comparisons")
     totals = _payload_numbers(events, EVENT_RANKING_COMPLETED, "list_size", "total", "item_count")
@@ -650,12 +658,21 @@ def build_admin_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "challenge_opened": list_opened,
         "started": started,
         "completed": completed,
+        "completed_sessions": len(completed_sessions),
         "copied": copied,
         "posters": posters,
+        "share_sessions": len(share_sessions),
+        "poster_sessions": len(poster_sessions),
+        "completed_share_sessions": len(completed_share_sessions),
+        "completed_poster_sessions": len(completed_poster_sessions),
         "start_rate": _rate(started, visits),
         "completion_rate": _rate(completed, started),
         "share_rate": _rate(copied, completed),
         "poster_rate": _rate(posters, completed),
+        "share_user_conversion_rate": _rate(len(completed_share_sessions), len(completed_sessions)),
+        "poster_download_user_conversion_rate": _rate(len(completed_poster_sessions), len(completed_sessions)),
+        "avg_share_actions_per_completed_session": _rate(copied, len(completed_sessions)),
+        "avg_poster_downloads_per_completed_session": _rate(posters, len(completed_sessions)),
         "avg_comparisons": _avg(comparisons),
         "median_comparisons": median(comparisons) if comparisons else 0.0,
         "p75_comparisons": _percentile(comparisons, 0.75),
@@ -808,11 +825,15 @@ def build_version_metrics(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         selected_sessions = _session_set(event for event in version_events if _event_matches(event, EVENT_LIST_SELECTED))
         started_sessions = _session_set(event for event in version_events if _event_matches(event, EVENT_SORTING_STARTED))
         completed_sessions = _session_set(event for event in version_events if _event_matches(event, EVENT_RANKING_COMPLETED))
+        share_sessions = _session_set(event for event in version_events if _event_matches(event, EVENT_SHARE_COPIED))
+        poster_sessions = _session_set(event for event in version_events if _event_matches(event, EVENT_POSTER_DOWNLOADED))
         shared_sessions = _session_set(
             event
             for event in version_events
             if _event_matches(event, EVENT_SHARE_COPIED) or _event_matches(event, EVENT_POSTER_DOWNLOADED)
         )
+        share_events = sum(1 for event in version_events if _event_matches(event, EVENT_SHARE_COPIED))
+        poster_events = sum(1 for event in version_events if _event_matches(event, EVENT_POSTER_DOWNLOADED))
         home_metrics = build_home_load_metrics(version_events)
         rows.append(
             {
@@ -842,10 +863,18 @@ def build_version_metrics(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "started_sessions": len(started_sessions),
                 "completed_sessions": len(completed_sessions),
                 "shared_sessions": len(shared_sessions),
+                "share_sessions": len(share_sessions),
+                "poster_sessions": len(poster_sessions),
+                "completed_share_sessions": len(completed_sessions & share_sessions),
+                "completed_poster_sessions": len(completed_sessions & poster_sessions),
                 "open_or_select_rate": _rate(len(opened_sessions | selected_sessions), len(visit_sessions)),
                 "start_rate": _rate(len(started_sessions), len(visit_sessions)),
                 "completion_rate": _rate(len(completed_sessions), len(started_sessions)),
                 "share_rate": _rate(len(shared_sessions), len(completed_sessions)),
+                "share_user_conversion_rate": _rate(len(completed_sessions & share_sessions), len(completed_sessions)),
+                "poster_download_user_conversion_rate": _rate(len(completed_sessions & poster_sessions), len(completed_sessions)),
+                "avg_share_actions_per_completed_session": _rate(share_events, len(completed_sessions)),
+                "avg_poster_downloads_per_completed_session": _rate(poster_events, len(completed_sessions)),
                 "avg_render_elapsed_ms": float(home_metrics.get("avg_render_elapsed_ms", 0.0)),
                 "p75_render_elapsed_ms": float(home_metrics.get("p75_render_elapsed_ms", 0.0)),
                 "p90_render_elapsed_ms": float(home_metrics.get("p90_render_elapsed_ms", 0.0)),
@@ -1036,6 +1065,7 @@ def build_funnel_insight(rows: List[Dict[str, Any]]) -> str:
 def build_daily_metrics(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     events = normalize_events(events)
     buckets: Dict[str, Counter] = {}
+    event_buckets: Dict[str, List[Dict[str, Any]]] = {}
     for event in events:
         event_date = _event_date(event)
         if event_date is None:
@@ -1043,6 +1073,7 @@ def build_daily_metrics(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         key = event_date.isoformat()
         buckets.setdefault(key, Counter())
         buckets[key][str(event.get("event_name") or "")] += 1
+        event_buckets.setdefault(key, []).append(event)
 
     if not buckets:
         return []
@@ -1061,6 +1092,7 @@ def build_daily_metrics(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         completed = counts.get(EVENT_RANKING_COMPLETED, 0)
         copied = counts.get(EVENT_SHARE_COPIED, 0)
         posters = counts.get(EVENT_POSTER_DOWNLOADED, 0)
+        day_summary = build_admin_summary(event_buckets.get(key, []))
         rows.append(
             {
                 "date": key,
@@ -1076,6 +1108,10 @@ def build_daily_metrics(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "completion_rate": _rate(completed, started),
                 "share_rate": _rate(copied, completed),
                 "poster_rate": _rate(posters, completed),
+                "share_user_conversion_rate": day_summary["share_user_conversion_rate"],
+                "poster_download_user_conversion_rate": day_summary["poster_download_user_conversion_rate"],
+                "avg_share_actions_per_completed_session": day_summary["avg_share_actions_per_completed_session"],
+                "avg_poster_downloads_per_completed_session": day_summary["avg_poster_downloads_per_completed_session"],
             }
         )
     return rows
@@ -1109,12 +1145,21 @@ def _metric_row(value: str, group_events: List[Dict[str, Any]], label_key: str) 
         "challenge_opened": summary["list_opened"],
         "started": summary["started"],
         "completed": summary["completed"],
+        "completed_sessions": summary["completed_sessions"],
         "copied": summary["copied"],
         "posters": summary["posters"],
+        "share_sessions": summary["share_sessions"],
+        "poster_sessions": summary["poster_sessions"],
+        "completed_share_sessions": summary["completed_share_sessions"],
+        "completed_poster_sessions": summary["completed_poster_sessions"],
         "start_rate": summary["start_rate"],
         "completion_rate": summary["completion_rate"],
         "share_rate": summary["share_rate"],
         "poster_rate": summary["poster_rate"],
+        "share_user_conversion_rate": summary["share_user_conversion_rate"],
+        "poster_download_user_conversion_rate": summary["poster_download_user_conversion_rate"],
+        "avg_share_actions_per_completed_session": summary["avg_share_actions_per_completed_session"],
+        "avg_poster_downloads_per_completed_session": summary["avg_poster_downloads_per_completed_session"],
         "avg_comparisons": summary["avg_comparisons"],
         "avg_total": summary["avg_total"],
         "avg_list_size": summary["avg_list_size"],
@@ -1288,6 +1333,10 @@ def build_experiment_metrics(events: List[Dict[str, Any]], *, top_n: int = 100) 
 
     for (experiment_id, variant_id), group_events in grouped.items():
         row = _metric_row(f"{experiment_id}:{variant_id}", group_events, "experiment_variant")
+        assigned_sessions = _session_set(group_events)
+        exposure_events = [event for event in group_events if _event_matches(event, EVENT_EXPERIMENT_EXPOSED)]
+        exposed_sessions = _session_set(exposure_events)
+        completed_sessions = _session_set(event for event in group_events if _event_matches(event, EVENT_RANKING_COMPLETED))
         home_exposure_sessions = _session_set(
             event
             for event in group_events
@@ -1301,6 +1350,12 @@ def build_experiment_metrics(events: List[Dict[str, Any]], *, top_n: int = 100) 
         )
         row["experiment_id"] = experiment_id
         row["variant_id"] = variant_id
+        row["assigned_sessions"] = len(assigned_sessions)
+        row["exposed_sessions"] = len(exposed_sessions)
+        row["exposure_event_count"] = len(exposure_events)
+        row["exposure_available"] = bool(exposed_sessions)
+        row["exposed_completed_sessions"] = len(exposed_sessions & completed_sessions)
+        row["exposed_completion_rate"] = _rate(len(exposed_sessions & completed_sessions), len(exposed_sessions))
         row["home_exposure_sessions"] = len(home_exposure_sessions)
         row["builtin_card_opened_sessions"] = len(builtin_card_opened_sessions)
         row["builtin_card_open_rate"] = _rate(
@@ -1487,8 +1542,8 @@ def build_admin_insights(events: List[Dict[str, Any]]) -> List[str]:
             f"完成用户平均作出 {summary['avg_comparisons']:.1f} 次取舍，平均整理规模 {summary['avg_list_size']:.1f} 部。"
         )
 
-    if summary["poster_rate"] > summary["share_rate"] and summary["completed"]:
-        insights.append("海报下载率高于复制分享率，说明视觉化结果可能比纯链接分享更有传播吸引力。")
+    if summary["avg_poster_downloads_per_completed_session"] > summary["avg_share_actions_per_completed_session"] and summary["completed_sessions"]:
+        insights.append("海报下载动作频次高于复制分享动作频次；这只是动作频次信号，不等同于用户转化率。")
 
     return insights[:6]
 

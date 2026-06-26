@@ -3,8 +3,10 @@
 Source: Film Sort Admin Analytics HTML export, 2026-06-01 to 2026-06-25.
 
 - Data range: 2026-06-01 to 2026-06-25
+- Applicable version: V2 current instrumentation with `home_content_rendered`; older visits without this event are excluded from the denominator
 - Statistical unit: unique session
 - Denominator: previous funnel stage session count
+- Horizontal comparability: only comparable with the same Current Total Funnel definition and the same instrumentation era; do not add to Light/Heavy/Legacy funnels
 - Scope note: current total funnel uses V2 session-level stages. It is not identical to all historical `visit` events.
 
 | Funnel Stage | Event Definition | Sessions | Step Conversion | Overall Conversion | Dropoff From Previous |

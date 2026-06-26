@@ -27,6 +27,40 @@
 | Unique Poster Download Conversion | `unique completed sessions with poster_downloaded / unique completed sessions` | session | 同上，需要去重后的 completed session 分母。 |
 | Behavior Action Frequency | `event count / completed event count` 或 `event count / completed sessions` | event/session | 只描述动作频次，不代表独立用户转化。 |
 
+## 3.1 v3.3 Share and Poster Metric Split
+
+从 v3.3 起，后台和导出报告不再把“分享率”作为单一指标展示，而是拆成用户转化和动作频次两类：
+
+| Metric | Formula | Answers |
+|---|---|---|
+| 分享用户转化率 | `completed sessions with at least one share_copied / completed sessions` | 有多少完成 session 至少愿意分享一次？ |
+| 平均分享动作次数 | `share_copied event count / completed sessions` | 每个完成 session 平均触发几次分享动作？ |
+| 海报下载用户转化率 | `completed sessions with at least one poster_downloaded / completed sessions` | 有多少完成 session 至少下载一次海报？ |
+| 平均海报下载次数 | `poster_downloaded event count / completed sessions` | 每个完成 session 平均触发几次海报下载？ |
+
+用户转化率必须使用去重 session。平均动作次数可以大于 1，也可以高于用户转化率；它只描述行为强度，不代表更多独立用户完成了分享或下载。
+
+## 3.2 Funnel Comparability Contract
+
+每张漏斗必须显式声明适用版本、统计窗口、统计单位和是否可横向比较：
+
+| Funnel | Unit | Comparability |
+|---|---|---|
+| Current Total Funnel | V2 canonical deduplicated session, starting at `home_content_rendered` | 只能与同口径 Current Total Funnel 比较；不能与 Light/Heavy/Legacy 相加。 |
+| Light List Funnel | V2 canonical deduplicated session, starting at `list_opened` | 只用于轻量片单路径诊断；不可与 Heavy Path 做因果比较。 |
+| Heavy Path Funnel | V2 canonical deduplicated session, starting at `list_selected` | 只用于配置/参数页路径诊断；不可与 Light List 相加。 |
+| Legacy Event Count Funnel | event count with legacy alias compatibility | 仅作历史事件量参考；不能与 session funnel 横向比较。 |
+
+## 3.3 Experiment Exposure Denominator
+
+稳定哈希分桶只表示 session 被分配到 variant，不代表用户真实看到实验 UI。严格 A/B 分析必须使用 `experiment_exposed` 作为主分母：
+
+```text
+Primary experiment metric = target converted sessions / experiment_exposed sessions
+```
+
+历史实验如果没有 `experiment_exposed`，可以展示 assigned sessions 或 proxy exposure 作为诊断，但不能声称严格实验效果。
+
 ## 4. Data Quality Controls
 
 ### Completed Without Start
@@ -71,4 +105,4 @@
 - 当前导出报告可支持激活漏斗、Light/Heavy path 对照、模板规模与完成率观察。
 - 当前导出报告不能严谨拆出完成 session 中唯一分享、唯一下载的独立转化率，因此分享/下载只作为事件频次信号。
 - 当前不支持长期留存、LTV 或严格因果判断。
-- 实验分析需要新增稳定曝光事件、session 级固定分流、预设停止条件和样本阈值。
+- 新实验可以使用 `experiment_exposed` 作为真实曝光分母；历史实验若缺少该事件，只能作为 assigned-session 诊断，不应声称严格 A/B 结论。

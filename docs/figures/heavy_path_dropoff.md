@@ -3,8 +3,10 @@
 Source: Film Sort Admin Analytics HTML export, 2026-06-01 to 2026-06-25.
 
 - Data range: 2026-06-01 to 2026-06-25
+- Applicable version: V2 canonical session funnels; Light starts at `list_opened`, Heavy starts at `list_selected`
 - Statistical unit: unique session
 - Denominator: each flow's own previous stage
+- Horizontal comparability: Light and Heavy are path diagnostics with different user intent; they are not additive and should not be read as a causal comparison
 - Scope note: Light Flow and Heavy Flow represent different user intents and should not be read as a causal A/B comparison.
 
 | Flow | Entry Stage | Entry Sessions | Started Sessions | Start / Entry | Completed Sessions | Completed / Started | Share or Download Sessions | Asset Action / Completed |

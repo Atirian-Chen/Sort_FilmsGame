@@ -182,9 +182,9 @@ payload 会屏蔽完整候选项、完整排名、用户名、手机号、邮箱
 
 `builtin_card_poster_v1` 额外展示：
 
-- 首页曝光：带该实验版本的 `home_content_rendered` session。
+- 首页曝光 proxy：带该实验版本的 `home_content_rendered` session。v3.3 之后严格实验分母改用 `experiment_exposed`，该字段仅用于历史诊断。
 - 内置片单打开：`entry_surface=home_builtin_card` 的 `list_opened` session。
-- 卡片打开率：内置片单打开 session / 首页曝光 session。
+- 卡片打开率 proxy：内置片单打开 session / 首页曝光 proxy session。
 
 后台 “实验分析” tab 会按配置分成两栏：已停止实验和正在进行的实验。每个实验展示状态、总流量比例、variant 权重比例、开始时间、结束时间和收口版本；分版本指标继续来自当前筛选时间范围内的历史事件 payload，因此已停止实验仍可复盘历史表现。
 
@@ -223,6 +223,42 @@ config = get_experiment_config(get_session_id(), "your_experiment_id", defaults=
 7. 如果实验只需要做标签记录，不改变页面表现，则不需要改业务代码；事件会自动带上所有 active 实验的分桶信息。
 
 后台数据看板 v2 会自动读取事件 payload 中的 `experiments` 字典，因此新增实验后不需要再单独开发实验报表。
+
+## v3.3 指标口径修正
+
+v3.3 对后台分析口径做三项修正，用来避免把不同分母的指标误读为同一类转化。
+
+### 漏斗可比性
+
+后台和 HTML 导出中的每张漏斗都会显示“适用版本 / 统计窗口 / 统计单位 / 是否可横向比较”：
+
+| Funnel | Unit | Comparison Rule |
+|---|---|---|
+| Current Total Funnel | 去重 session，从 `home_content_rendered` 起算 | 只适用于有首页渲染埋点的 V2 当前口径，不可与 Light/Heavy/Legacy 相加。 |
+| Light List Funnel | 去重 session，从 `list_opened` 起算 | 只用于轻量片单路径诊断，不可与 Heavy Path 做因果比较。 |
+| Heavy Path Funnel | 去重 session，从 `list_selected` 起算 | 只用于配置/参数页路径诊断，不可与 Light List 相加。 |
+| Legacy Event Count Funnel | event count | 只作历史事件量参考，不可与 session funnel 横向比较。 |
+
+### 分享与下载指标
+
+“分享率”不再作为单一展示指标。后台拆成：
+
+- 分享用户转化率：至少 `share_copied` 一次的完成 session / 完成 session。
+- 平均分享动作次数：`share_copied` event count / 完成 session。
+- 海报下载用户转化率：至少 `poster_downloaded` 一次的完成 session / 完成 session。
+- 平均海报下载次数：`poster_downloaded` event count / 完成 session。
+
+用户转化率回答“有多少完成用户愿意做这件事”，动作次数回答“完成用户平均做了几次”。两者不能混用。
+
+### 实验曝光分母
+
+稳定哈希分桶只表示 session 被 assigned 到 variant，不代表用户真实看到了实验 UI。v3.3 新增 `experiment_exposed` 事件，只有实验控制的 UI surface 实际渲染时才上报。
+
+后台实验分析中：
+
+- Assigned sessions：事件 payload 中带有该 experiment/variant 的 session，仅作诊断。
+- Exposed sessions：触发 `experiment_exposed` 的去重 session，是严格实验主分母。
+- 历史实验如果没有 `experiment_exposed`，显示“真实曝光分母不可用”；`home_content_rendered` 只能作为历史 proxy，不再等同真实曝光。
 
 ## 隐私说明
 
