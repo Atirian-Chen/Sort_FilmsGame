@@ -1103,6 +1103,169 @@ def render_app_styles() -> None:
             line-height: 1.25;
             text-align: center;
         }
+        .zero-start-strip {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.72fr) auto;
+            align-items: center;
+            gap: 14px;
+            border: 1px solid #26373b;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #142a2c 0%, #263238 58%, #3a332c 100%);
+            color: #fffaf4 !important;
+            padding: 14px;
+            margin: 10px 0;
+            text-decoration: none !important;
+            box-shadow: 0 14px 34px rgba(20, 24, 30, 0.12);
+        }
+        .zero-start-strip:hover {
+            border-color: #5ea39d;
+            text-decoration: none !important;
+        }
+        .zero-start-main,
+        .zero-start-pick {
+            min-width: 0;
+        }
+        .zero-start-kicker,
+        .duel-teaser-kicker {
+            color: #ffd19a;
+            font-size: 11px;
+            font-weight: 850;
+            line-height: 1.2;
+            margin-bottom: 3px;
+        }
+        .zero-start-title {
+            color: #fffaf4;
+            font-size: 20px;
+            font-weight: 900;
+            line-height: 1.2;
+            margin-bottom: 4px;
+        }
+        .zero-start-copy {
+            color: #f3e8dc;
+            font-size: 13px;
+            font-weight: 650;
+            line-height: 1.45;
+        }
+        .zero-start-pick {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid rgba(255, 250, 244, 0.20);
+            border-radius: 8px;
+            background: rgba(255, 250, 244, 0.10);
+            padding: 8px;
+        }
+        .zero-start-poster {
+            width: 42px;
+            height: 58px;
+            object-fit: cover;
+            border-radius: 6px;
+            flex: 0 0 auto;
+        }
+        .zero-start-template {
+            color: #fffaf4;
+            font-size: 14px;
+            font-weight: 860;
+            line-height: 1.25;
+        }
+        .zero-start-meta {
+            color: #d9ebe7;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.3;
+            margin-top: 3px;
+        }
+        .zero-start-cta {
+            border-radius: 6px;
+            background: #fffaf4;
+            color: #1f2328;
+            font-size: 13px;
+            font-weight: 850;
+            line-height: 1;
+            padding: 12px 14px;
+            white-space: nowrap;
+            text-align: center;
+        }
+        .duel-teaser {
+            display: grid;
+            grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr);
+            gap: 12px;
+            align-items: stretch;
+            border: 1px solid #d8e5e1;
+            border-radius: 8px;
+            background: #f6fffb;
+            padding: 13px;
+            margin: 10px 0;
+        }
+        .duel-teaser-copy {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .duel-teaser-kicker {
+            color: #1f6f6a;
+        }
+        .duel-teaser-title {
+            color: #163f3c;
+            font-size: 18px;
+            font-weight: 900;
+            line-height: 1.24;
+            margin-bottom: 4px;
+        }
+        .duel-teaser-note {
+            color: #4f625f;
+            font-size: 13px;
+            font-weight: 650;
+            line-height: 1.45;
+        }
+        .duel-teaser-options {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+            gap: 8px;
+            align-items: stretch;
+        }
+        .duel-teaser-choice {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 92px;
+            border: 1px solid #bfd7d2;
+            border-radius: 8px;
+            background: #fffdf9;
+            padding: 12px;
+            color: #1f2328 !important;
+            text-decoration: none !important;
+            transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+        }
+        .duel-teaser-choice:hover {
+            border-color: #1f6f6a;
+            box-shadow: 0 0 0 3px rgba(31, 111, 106, 0.10);
+            transform: translateY(-1px);
+            text-decoration: none !important;
+        }
+        .duel-choice-label {
+            color: #1f6f6a;
+            font-size: 12px;
+            font-weight: 900;
+            line-height: 1.2;
+            margin-bottom: 8px;
+        }
+        .duel-choice-title {
+            color: #1f2328;
+            font-size: 18px;
+            font-weight: 900;
+            line-height: 1.25;
+            overflow-wrap: anywhere;
+        }
+        .duel-teaser-vs {
+            align-self: center;
+            color: #8a4f3d;
+            font-size: 12px;
+            font-weight: 900;
+            line-height: 1;
+            padding: 0 2px;
+        }
         .challenge-grid {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1730,6 +1893,31 @@ def render_app_styles() -> None:
             .collect-spotlight-note {
                 text-align: left;
                 min-width: 0;
+            }
+            .zero-start-strip {
+                grid-template-columns: 1fr;
+                gap: 10px;
+                padding: 12px;
+            }
+            .zero-start-pick {
+                align-items: center;
+            }
+            .zero-start-cta {
+                width: 100%;
+            }
+            .duel-teaser {
+                grid-template-columns: 1fr;
+                padding: 12px;
+            }
+            .duel-teaser-options {
+                grid-template-columns: 1fr;
+            }
+            .duel-teaser-vs {
+                justify-self: center;
+                padding: 2px 0;
+            }
+            .duel-teaser-choice {
+                min-height: 74px;
             }
             .challenge-grid {
                 grid-template-columns: 1fr;
@@ -3941,6 +4129,7 @@ def maybe_open_url_challenge() -> None:
             item_count=len(challenge.items),
             top_k=challenge.top_k,
             entry_surface=get_query_param("entry_surface") or "direct_list_link",
+            teaser_choice=get_query_param("teaser_choice") or None,
         ),
     )
     start_challenge(challenge)
@@ -5669,6 +5858,12 @@ def admin_group_df(rows: List[Dict[str, Any]], label_key: str, label_name: str, 
         if "home_exposure_sessions" in row:
             item["Assigned sessions"] = int(row.get("assigned_sessions", 0))
             item["Exposed sessions"] = int(row.get("exposed_sessions", 0))
+            item["曝光后行动"] = int(row.get("exposed_action_sessions", 0))
+            item["曝光后行动率"] = (
+                admin_percent(row.get("exposed_action_rate"))
+                if int(row.get("exposed_sessions", 0) or 0) > 0
+                else "真实曝光分母不可用"
+            )
             item["实验主指标"] = (
                 admin_percent(row.get("exposed_completion_rate"))
                 if int(row.get("exposed_sessions", 0) or 0) > 0
@@ -5816,7 +6011,8 @@ def render_admin_experiment_analysis(events: List[Dict[str, Any]]) -> None:
 
     st.caption(
         "说明：实验配置来自 experiments.py。Assigned sessions 只表示事件 payload 带有该 variant；"
-        "严格 A/B 主分母必须使用 experiment_exposed 的 Exposed sessions。历史实验没有真实曝光事件时，实验主指标显示为不可用。"
+        "严格 A/B 主分母必须使用 experiment_exposed 的 Exposed sessions。曝光后行动率表示曝光后发生打开/选择片单或开始整理的 session 比例；"
+        "历史实验没有真实曝光事件时，实验主指标显示为不可用。"
     )
 
 
@@ -6140,9 +6336,38 @@ def render_admin_dashboard() -> None:
 
 
 def render_cover_header() -> None:
-    experiment_config = get_experiment_config(get_session_id(), "homepage_cta_v1", {"hero_title": HERO_TITLE})
-    track_experiment_exposure("hero_cta", ["homepage_cta_v1"])
+    experiment_config = get_experiment_config(
+        get_session_id(),
+        "post_render_hero_value_v1",
+        {
+            "hero_title": HERO_TITLE,
+            "hero_subtitle": HERO_SUBTITLE,
+            "hero_tagline": HERO_TAGLINE,
+            "hero_outcomes": [
+                "得到一份 Top 榜单",
+                "看见你的冠军电影",
+                "生成结果海报",
+                "复制链接给朋友同题挑战",
+            ],
+        },
+    )
+    track_experiment_exposure("hero_cta", ["post_render_hero_value_v1"])
     hero_title = str(experiment_config.get("hero_title") or HERO_TITLE)
+    hero_subtitle = str(experiment_config.get("hero_subtitle") or HERO_SUBTITLE)
+    hero_tagline = str(experiment_config.get("hero_tagline") or HERO_TAGLINE)
+    hero_outcomes = experiment_config.get("hero_outcomes")
+    if not isinstance(hero_outcomes, list) or not hero_outcomes:
+        hero_outcomes = [
+            "得到一份 Top 榜单",
+            "看见你的冠军电影",
+            "生成结果海报",
+            "复制链接给朋友同题挑战",
+        ]
+    outcome_html = "".join(
+        f'<div class="hero-outcome">{html.escape(str(outcome))}</div>'
+        for outcome in hero_outcomes[:4]
+        if str(outcome).strip()
+    )
     hero_title_html = html.escape(hero_title).replace("你的电影审美名单", "你的<br>电影审美名单").replace("你的电影审美榜单", "你的<br>电影审美榜单")
     st.markdown(
         f"""
@@ -6150,12 +6375,9 @@ def render_cover_header() -> None:
           <div class="hero-copy">
             <div class="hero-kicker">电影片单整理器</div>
             <h1 class="hero-title">{hero_title_html}</h1>
-            <p class="hero-subtitle">{html.escape(HERO_SUBTITLE)} {html.escape(HERO_TAGLINE)}</p>
+            <p class="hero-subtitle">{html.escape(hero_subtitle)} {html.escape(hero_tagline)}</p>
             <div class="hero-outcomes">
-              <div class="hero-outcome">得到一份 Top 榜单</div>
-              <div class="hero-outcome">看见你的冠军电影</div>
-              <div class="hero-outcome">生成结果海报</div>
-              <div class="hero-outcome">复制链接给朋友同题挑战</div>
+              {outcome_html}
             </div>
           </div>
           <div class="example-card">
@@ -7358,22 +7580,44 @@ def render_step_header(step: int, title: str, subtitle: str = "", compact: bool 
 
 
 def render_douban_collect_spotlight(homepage_cta_text: str = "开始整理") -> None:
+    collect_config = get_experiment_config(
+        get_session_id(),
+        "douban_collect_entry_cta_v1",
+        {
+            "collect_kicker": "主推功能 · 豆瓣已看总榜",
+            "collect_title": "把你看过的电影排成私人总榜",
+            "collect_copy": "适合想排出自己总榜单、年度榜单或某个阶段观影坐标的用户。输入豆瓣 ID，读取公开的“看过”电影，再用一轮轮二选一整理出总榜或 Top N。",
+            "collect_note_html": "可只排 Top N<br>也可整理完整总榜",
+            "collect_cta_text": homepage_cta_text,
+            "collect_hint": "只读取公开可访问的“看过”页面；可以只排 Top N，也可以整理完整总榜。",
+        },
+    )
+    track_experiment_exposure("douban_collect_spotlight", ["douban_collect_entry_cta_v1"])
+    collect_kicker = str(collect_config.get("collect_kicker") or "主推功能 · 豆瓣已看总榜")
+    collect_title = str(collect_config.get("collect_title") or "把你看过的电影排成私人总榜")
+    collect_copy = str(
+        collect_config.get("collect_copy")
+        or "适合想排出自己总榜单、年度榜单或某个阶段观影坐标的用户。输入豆瓣 ID，读取公开的“看过”电影，再用一轮轮二选一整理出总榜或 Top N。"
+    )
+    collect_note_html = str(collect_config.get("collect_note_html") or "可只排 Top N<br>也可整理完整总榜")
+    collect_cta_text = str(collect_config.get("collect_cta_text") or homepage_cta_text or "开始整理")
+    collect_hint = str(collect_config.get("collect_hint") or "只读取公开可访问的“看过”页面；可以只排 Top N，也可以整理完整总榜。")
     st.markdown(
-        """
+        f"""
         <div class="collect-spotlight">
           <div>
-            <div class="collect-spotlight-kicker">主推功能 · 豆瓣已看总榜</div>
-            <div class="collect-spotlight-title">把你看过的电影排成私人总榜</div>
-            <div class="collect-spotlight-copy">适合想排出自己总榜单、年度榜单或某个阶段观影坐标的用户。输入豆瓣 ID，读取公开的“看过”电影，再用一轮轮二选一整理出总榜或 Top N。</div>
+            <div class="collect-spotlight-kicker">{html.escape(collect_kicker)}</div>
+            <div class="collect-spotlight-title">{html.escape(collect_title)}</div>
+            <div class="collect-spotlight-copy">{html.escape(collect_copy)}</div>
           </div>
-          <div class="collect-spotlight-note">可只排 Top N<br>也可整理完整总榜</div>
+          <div class="collect-spotlight-note">{collect_note_html}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
     action_col, hint_col = st.columns([1, 2.4])
     with action_col:
-        if render_button_compat(homepage_cta_text, key="btn_feature_douban_collect", use_container_width=True, button_type="primary"):
+        if render_button_compat(collect_cta_text, key="btn_feature_douban_collect", use_container_width=True, button_type="primary"):
             set_selected_mode(MODE_DOUBAN_COLLECT)
             track_event(
                 EVENT_LIST_SELECTED,
@@ -7383,7 +7627,7 @@ def render_douban_collect_spotlight(homepage_cta_text: str = "开始整理") -> 
             )
             go_to_step(2)
     with hint_col:
-        st.caption("只读取公开可访问的“看过”页面；可以只排 Top N，也可以整理完整总榜。")
+        st.caption(collect_hint)
 
 
 def render_builtin_quick_start_lists() -> None:
@@ -7394,10 +7638,38 @@ def render_builtin_quick_start_lists() -> None:
     )
     track_experiment_exposure("homepage_card", ["builtin_card_poster_v1"])
     show_card_posters = bool(poster_config.get("show_builtin_card_posters", False))
+    card_config = get_experiment_config(
+        get_session_id(),
+        "quick_list_card_framing_v1",
+        {
+            "card_reason_label": "推荐理由",
+            "card_recommendation_prefix": "",
+            "card_meta_template": "{count} 部电影 · 前 {top_k} 名",
+            "card_action_text": "开始整理",
+        },
+    )
+    track_experiment_exposure("quick_list_cards", ["quick_list_card_framing_v1"])
+    card_reason_label = str(card_config.get("card_reason_label") or "推荐理由")
+    card_recommendation_prefix = str(card_config.get("card_recommendation_prefix") or "")
+    card_meta_template = str(card_config.get("card_meta_template") or "{count} 部电影 · 前 {top_k} 名")
+    card_action_template = str(card_config.get("card_action_text") or "开始整理")
     experiment_query = get_experiment_query_params(get_session_id())
     card_html = []
     for template in FILM_CHALLENGE_TEMPLATES:
-        recommendation = html.escape(str(template.get("recommendation", "")))
+        item_count = len(template.get("items", []))
+        top_k = template.get("top_k", 10)
+        recommendation_text = str(template.get("recommendation", ""))
+        if card_recommendation_prefix and recommendation_text:
+            recommendation_text = f"{card_recommendation_prefix}{recommendation_text}"
+        recommendation = html.escape(recommendation_text)
+        try:
+            card_meta = card_meta_template.format(count=item_count, top_k=top_k)
+        except Exception:
+            card_meta = f"{item_count} 部电影 · 前 {top_k} 名"
+        try:
+            card_action_text = card_action_template.format(count=item_count, top_k=top_k)
+        except Exception:
+            card_action_text = "开始整理"
         link_params = {
             "list": str(template["id"]),
             "entry_surface": "home_builtin_card",
@@ -7428,11 +7700,11 @@ def render_builtin_quick_start_lists() -> None:
             f'</div>'
             f'{poster_html}'
             f'</div>'
-            f'<div class="challenge-reason"><div class="challenge-reason-label">推荐理由</div>{recommendation}</div>'
+            f'<div class="challenge-reason"><div class="challenge-reason-label">{html.escape(card_reason_label)}</div>{recommendation}</div>'
             f'</div>'
             f'<div class="challenge-foot">'
-            f'<div class="mini-note">{len(template.get("items", []))} 部电影 · 前 {template.get("top_k", 10)} 名</div>'
-            f'<span class="challenge-action">开始整理</span>'
+            f'<div class="mini-note">{html.escape(str(card_meta))}</div>'
+            f'<span class="challenge-action">{html.escape(str(card_action_text))}</span>'
             f'</div>'
             f'</a>'
         )
@@ -7466,11 +7738,171 @@ def render_builtin_quick_start_lists() -> None:
             )
 
 
+def build_home_action_url(params: Dict[str, Any]) -> str:
+    query = {
+        str(key): str(value)
+        for key, value in params.items()
+        if value is not None and str(value).strip()
+    }
+    query.update(get_experiment_query_params(get_session_id()))
+    return f"?{urlencode(query)}"
+
+
+def choose_zero_decision_template(template_ids: Any) -> Optional[Dict[str, object]]:
+    ids = template_ids if isinstance(template_ids, list) else []
+    templates: List[Dict[str, object]] = []
+    for template_id in ids:
+        template = get_template(str(template_id))
+        if template:
+            templates.append(template)
+    if not templates:
+        fallback = get_template("douban-top50")
+        return fallback
+    index = stable_int(f"zero_decision_template:{get_session_id()}") % len(templates)
+    return templates[index]
+
+
+def render_zero_decision_start() -> None:
+    config = get_experiment_config(
+        get_session_id(),
+        "home_zero_decision_start_v1",
+        {
+            "show_zero_decision_start": False,
+            "zero_decision_title": "不知道排哪份？直接开一局",
+            "zero_decision_copy": "系统会从适合快速开始的片单里为你稳定挑一份，同一个会话刷新也不会变。",
+            "zero_decision_cta": "现在开排",
+            "zero_decision_template_ids": ["douban-top50", "miyazaki", "nolan", "chinese-highscore", "couple-debate"],
+        },
+    )
+    track_experiment_exposure("zero_decision_start", ["home_zero_decision_start_v1"])
+    if not bool(config.get("show_zero_decision_start", False)):
+        return
+
+    template = choose_zero_decision_template(config.get("zero_decision_template_ids"))
+    if not template:
+        return
+
+    template_id = str(template["id"])
+    template_name = str(template.get("name") or template_id)
+    top_k = template.get("top_k", 10)
+    item_count = len(template.get("items", []))
+    href = html.escape(
+        build_home_action_url(
+            {
+                "list": template_id,
+                "entry_surface": "home_zero_decision_start",
+            }
+        ),
+        quote=True,
+    )
+    title = str(config.get("zero_decision_title") or "不知道排哪份？直接开一局")
+    copy = str(config.get("zero_decision_copy") or "")
+    cta = str(config.get("zero_decision_cta") or "现在开排")
+    poster_src = ""
+    poster_asset = Path(str(template.get("card_poster_asset") or ""))
+    if poster_asset:
+        poster_src = image_file_data_uri(Path(__file__).parent / poster_asset) or ""
+    poster_html = (
+        f'<img class="zero-start-poster" src="{html.escape(poster_src, quote=True)}" '
+        f'alt="{html.escape(str(template.get("card_poster_title") or template_name), quote=True)}海报" loading="eager">'
+        if poster_src
+        else ""
+    )
+    st.markdown(
+        f"""
+        <a class="zero-start-strip" href="{href}" target="_self" aria-label="直接开始整理 {html.escape(template_name, quote=True)}">
+          <div class="zero-start-main">
+            <div class="zero-start-kicker">零决策开排</div>
+            <div class="zero-start-title">{html.escape(title)}</div>
+            <div class="zero-start-copy">{html.escape(copy)}</div>
+          </div>
+          <div class="zero-start-pick">
+            {poster_html}
+            <div>
+              <div class="zero-start-template">{html.escape(template_name)}</div>
+              <div class="zero-start-meta">{item_count} 部电影 · Top {top_k}</div>
+            </div>
+          </div>
+          <div class="zero-start-cta">{html.escape(cta)}</div>
+        </a>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_home_duel_teaser() -> None:
+    config = get_experiment_config(
+        get_session_id(),
+        "home_duel_teaser_v1",
+        {
+            "show_duel_teaser": False,
+            "duel_teaser_title": "先试一题：你更想把谁排前面？",
+            "duel_teaser_copy": "点任意一边就进入同一份豆瓣高分片单，后面继续用二选一排出你的 Top 榜。",
+            "duel_teaser_template_id": "douban-top50",
+            "duel_teaser_left": "千与千寻",
+            "duel_teaser_right": "星际穿越",
+        },
+    )
+    track_experiment_exposure("duel_teaser", ["home_duel_teaser_v1"])
+    if not bool(config.get("show_duel_teaser", False)):
+        return
+
+    template_id = str(config.get("duel_teaser_template_id") or "douban-top50")
+    template = get_template(template_id) or get_template("douban-top50")
+    if template:
+        template_id = str(template["id"])
+    left_title = str(config.get("duel_teaser_left") or "千与千寻")
+    right_title = str(config.get("duel_teaser_right") or "星际穿越")
+    left_href = html.escape(
+        build_home_action_url(
+            {
+                "list": template_id,
+                "entry_surface": "home_duel_teaser",
+                "teaser_choice": "left",
+            }
+        ),
+        quote=True,
+    )
+    right_href = html.escape(
+        build_home_action_url(
+            {
+                "list": template_id,
+                "entry_surface": "home_duel_teaser",
+                "teaser_choice": "right",
+            }
+        ),
+        quote=True,
+    )
+    title = str(config.get("duel_teaser_title") or "先试一题：你更想把谁排前面？")
+    copy = str(config.get("duel_teaser_copy") or "")
+    st.markdown(
+        f"""
+        <section class="duel-teaser" aria-label="首页二选一试看">
+          <div class="duel-teaser-copy">
+            <div class="duel-teaser-kicker">先试一题</div>
+            <div class="duel-teaser-title">{html.escape(title)}</div>
+            <div class="duel-teaser-note">{html.escape(copy)}</div>
+          </div>
+          <div class="duel-teaser-options">
+            <a class="duel-teaser-choice" href="{left_href}" target="_self" aria-label="选择 {html.escape(left_title, quote=True)} 并开始整理">
+              <span class="duel-choice-label">A</span>
+              <span class="duel-choice-title">{html.escape(left_title)}</span>
+            </a>
+            <div class="duel-teaser-vs">VS</div>
+            <a class="duel-teaser-choice" href="{right_href}" target="_self" aria-label="选择 {html.escape(right_title, quote=True)} 并开始整理">
+              <span class="duel-choice-label">B</span>
+              <span class="duel-choice-title">{html.escape(right_title)}</span>
+            </a>
+          </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_mode_selection_page() -> None:
     current_mode = get_selected_mode()
     mode_options = [MODE_DOUBAN_COLLECT, MODE_CUSTOM, MODE_DOUBAN]
-    cta_config = get_experiment_config(get_session_id(), "homepage_cta_v1", {"cta_text": "开始整理"})
-    homepage_cta_text = str(cta_config.get("cta_text") or "开始整理")
     layout_config = get_experiment_config(
         get_session_id(),
         "home_layout_order_v1",
@@ -7485,13 +7917,15 @@ def render_mode_selection_page() -> None:
         "不用先想完整顺序，只在两部电影之间作一次取舍。",
         compact=True,
     )
+    render_zero_decision_start()
+    render_home_duel_teaser()
 
     if home_layout_order == "builtin_first":
         render_builtin_quick_start_lists()
         safe_divider()
-        render_douban_collect_spotlight(homepage_cta_text)
+        render_douban_collect_spotlight()
     else:
-        render_douban_collect_spotlight(homepage_cta_text)
+        render_douban_collect_spotlight()
         safe_divider()
         render_builtin_quick_start_lists()
 

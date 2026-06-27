@@ -163,7 +163,21 @@ payload 会屏蔽完整候选项、完整排名、用户名、手机号、邮箱
 - `variant_name`
 - `config`
 
-当前没有正在运行的 active 实验；最近两个实验已经停止并全量收口：
+当前正在运行 5 个围绕“渲染后行动率”的 active 实验。主指标为：
+
+```text
+exposed_action_rate = exposed sessions 中发生 list_opened / list_selected / sorting_started 的 session / exposed sessions
+```
+
+当前 active 实验：
+
+- `post_render_hero_value_v1`：首屏价值表达实验，对比原首屏表达与更明确的结果预览表达。
+- `quick_list_card_framing_v1`：快速片单卡片行动框架实验，对比“推荐理由 + 开始整理”与更低成本的“先排 Top N”行动提示。
+- `douban_collect_entry_cta_v1`：豆瓣已看入口 CTA 降成本实验，对比总榜叙事与下一步低门槛提示。
+- `home_zero_decision_start_v1`：首页零决策开排实验，对比不显示新入口与一键进入按 session 稳定推荐的内置片单。
+- `home_duel_teaser_v1`：首页先试一题二选一实验，对比不显示试看题与点击一组二选一后进入同一份片单。
+
+最近两个历史实验已经停止并全量收口：
 
 - `home_layout_order_v1`：已收口到 `builtin_first`，首页默认先展示内置快速片单，再展示豆瓣已看主推。
 - `builtin_card_poster_v1`：已收口到 `poster`，内置轻量片单卡默认显示预制代表电影海报。
@@ -187,6 +201,12 @@ payload 会屏蔽完整候选项、完整排名、用户名、手机号、邮箱
 - 卡片打开率 proxy：内置片单打开 session / 首页曝光 proxy session。
 
 后台 “实验分析” tab 会按配置分成两栏：已停止实验和正在进行的实验。每个实验展示状态、总流量比例、variant 权重比例、开始时间、结束时间和收口版本；分版本指标继续来自当前筛选时间范围内的历史事件 payload，因此已停止实验仍可复盘历史表现。
+
+v3.4 起，实验表额外展示：
+
+- 曝光后行动：exposed sessions 中发生 `list_opened` / `list_selected` / `sorting_started` 的去重 session。
+- 曝光后行动率：曝光后行动 / exposed sessions，用于当前“渲染后行动率”优化实验。
+- v3.5 的 `home_duel_teaser_v1` 点击后，`list_opened` payload 会额外带 `teaser_choice=left/right`，用于拆分用户先点了哪一侧。
 
 ## 内容统计与冠军榜海报
 

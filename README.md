@@ -80,7 +80,15 @@ The case study publishes aggregate findings only, not raw user events, session i
 
 ## A/B 实验框架
 
-实验配置位于 [experiments.py](experiments.py)。当前没有 active 实验；`home_layout_order_v1` 和 `builtin_card_poster_v1` 已停止并全量收口，首页默认先展示内置快速片单，内置片单卡默认显示预制代表电影海报。历史实验配置和事件 payload 仍保留在后台，用于继续复盘分版本表现。
+实验配置位于 [experiments.py](experiments.py)。当前 active 实验目标是优化“渲染后行动率”：`home_content_rendered` 后发生 `list_opened` / `list_selected` / `sorting_started` 的去重 session 比例。新实验都使用 `experiment_exposed` 作为严格曝光分母：
+
+- `post_render_hero_value_v1`：首屏价值表达实验，对比原首屏表达与更明确的结果预览表达。
+- `quick_list_card_framing_v1`：快速片单卡片行动框架实验，对比“推荐理由 + 开始整理”与更低成本的“先排 Top N”行动提示。
+- `douban_collect_entry_cta_v1`：豆瓣已看入口 CTA 降成本实验，对比总榜叙事与下一步低门槛提示。
+- `home_zero_decision_start_v1`：首页零决策开排实验，对比不显示新入口与一键进入稳定推荐片单。
+- `home_duel_teaser_v1`：首页先试一题实验，对比不显示试看题与点击一组二选一后进入同一份片单。
+
+`home_layout_order_v1` 和 `builtin_card_poster_v1` 已停止并全量收口，首页默认先展示内置快速片单，内置片单卡默认显示预制代表电影海报。历史实验配置和事件 payload 仍保留在后台，用于继续复盘分版本表现。
 
 以后新增实验时，一般不需要改后台看板或埋点聚合逻辑。常规流程是：
 
@@ -662,6 +670,20 @@ https://movie.douban.com/people/123456/collect
 - 分享/下载指标拆成用户转化率与平均动作次数，不再用单一“分享率”混合表达。
 - 新增 `experiment_exposed` 事件，实验主分母改为真实曝光 session，assigned sessions 仅作诊断。
 - 新增 [docs/version_updates/version3.3.md](docs/version_updates/version3.3.md)，并更新 [docs/analytics_v2.md](docs/analytics_v2.md) 与 [docs/metrics_contract.md](docs/metrics_contract.md) 的指标口径。
+
+### v3.4 渲染后行动率 A/B 实验
+
+- 新增 `post_render_hero_value_v1`、`quick_list_card_framing_v1`、`douban_collect_entry_cta_v1` 三个 active 实验，目标是提升首页渲染后行动率。
+- 首页首屏、快速片单卡片、豆瓣已看主推区分别接入实验配置，并在真实渲染时上报 `experiment_exposed`。
+- 后台实验分析新增“曝光后行动”和“曝光后行动率”，用于观察 exposed sessions 中打开/选择片单或开始整理的比例。
+- 新增 [docs/version_updates/version3.4.md](docs/version_updates/version3.4.md)，并更新 [docs/analytics_v2.md](docs/analytics_v2.md) 的当前实验说明。
+
+### v3.5 创意型渲染后行动率实验
+
+- 追加 `home_zero_decision_start_v1` 和 `home_duel_teaser_v1` 两个 active 实验，不暂停 v3.4 的 3 个 active 实验。
+- 首页新增“零决策开排”横条，可按 session 稳定推荐一份内置片单并直接进入取舍流程。
+- 首页新增“先试一题”二选一模块，点击任意一侧进入同一份豆瓣高分片单，并在 payload 中记录 `teaser_choice`。
+- 新增 [docs/version_updates/version3.5.md](docs/version_updates/version3.5.md)，并更新 [docs/analytics_v2.md](docs/analytics_v2.md) 的当前实验说明。
 
 ---
 

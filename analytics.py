@@ -1336,6 +1336,11 @@ def build_experiment_metrics(events: List[Dict[str, Any]], *, top_n: int = 100) 
         assigned_sessions = _session_set(group_events)
         exposure_events = [event for event in group_events if _event_matches(event, EVENT_EXPERIMENT_EXPOSED)]
         exposed_sessions = _session_set(exposure_events)
+        action_sessions = _session_set(
+            event
+            for event in group_events
+            if canonical_event_name(event.get("event_name")) in HOME_ENGAGEMENT_EVENTS
+        )
         completed_sessions = _session_set(event for event in group_events if _event_matches(event, EVENT_RANKING_COMPLETED))
         home_exposure_sessions = _session_set(
             event
@@ -1354,6 +1359,8 @@ def build_experiment_metrics(events: List[Dict[str, Any]], *, top_n: int = 100) 
         row["exposed_sessions"] = len(exposed_sessions)
         row["exposure_event_count"] = len(exposure_events)
         row["exposure_available"] = bool(exposed_sessions)
+        row["exposed_action_sessions"] = len(exposed_sessions & action_sessions)
+        row["exposed_action_rate"] = _rate(len(exposed_sessions & action_sessions), len(exposed_sessions))
         row["exposed_completed_sessions"] = len(exposed_sessions & completed_sessions)
         row["exposed_completion_rate"] = _rate(len(exposed_sessions & completed_sessions), len(exposed_sessions))
         row["home_exposure_sessions"] = len(home_exposure_sessions)

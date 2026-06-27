@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional
 
 
-APP_VERSION = "v3.3"
-APP_RELEASE_ID = "v3.3-analytics-metric-contract"
-APP_RELEASE_NAME = "分析口径与实验曝光分母修正"
-APP_RELEASED_AT = "2026-06-27T00:00:00+08:00"
+APP_VERSION = "v3.5"
+APP_RELEASE_ID = "v3.5-post-render-action-creative-experiments"
+APP_RELEASE_NAME = "创意型渲染后行动率实验"
+APP_RELEASED_AT = "2026-06-27T20:56:19+08:00"
 
 
 # Version starts are based on the first push/deploy commit of each feature phase
@@ -172,6 +172,13 @@ RELEASE_TIMELINE = [
         "release_id": "v3.2-experiment-rollout-dashboard",
         "release_name": "实验收口与后台分析优化",
         "released_at": "2026-06-25T18:22:38+08:00",
+        "commit": "",
+    },
+    {
+        "app_version": "v3.4",
+        "release_id": "v3.4-post-render-action-experiments",
+        "release_name": "渲染后行动率 A/B 实验",
+        "released_at": "2026-06-27T03:08:50+08:00",
         "commit": "",
     },
     {
