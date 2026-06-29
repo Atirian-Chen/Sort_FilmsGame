@@ -208,6 +208,30 @@ v3.4 起，实验表额外展示：
 - 曝光后行动率：曝光后行动 / exposed sessions，用于当前“渲染后行动率”优化实验。
 - v3.5 的 `home_duel_teaser_v1` 点击后，`list_opened` payload 会额外带 `teaser_choice=left/right`，用于拆分用户先点了哪一侧。
 
+## v3.6 轻量片单自动维护
+
+首页轻量片单固定展示 9 份。北京时间 03:00 是统计日切边界，03:00 后首个首页访问通过 `get_home_light_list_roster()` RPC 补算并读取 roster；Streamlit 休眠期间不会主动执行。当天首次结算会持久化 active roster 和 `display_rank`，同一统计日的后续 RPC 只读取状态表，不再扫描 `analytics_events` 或重复更新顺序。
+
+统计与排序口径：
+
+- 昨日访问：北京时间上一完整统计日内，`list_opened` / 历史 `challenge_opened` 的去重 `session_id`。
+- 近 3 日访问：最近 3 个完整北京时间统计日的每日去重 session 之和。
+- 日常顺序：24 小时新品保护中的片单优先，其余按昨日访问降序；并列沿用旧顺序。
+- 三日轮换：移除近 3 日访问最低的 3 份，加入导演、演员、类型候选各 1 份。
+- 新片单至少积累 3 个统计日后才可参与淘汰；下架后冷却 21 天。
+- 下架只改变首页 roster，不删除模板定义、分享链接或历史事件。
+
+新增 Supabase 对象：
+
+- `light_list_catalog_state`
+- `light_list_daily_stats`
+- `light_list_rotation_runs`
+- `get_home_light_list_roster()`：幂等维护并返回当前 roster。
+- `read_home_light_list_roster()`：维护失败时读取上次状态。
+- `get_light_list_rotation_history()`：供 Admin 展示轮换历史。
+
+Admin “轻量片单维护”tab 展示当前顺序、昨日/近 3 日访问、新品状态、最后和下一轮日期，以及最近轮换记录。首页 roster 来源会写入 `home_content_rendered.payload.light_list_roster_source`，可能值为 `maintenance`、`previous` 或 `static_fallback`。
+
 ## 内容统计与冠军榜海报
 
 v3.1 后台新增 “内容统计” tab，用于观察模板片单完成结果中最常成为冠军的电影。

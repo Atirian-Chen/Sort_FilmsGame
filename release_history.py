@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional
 
 
-APP_VERSION = "v3.5"
-APP_RELEASE_ID = "v3.5-post-render-action-creative-experiments"
-APP_RELEASE_NAME = "创意型渲染后行动率实验"
-APP_RELEASED_AT = "2026-06-27T20:56:19+08:00"
+APP_VERSION = "v3.6"
+APP_RELEASE_ID = "v3.6-light-list-auto-rotation"
+APP_RELEASE_NAME = "轻量片单自动排序与轮换"
+APP_RELEASED_AT = "2026-06-29T14:21:07+08:00"
 
 
 # Version starts are based on the first push/deploy commit of each feature phase
@@ -179,6 +179,13 @@ RELEASE_TIMELINE = [
         "release_id": "v3.4-post-render-action-experiments",
         "release_name": "渲染后行动率 A/B 实验",
         "released_at": "2026-06-27T03:08:50+08:00",
+        "commit": "",
+    },
+    {
+        "app_version": "v3.5",
+        "release_id": "v3.5-post-render-action-creative-experiments",
+        "release_name": "创意型渲染后行动率实验",
+        "released_at": "2026-06-27T20:56:19+08:00",
         "commit": "",
     },
     {

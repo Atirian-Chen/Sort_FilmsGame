@@ -76,7 +76,22 @@ The case study publishes aggregate findings only, not raw user events, session i
 - 内容统计：只统计模板片单 `winner`，展示每个模板片单的完成数、冠军 Top3，并生成可下载的冠军榜宣传海报。
 - 按 `source / utm_source / utm_medium / utm_campaign` 查看渠道归因。
 - 实验分析：按已停止实验 / 正在进行的实验两栏查看实验比例、起止时间、收口版本和历史分版本指标。
+- 轻量片单维护：查看首页当前 9 份顺序、昨日/近 3 日访问、新品保护、轮换历史和下一轮日期。
 - 支持最近 7 天、最近 30 天、全部历史和自定义时间范围筛选。
+
+## 轻量片单自动维护
+
+v3.6 起，首页固定展示 9 份轻量片单，顺序和上架名单由 Supabase 状态自动维护：
+
+- 北京时间 03:00 作为统计日切边界；03:00 后第一个首页访问会补算昨日数据。若应用当时休眠，不会在无人访问时自行唤醒。
+- 日常顺序按昨日 `list_opened` 去重 session 降序排列。
+- 当天首次结算会把 9 份 active roster 和 `display_rank` 固化到 Supabase；同一统计日的后续调用只读取状态表，不再扫描事件或重复排序。
+- 每满 3 个完整统计日，自动下架近 3 日访问最少的 3 份，并从预制候选池加入导演、演员、类型片单各 1 份。
+- 新上架片单置顶保护 24 小时；下架片单进入 21 天冷却后可再次候选。
+- 下架只影响首页展示，旧分享链接和历史事件仍然有效。
+- 轮换模板池包含 24 份新片单，导演、演员、类型各 8 份；其中斯皮尔伯格初始 active，其余 23 份候选，运行状态保存在 Supabase。
+
+首页会依次尝试“维护 RPC → 上次 Supabase 状态 → 静态 9 份”。因此 migration 未部署或 Supabase 暂时不可用时，主流程仍可正常使用。
 
 ## A/B 实验框架
 
@@ -112,7 +127,8 @@ streamlit run merged_douban_ranker_v3.py
 语法检查：
 
 ```bash
-python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py release_history.py
+python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py light_list_catalog.py light_list_runtime.py release_history.py
+python -m unittest tests.test_light_list_catalog -v
 ```
 
 ## 隐私说明
@@ -266,7 +282,8 @@ streamlit run merged_douban_ranker_v3.py
 常用检查：
 
 ```bash
-python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py release_history.py
+python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py light_list_catalog.py light_list_runtime.py release_history.py
+python -m unittest tests.test_light_list_catalog -v
 ```
 
 没有配置 Supabase 时，应用仍然可以运行；公开统计、短片单链接、豆瓣已看跨设备导入会自动降级或隐藏。
@@ -278,7 +295,7 @@ python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py chal
 Supabase 用来保存匿名事件、可分享片单和浏览器书签导入的豆瓣已看片单。
 
 1. 创建 Supabase project。
-2. 在 Supabase SQL Editor 执行 [supabase_schema.sql](supabase_schema.sql)。
+2. 新项目在 Supabase SQL Editor 执行 [supabase_schema.sql](supabase_schema.sql)；已有项目升级 v3.6 时执行 [20260629_light_list_auto_rotation.sql](supabase/migrations/20260629_light_list_auto_rotation.sql)。
 3. 在 Streamlit Community Cloud 的 Secrets 里配置：
 
 ```toml
@@ -295,6 +312,9 @@ ADMIN_DASHBOARD_TOKEN = "change-this-token"
 - `challenge_sets`：保存用户主动生成的片单链接。
 - `analytics_events`：保存匿名事件漏斗，供公开指标和后台数据看板使用。
 - `imported_movie_lists`：保存浏览器书签导入的豆瓣已看片单、条目类型、评分和标记日期，默认 7 天过期。
+- `light_list_catalog_state`：保存 32 份轻量片单的 active/candidate 状态、顺序、新品保护和冷却时间。
+- `light_list_daily_stats`：保存按北京时间自然日聚合的片单独立访问 session。
+- `light_list_rotation_runs`：保存每次自动下架和上架的片单 ID，用于幂等与复盘。
 
 ---
 
@@ -684,6 +704,14 @@ https://movie.douban.com/people/123456/collect
 - 首页新增“零决策开排”横条，可按 session 稳定推荐一份内置片单并直接进入取舍流程。
 - 首页新增“先试一题”二选一模块，点击任意一侧进入同一份豆瓣高分片单，并在 payload 中记录 `teaser_choice`。
 - 新增 [docs/version_updates/version3.5.md](docs/version_updates/version3.5.md)，并更新 [docs/analytics_v2.md](docs/analytics_v2.md) 的当前实验说明。
+
+### v3.6 轻量片单自动排序与轮换
+
+- 首页固定展示 9 份轻量片单，03:00 后首次有效结算按昨日独立访问 session 自动排序并固化到次日日切。
+- 每 3 个完整统计日自动下架近 3 日访问最低的 3 份，并加入导演、演员、类型候选各 1 份。
+- 新增 24 份预制轮换模板、24 小时新品保护、21 天冷却和多级降级。
+- Admin 新增“轻量片单维护”tab，Supabase 新增 roster、日统计和轮换记录。
+- 新增 [docs/version_updates/version3.6.md](docs/version_updates/version3.6.md) 和 [20260629_light_list_auto_rotation.sql](supabase/migrations/20260629_light_list_auto_rotation.sql)。
 
 ---
 

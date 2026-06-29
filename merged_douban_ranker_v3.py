@@ -60,6 +60,8 @@ from analytics import (
     build_top_k_distribution,
     build_version_metrics,
     fetch_all_events,
+    fetch_home_light_list_roster,
+    fetch_light_list_rotation_history,
     fetch_public_metrics,
     filter_events_by_date,
     get_admin_token,
@@ -91,6 +93,7 @@ from import_store import (
     fetch_imported_movie_list,
 )
 from release_history import APP_VERSION
+from light_list_runtime import resolve_home_light_list_state
 from launch_copy import (
     FILM_CHALLENGE_TEMPLATES,
     HERO_SUBTITLE,
@@ -1433,6 +1436,28 @@ def render_app_styles() -> None:
             font-size: 11px;
             font-weight: 800;
             margin-bottom: 6px;
+        }
+        .challenge-badge-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 6px;
+        }
+        .challenge-badge-row .challenge-badge {
+            margin-bottom: 0;
+        }
+        .challenge-new-badge {
+            display: inline-block;
+            width: fit-content;
+            border: 1px solid #b9d9d3;
+            border-radius: 999px;
+            color: #145e58;
+            background: #ecfbf7;
+            padding: 3px 7px;
+            font-size: 11px;
+            font-weight: 850;
+            line-height: 1.2;
         }
         .challenge-title {
             color: #1f2328;
@@ -6125,6 +6150,79 @@ def render_admin_recent_events(events: List[Dict[str, Any]]) -> None:
     )
 
 
+def render_admin_light_list_maintenance() -> None:
+    if render_button_compat("重新读取维护状态", key="admin_refresh_light_list_roster", use_container_width=False):
+        try:
+            fetch_home_light_list_roster.clear()
+            fetch_light_list_rotation_history.clear()
+        except Exception:
+            pass
+        rerun()
+
+    roster_state = fetch_home_light_list_roster()
+    known_ids = [str(template["id"]) for template in FILM_CHALLENGE_TEMPLATES]
+    resolved = resolve_home_light_list_state(roster_state, known_ids)
+    source = str(resolved.get("source") or "static_fallback")
+    metadata = resolved.get("metadata") if isinstance(resolved.get("metadata"), dict) else {}
+    template_ids = [str(value) for value in resolved.get("template_ids", [])]
+
+    if source == "static_fallback":
+        st.warning(
+            "当前使用静态 8 份片单回退顺序。请先在 Supabase SQL Editor 执行 "
+            "supabase/migrations/20260629_light_list_auto_rotation.sql。"
+        )
+    elif source == "previous":
+        st.warning("本次维护 RPC 未成功，当前展示 Supabase 上一次成功保存的顺序。")
+    else:
+        st.success("轻量片单维护 RPC 已成功读取并完成必要的日统计/轮换检查。")
+
+    first_meta = metadata.get(template_ids[0], {}) if template_ids and isinstance(metadata.get(template_ids[0]), dict) else {}
+    info1, info2, info3, info4 = st.columns(4)
+    with info1:
+        st.metric("首页片单数", len(template_ids))
+    with info2:
+        st.metric("最后轮换日", first_meta.get("last_rotation_date") or "未记录")
+    with info3:
+        st.metric("下一轮最早日期", first_meta.get("next_rotation_date") or "未记录")
+    with info4:
+        st.metric("数据更新时间", admin_short_time(first_meta.get("data_updated_at")) or "未记录")
+
+    roster_rows = []
+    for index, template_id in enumerate(template_ids, 1):
+        meta = metadata.get(template_id) if isinstance(metadata.get(template_id), dict) else {}
+        roster_rows.append(
+            {
+                "排名": int(meta.get("display_rank", index) or index),
+                "片单": admin_template_display_name(template_id),
+                "template_id": template_id,
+                "昨日访问 session": int(meta.get("yesterday_sessions", 0) or 0),
+                "近 3 日访问 session": int(meta.get("three_day_sessions", 0) or 0),
+                "新品保护": "是" if meta.get("is_new") is True else "否",
+            }
+        )
+    render_admin_dataframe(pd.DataFrame(roster_rows))
+
+    safe_divider()
+    st.markdown("**最近轮换记录**")
+    history = fetch_light_list_rotation_history(12)
+    if not history:
+        st.info("还没有实际轮换记录；初始化记录不会显示在这里。")
+        return
+    history_rows = []
+    for row in history:
+        removed_ids = [str(value) for value in row.get("removed_ids", [])]
+        added_ids = [str(value) for value in row.get("added_ids", [])]
+        history_rows.append(
+            {
+                "轮换日期": row.get("run_date") or "",
+                "下架": "、".join(admin_template_display_name(template_id) for template_id in removed_ids),
+                "上架": "、".join(admin_template_display_name(template_id) for template_id in added_ids),
+                "执行时间": admin_short_time(row.get("created_at")),
+            }
+        )
+    render_admin_dataframe(pd.DataFrame(history_rows))
+
+
 def render_admin_dashboard() -> None:
     ensure_pandas()
     token = get_query_param("admin")
@@ -6141,6 +6239,8 @@ def render_admin_dashboard() -> None:
     if render_button_compat("刷新数据缓存", key="admin_refresh_cache_v2", use_container_width=False):
         try:
             fetch_all_events.clear()
+            fetch_home_light_list_roster.clear()
+            fetch_light_list_rotation_history.clear()
         except Exception:
             pass
         rerun()
@@ -6210,8 +6310,8 @@ def render_admin_dashboard() -> None:
     render_admin_insights(build_admin_insights(events))
     safe_divider()
 
-    funnel_tab, load_tab, version_tab, trend_tab, list_tab, content_tab, channel_tab, experiment_tab, behavior_tab, share_tab, event_tab = st.tabs(
-        ["漏斗分析", "首页加载诊断", "版本分析", "每日趋势", "片单分析", "内容统计", "渠道归因", "实验分析", "行为质量", "分享素材", "最近事件"]
+    funnel_tab, load_tab, version_tab, trend_tab, list_tab, maintenance_tab, content_tab, channel_tab, experiment_tab, behavior_tab, share_tab, event_tab = st.tabs(
+        ["漏斗分析", "首页加载诊断", "版本分析", "每日趋势", "片单分析", "轻量片单维护", "内容统计", "渠道归因", "实验分析", "行为质量", "分享素材", "最近事件"]
     )
 
     with funnel_tab:
@@ -6263,6 +6363,9 @@ def render_admin_dashboard() -> None:
         render_admin_group_section("片单维度表现", build_list_metrics(events, sort_by=sort_map[sort_label], top_n=100), "list_id", "list_id")
         safe_divider()
         render_admin_group_section("模式维度表现", build_group_metrics(events, "mode", label_key="mode", include_unknown=True, top_n=30), "mode", "mode")
+
+    with maintenance_tab:
+        render_admin_light_list_maintenance()
 
     with content_tab:
         render_admin_content_stats(events, start_date, end_date)
@@ -7630,6 +7733,19 @@ def render_douban_collect_spotlight(homepage_cta_text: str = "开始整理") -> 
         st.caption(collect_hint)
 
 
+def get_home_light_list_view() -> Tuple[List[Dict[str, object]], Dict[str, Dict[str, Any]]]:
+    known_ids = [str(template["id"]) for template in FILM_CHALLENGE_TEMPLATES]
+    resolved = resolve_home_light_list_state(fetch_home_light_list_roster(), known_ids)
+    templates = [
+        template
+        for template_id in resolved.get("template_ids", [])
+        if (template := get_template(str(template_id))) is not None
+    ]
+    metadata = resolved.get("metadata") if isinstance(resolved.get("metadata"), dict) else {}
+    st.session_state["light_list_roster_source"] = str(resolved.get("source") or "static_fallback")
+    return templates, metadata
+
+
 def render_builtin_quick_start_lists() -> None:
     poster_config = get_experiment_config(
         get_session_id(),
@@ -7654,8 +7770,12 @@ def render_builtin_quick_start_lists() -> None:
     card_meta_template = str(card_config.get("card_meta_template") or "{count} 部电影 · 前 {top_k} 名")
     card_action_template = str(card_config.get("card_action_text") or "开始整理")
     experiment_query = get_experiment_query_params(get_session_id())
+    home_templates, roster_metadata = get_home_light_list_view()
     card_html = []
-    for template in FILM_CHALLENGE_TEMPLATES:
+    for template in home_templates:
+        template_id = str(template["id"])
+        runtime_meta = roster_metadata.get(template_id) if isinstance(roster_metadata.get(template_id), dict) else {}
+        new_badge_html = '<span class="challenge-new-badge">新上架</span>' if runtime_meta.get("is_new") is True else ""
         item_count = len(template.get("items", []))
         top_k = template.get("top_k", 10)
         recommendation_text = str(template.get("recommendation", ""))
@@ -7694,7 +7814,10 @@ def render_builtin_quick_start_lists() -> None:
             f'<div>'
             f'<div class="{header_class}">'
             f'<div class="challenge-card-heading">'
+            f'<div class="challenge-badge-row">'
             f'<span class="challenge-badge">{html.escape(str(template.get("badge", "电影片单")))}</span>'
+            f'{new_badge_html}'
+            f'</div>'
             f'<div class="challenge-title">{html.escape(str(template["name"]))}</div>'
             f'<div class="challenge-copy">{html.escape(str(template.get("tagline", "")))}</div>'
             f'</div>'
@@ -7713,11 +7836,11 @@ def render_builtin_quick_start_lists() -> None:
     with st.expander("把这份片单发给朋友", expanded=False):
         selected_template_name = st.selectbox(
             "选择片单",
-            [str(template["name"]) for template in FILM_CHALLENGE_TEMPLATES],
+            [str(template["name"]) for template in home_templates],
             key="home_share_template_name",
         )
         selected_template = next(
-            template for template in FILM_CHALLENGE_TEMPLATES if str(template["name"]) == selected_template_name
+            template for template in home_templates if str(template["name"]) == selected_template_name
         )
         template_id = str(selected_template["id"])
         template_url = build_template_url(template_id)
@@ -7750,14 +7873,13 @@ def build_home_action_url(params: Dict[str, Any]) -> str:
 
 def choose_zero_decision_template(template_ids: Any) -> Optional[Dict[str, object]]:
     ids = template_ids if isinstance(template_ids, list) else []
-    templates: List[Dict[str, object]] = []
-    for template_id in ids:
-        template = get_template(str(template_id))
-        if template:
-            templates.append(template)
+    active_templates, _ = get_home_light_list_view()
+    active_by_id = {str(template["id"]): template for template in active_templates}
+    templates = [active_by_id[str(template_id)] for template_id in ids if str(template_id) in active_by_id]
     if not templates:
-        fallback = get_template("douban-top50")
-        return fallback
+        templates = active_templates
+    if not templates:
+        return get_template("douban-top50")
     index = stable_int(f"zero_decision_template:{get_session_id()}") % len(templates)
     return templates[index]
 
@@ -9020,6 +9142,7 @@ def main() -> None:
                 mode=get_selected_mode(),
                 render_elapsed_ms=int(max(0, (datetime.now() - home_render_started_at).total_seconds() * 1000)),
                 home_layout_order=st.session_state.get("home_layout_order", "current"),
+                light_list_roster_source=st.session_state.get("light_list_roster_source", "static_fallback"),
             ),
         )
     elif step == 2:

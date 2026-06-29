@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
+from light_list_catalog import ROTATION_CANDIDATE_TEMPLATES
+
 
 HERO_TITLE = "慢慢排出你的电影审美名单"
 HERO_SUBTITLE = "不必一次想清全部顺序，只在两部电影之间作一次取舍。"
@@ -158,6 +160,8 @@ FILM_CHALLENGE_TEMPLATES: List[Dict[str, object]] = [
         ],
     },
 ]
+
+FILM_CHALLENGE_TEMPLATES.extend(ROTATION_CANDIDATE_TEMPLATES)
 
 
 def get_template(template_id: str) -> Optional[Dict[str, object]]:

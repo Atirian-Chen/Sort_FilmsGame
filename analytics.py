@@ -484,6 +484,91 @@ def supabase_request(method: str, table: str, *, params: Optional[Dict[str, str]
         return None
 
 
+def _normalize_light_list_roster_rows(value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    rows: List[Dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        template_id = _safe_text(item.get("template_id"))
+        if not template_id:
+            continue
+        try:
+            display_rank = int(item.get("display_rank") or 0)
+            yesterday_sessions = max(0, int(item.get("yesterday_sessions") or 0))
+            three_day_sessions = max(0, int(item.get("three_day_sessions") or 0))
+        except (TypeError, ValueError):
+            continue
+        rows.append(
+            {
+                "template_id": template_id,
+                "display_rank": display_rank,
+                "yesterday_sessions": yesterday_sessions,
+                "three_day_sessions": three_day_sessions,
+                "is_new": item.get("is_new") is True,
+                "last_rotation_date": _safe_text(item.get("last_rotation_date")),
+                "next_rotation_date": _safe_text(item.get("next_rotation_date")),
+                "data_updated_at": _safe_text(item.get("data_updated_at")),
+            }
+        )
+    rows.sort(key=lambda row: (int(row.get("display_rank", 0) or 0), str(row.get("template_id") or "")))
+    return rows
+
+
+@st.cache_data(show_spinner=False, ttl=300)
+def fetch_home_light_list_roster() -> Dict[str, Any]:
+    if not analytics_enabled():
+        return {"rows": [], "source": "unavailable"}
+
+    refreshed = supabase_request(
+        "POST",
+        "rpc/get_home_light_list_roster",
+        json_body={},
+    )
+    rows = _normalize_light_list_roster_rows(refreshed)
+    if rows:
+        return {"rows": rows, "source": "maintenance"}
+
+    previous = supabase_request(
+        "POST",
+        "rpc/read_home_light_list_roster",
+        json_body={},
+    )
+    rows = _normalize_light_list_roster_rows(previous)
+    if rows:
+        return {"rows": rows, "source": "previous"}
+    return {"rows": [], "source": "unavailable"}
+
+
+@st.cache_data(show_spinner=False, ttl=300)
+def fetch_light_list_rotation_history(limit: int = 12) -> List[Dict[str, Any]]:
+    if not analytics_enabled():
+        return []
+    result = supabase_request(
+        "POST",
+        "rpc/get_light_list_rotation_history",
+        json_body={"p_limit": max(1, min(int(limit), 50))},
+    )
+    if not isinstance(result, list):
+        return []
+    rows: List[Dict[str, Any]] = []
+    for item in result:
+        if not isinstance(item, dict):
+            continue
+        removed_ids = item.get("removed_ids") if isinstance(item.get("removed_ids"), list) else []
+        added_ids = item.get("added_ids") if isinstance(item.get("added_ids"), list) else []
+        rows.append(
+            {
+                "run_date": _safe_text(item.get("run_date")),
+                "removed_ids": [str(value) for value in removed_ids if str(value).strip()],
+                "added_ids": [str(value) for value in added_ids if str(value).strip()],
+                "created_at": _safe_text(item.get("created_at")),
+            }
+        )
+    return rows
+
+
 def get_analytics_executor() -> ThreadPoolExecutor:
     global _ANALYTICS_EXECUTOR
     if _ANALYTICS_EXECUTOR is None:
