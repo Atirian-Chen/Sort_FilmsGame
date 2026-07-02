@@ -4,6 +4,8 @@
 
 v3.6 为首页轻量片单增加基于真实匿名访问的自动排序和三日轮换。首页固定展示 9 份；片单模板保存在代码中，日统计与运行状态保存在 Supabase。
 
+本版本同时为新增的 24 份轮换模板补齐代表电影海报，最终 32 份轻量片单都使用仓库内静态缩略图。
+
 ## Daily Ranking
 
 - 北京时间 03:00 作为日切边界，03:00 后首个首页访问触发维护 RPC。
@@ -24,6 +26,13 @@ v3.6 为首页轻量片单增加基于真实匿名访问的自动排序和三日
 - 保留原 8 份片单，并将斯皮尔伯格片单作为第 9 份初始展示。
 - 新增的 24 份轮换模板仍为导演、演员、类型各 8 份；初始状态中 1 份 active、23 份候选。
 - 全量 32 份模板继续支持 `?list=<template_id>` 直链；从首页下架不会破坏旧链接。
+
+## Poster Coverage
+
+- 沿用轻量片单原有的代表电影海报样式，不生成片单概念封面。
+- 新增 24 张 `136×192` RGB WebP，连同原有 8 张共覆盖全部 32 份模板，单张不超过 20 KB。
+- `promo_assets/generate_builtin_list_thumbnails.py` 默认只生成缺失文件，支持显式覆盖和联系表检查。
+- 页面运行时只读取 `assets/builtin_list_thumbnails/`，不会为卡片实时请求豆瓣或 IMDb。
 
 ## Supabase
 
@@ -48,7 +57,7 @@ v3.6 为首页轻量片单增加基于真实匿名访问的自动排序和三日
 ## Regression Commands
 
 ```bash
-python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py light_list_catalog.py light_list_runtime.py release_history.py
+python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py light_list_catalog.py light_list_runtime.py release_history.py promo_assets/generate_builtin_list_thumbnails.py
 python -m unittest tests.test_light_list_catalog -v
 git diff --check
 ```

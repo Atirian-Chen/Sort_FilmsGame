@@ -415,6 +415,7 @@ ROTATION_CANDIDATE_TEMPLATES: List[Dict[str, object]] = [
 
 for priority, template in enumerate(ROTATION_CANDIDATE_TEMPLATES, 1):
     template_id = str(template["id"])
+    template["card_poster_asset"] = f"assets/builtin_list_thumbnails/{template_id}.webp"
     template["rotation_segment"] = (
         "director" if priority <= 8 else "actor" if priority <= 16 else "category"
     )

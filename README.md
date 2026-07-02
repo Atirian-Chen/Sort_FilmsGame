@@ -90,6 +90,15 @@ v3.6 起，首页固定展示 9 份轻量片单，顺序和上架名单由 Supab
 - 新上架片单置顶保护 24 小时；下架片单进入 21 天冷却后可再次候选。
 - 下架只影响首页展示，旧分享链接和历史事件仍然有效。
 - 轮换模板池包含 24 份新片单，导演、演员、类型各 8 份；其中斯皮尔伯格初始 active，其余 23 份候选，运行状态保存在 Supabase。
+- 全部 32 份轻量片单都绑定一张 `136×192` WebP 代表电影海报；运行时只读仓库静态资源，不临时联网抓图。
+
+需要补建或检查轻量片单缩略图时运行：
+
+```bash
+python promo_assets/generate_builtin_list_thumbnails.py
+```
+
+脚本默认跳过已有文件；仅在明确传入 `--overwrite` 时覆盖，并可用 `--contact-sheet <path>` 生成带片单 ID 和代表电影名的检查联系表。
 
 首页会依次尝试“维护 RPC → 上次 Supabase 状态 → 静态 9 份”。因此 migration 未部署或 Supabase 暂时不可用时，主流程仍可正常使用。
 
@@ -127,7 +136,7 @@ streamlit run merged_douban_ranker_v3.py
 语法检查：
 
 ```bash
-python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py light_list_catalog.py light_list_runtime.py release_history.py
+python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py light_list_catalog.py light_list_runtime.py release_history.py promo_assets/generate_builtin_list_thumbnails.py
 python -m unittest tests.test_light_list_catalog -v
 ```
 
@@ -282,7 +291,7 @@ streamlit run merged_douban_ranker_v3.py
 常用检查：
 
 ```bash
-python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py light_list_catalog.py light_list_runtime.py release_history.py
+python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py light_list_catalog.py light_list_runtime.py release_history.py promo_assets/generate_builtin_list_thumbnails.py
 python -m unittest tests.test_light_list_catalog -v
 ```
 
@@ -710,6 +719,7 @@ https://movie.douban.com/people/123456/collect
 - 首页固定展示 9 份轻量片单，03:00 后首次有效结算按昨日独立访问 session 自动排序并固化到次日日切。
 - 每 3 个完整统计日自动下架近 3 日访问最低的 3 份，并加入导演、演员、类型候选各 1 份。
 - 新增 24 份预制轮换模板、24 小时新品保护、21 天冷却和多级降级。
+- 为新增的 24 份轮换模板补齐静态代表电影海报，至此 32 份轻量片单全部具备卡片缩略图。
 - Admin 新增“轻量片单维护”tab，Supabase 新增 roster、日统计和轮换记录。
 - 新增 [docs/version_updates/version3.6.md](docs/version_updates/version3.6.md) 和 [20260629_light_list_auto_rotation.sql](supabase/migrations/20260629_light_list_auto_rotation.sql)。
 

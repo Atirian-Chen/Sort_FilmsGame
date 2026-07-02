@@ -4,6 +4,8 @@ import unittest
 from collections import Counter
 from pathlib import Path
 
+from PIL import Image
+
 from launch_copy import FILM_CHALLENGE_TEMPLATES, get_template
 from light_list_catalog import (
     DEFAULT_HOME_LIGHT_LIST_IDS,
@@ -28,16 +30,33 @@ class LightListCatalogTests(unittest.TestCase):
         self.assertEqual({"director": 8, "actor": 8, "category": 8}, dict(segments))
 
     def test_templates_have_valid_items_and_top_k(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        poster_assets = set()
         for template in FILM_CHALLENGE_TEMPLATES:
             template_id = str(template["id"])
             items = [str(item).strip() for item in template.get("items", [])]
             top_k = int(template.get("top_k", 0) or 0)
+            poster_title = str(template.get("card_poster_title") or "").strip()
+            poster_asset = str(template.get("card_poster_asset") or "").strip()
             self.assertGreaterEqual(len(items), 8, template_id)
             self.assertLessEqual(len(items), 50, template_id)
             self.assertEqual(len(items), len(set(items)), template_id)
             self.assertIn(top_k, {8, 10}, template_id)
             self.assertLessEqual(top_k, len(items), template_id)
+            self.assertIn(poster_title, items, template_id)
+            self.assertTrue(poster_asset, template_id)
+            self.assertNotIn(poster_asset, poster_assets, template_id)
+            poster_assets.add(poster_asset)
+            poster_path = root / poster_asset
+            self.assertTrue(poster_path.is_file(), template_id)
+            self.assertLessEqual(poster_path.stat().st_size, 20 * 1024, template_id)
+            with Image.open(poster_path) as poster:
+                self.assertEqual("WEBP", poster.format, template_id)
+                self.assertEqual((136, 192), poster.size, template_id)
+                self.assertEqual("RGB", poster.mode, template_id)
             self.assertIsNotNone(get_template(template_id))
+
+        self.assertEqual(32, len(poster_assets))
 
     def test_rotation_candidates_have_runtime_metadata(self) -> None:
         for priority, template in enumerate(ROTATION_CANDIDATE_TEMPLATES, 1):

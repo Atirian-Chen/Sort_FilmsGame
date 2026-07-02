@@ -207,6 +207,11 @@ def ensure_beautiful_soup() -> None:
 
 # 精确到 IMDb ID 的备用海报源，覆盖内置片单里豆瓣不稳定命中的影片。
 CURATED_IMDB_POSTERS: Dict[str, Dict[str, str]] = {
+    "银翼杀手": {"query": "blade_runner", "imdb_id": "tt0083658"},
+    "盗火线": {"query": "heat", "imdb_id": "tt0113277"},
+    "伴我同行": {"query": "stand_by_me", "imdb_id": "tt0092005"},
+    "闪灵": {"query": "the_shining", "imdb_id": "tt0081505"},
+    "洛奇": {"query": "rocky", "imdb_id": "tt0075148"},
     "追随": {"query": "following", "imdb_id": "tt0154506"},
     "记忆碎片": {"query": "memento", "imdb_id": "tt0209144"},
     "失眠症": {"query": "insomnia", "imdb_id": "tt0278504"},
