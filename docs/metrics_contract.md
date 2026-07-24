@@ -61,6 +61,15 @@ Primary experiment metric = target converted sessions / experiment_exposed sessi
 
 历史实验如果没有 `experiment_exposed`，可以展示 assigned sessions 或 proxy exposure 作为诊断，但不能声称严格实验效果。
 
+截至 2026-07-24 的历史实验虽然有应用侧曝光调用，但 Supabase anon insert policy 未允许 `experiment_exposed`，因此 Exposed sessions 为 0。`20260724_abtest_v38_events.sql` 修复后才开始积累严格曝光分母，修复前数据不能回填。
+
+v3.8 的实验主指标按漏斗阶段拆分：
+
+- 首页：曝光后行动率。
+- 重链路配置：曝光后开始率。
+- 排序救援：曝光后完成率。
+- 结果传播：曝光后分享/海报率。
+
 ## 4. Data Quality Controls
 
 ### Completed Without Start

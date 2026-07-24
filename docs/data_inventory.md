@@ -52,6 +52,10 @@ Code-inferred and sampled payload fields include:
 | `visit` | implemented | Canonical page/app visit event. |
 | `home_content_rendered` | implemented | Home content render completion signal. |
 | `experiment_exposed` | implemented | True experiment UI exposure event added in v3.3; used as strict experiment denominator. |
+| `heavy_config_viewed` | implemented | v3.8 Douban-collect configuration page view for heavy-path diagnostics. |
+| `default_start_clicked` | implemented | v3.8 recommended Top 10 quick-start interaction. |
+| `sorting_scope_reduced` | implemented | v3.8 in-progress target reduction, storing counts and old/new Top K only. |
+| `result_share_prompt_clicked` | implemented | v3.8 result-page quick-share poster action. |
 | `list_opened` | implemented | Canonical list-open event; may be called through legacy alias in app code. |
 | `list_selected` | implemented | Heavy-path/mode selection signal. |
 | `sorting_started` | implemented | Canonical sorting start event; may be called through legacy alias in app code. |

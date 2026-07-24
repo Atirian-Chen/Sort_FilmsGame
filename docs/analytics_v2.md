@@ -163,24 +163,20 @@ payload 会屏蔽完整候选项、完整排名、用户名、手机号、邮箱
 - `variant_name`
 - `config`
 
-当前正在运行 5 个围绕“渲染后行动率”的 active 实验。主指标为：
+v3.8 已停止 v3.4 / v3.5 的 5 个实验。由于 Supabase anon insert policy 当时遗漏 `experiment_exposed`，这些实验只有 assigned sessions 和 proxy 指标，收口结论只作方向判断：
 
-```text
-exposed_action_rate = exposed sessions 中发生 list_opened / list_selected / sorting_started 的 session / exposed sessions
-```
+- `post_render_hero_value_v1 → outcome_preview`
+- `quick_list_card_framing_v1 → control`
+- `douban_collect_entry_cta_v1 → control`
+- `home_zero_decision_start_v1 → control`
+- `home_duel_teaser_v1 → control`
 
 当前 active 实验：
 
-- `post_render_hero_value_v1`：首屏价值表达实验，对比原首屏表达与更明确的结果预览表达。
-- `quick_list_card_framing_v1`：快速片单卡片行动框架实验，对比“推荐理由 + 开始整理”与更低成本的“先排 Top N”行动提示。
-- `douban_collect_entry_cta_v1`：豆瓣已看入口 CTA 降成本实验，对比总榜叙事与下一步低门槛提示。
-- `home_zero_decision_start_v1`：首页零决策开排实验，对比不显示新入口与一键进入按 session 稳定推荐的内置片单。
-- `home_duel_teaser_v1`：首页先试一题二选一实验，对比不显示试看题与点击一组二选一后进入同一份片单。
-
-最近两个历史实验已经停止并全量收口：
-
-- `home_layout_order_v1`：已收口到 `builtin_first`，首页默认先展示内置快速片单，再展示豆瓣已看主推。
-- `builtin_card_poster_v1`：已收口到 `poster`，内置轻量片单卡默认显示预制代表电影海报。
+- `home_featured_quick_start_v1`：首页近期高完成片单直达；主指标为曝光后行动率。
+- `heavy_default_start_v1`：豆瓣已看推荐 Top 10 快速开排；主指标为曝光后开始率。
+- `sorting_scope_rescue_v1`：长流程保留进度并缩短为 Top 10；主指标为曝光后完成率。
+- `result_share_bundle_v1`：结果页一键分享包；主指标为曝光后分享/海报率。
 
 实验处于 `active` 时，会用 `anonymous_session_id + experiment_id` 做稳定哈希分桶；内置片单卡链接会携带所有 active 实验的已验证 variant 参数。实验停止后不再为新事件写入分桶上下文，旧链接里的实验 query 参数也不会改变当前默认体验。
 
@@ -193,6 +189,10 @@ exposed_action_rate = exposed sessions 中发生 list_opened / list_selected / s
 - 完成率
 - 复制分享数
 - 海报下载数
+- 曝光后行动率
+- 曝光后开始率
+- 曝光后完成率
+- 曝光后分享/海报率
 
 `builtin_card_poster_v1` 额外展示：
 
@@ -202,11 +202,14 @@ exposed_action_rate = exposed sessions 中发生 list_opened / list_selected / s
 
 后台 “实验分析” tab 会按配置分成两栏：已停止实验和正在进行的实验。每个实验展示状态、总流量比例、variant 权重比例、开始时间、结束时间和收口版本；分版本指标继续来自当前筛选时间范围内的历史事件 payload，因此已停止实验仍可复盘历史表现。
 
-v3.4 起，实验表额外展示：
+v3.8 的实验表展示：
 
 - 曝光后行动：exposed sessions 中发生 `list_opened` / `list_selected` / `sorting_started` 的去重 session。
-- 曝光后行动率：曝光后行动 / exposed sessions，用于当前“渲染后行动率”优化实验。
-- v3.5 的 `home_duel_teaser_v1` 点击后，`list_opened` payload 会额外带 `teaser_choice=left/right`，用于拆分用户先点了哪一侧。
+- 曝光后开始：exposed sessions 中发生 `sorting_started` 的去重 session。
+- 曝光后完成：exposed sessions 中发生 `ranking_completed` 的去重 session。
+- 曝光后分享/海报：exposed sessions 中发生 `share_copied` / `poster_downloaded` 的去重 session。
+
+上线 v3.8 前必须执行 [20260724_abtest_v38_events.sql](../supabase/migrations/20260724_abtest_v38_events.sql)。该 migration 修复 `experiment_exposed` 的 RLS allow-list，并允许 `heavy_config_viewed`、`default_start_clicked`、`sorting_scope_reduced`、`result_share_prompt_clicked` 四个功能交互事件。应用对 `experiment_exposed` 使用同步确认；写入失败不会把当前 session 永久标记为已上报。
 
 ## v3.6 轻量片单自动维护
 
@@ -231,6 +234,17 @@ v3.4 起，实验表额外展示：
 - `get_light_list_rotation_history()`：供 Admin 展示轮换历史。
 
 Admin “轻量片单维护”tab 展示当前顺序、昨日/近 3 日访问、新品状态、最后和下一轮日期，以及最近轮换记录。首页 roster 来源会写入 `home_content_rendered.payload.light_list_roster_source`，可能值为 `maintenance`、`previous` 或 `static_fallback`。
+
+## v3.7 Top 10 / Top 100 结果海报
+
+结果页的榜单海报改为用户点击后按需生成，避免首次进入结果页时自动抓取前列电影海报：
+
+- `result_top10`：最多前 10 名，包含电影海报，固定 `1080×1920`。
+- `result_top100`：最多前 100 名，纯文字动态 1–4 栏，固定 `1800×2400`，不会调用电影海报获取链路。
+- 不足目标数量时按实际可靠排名生成 `Top N`；超过 100 名时只展示前 100 名。
+- `poster_downloaded` 与 `qr_viewed` payload 使用 `poster_type=result_top10/result_top100`，并写入 `poster_item_count`；`contested_choice` 保持不变。
+
+后台现有按 `poster_type` 的动态分组可直接识别两种海报，不新增数据库字段或 migration。
 
 ## 内容统计与冠军榜海报
 
@@ -297,6 +311,8 @@ v3.3 对后台分析口径做三项修正，用来避免把不同分母的指标
 ### 实验曝光分母
 
 稳定哈希分桶只表示 session 被 assigned 到 variant，不代表用户真实看到了实验 UI。v3.3 新增 `experiment_exposed` 事件，只有实验控制的 UI surface 实际渲染时才上报。
+
+v3.3 至 v3.7 的应用代码虽然调用了该事件，但 Supabase insert policy 未允许该事件名，因此截至 2026-07-24 的历史报告中 Exposed sessions 为 0。v3.8 migration 修复后，新实验才具备严格曝光分母；不得把修复前的 assigned/proxy 指标追溯解释为真实曝光。
 
 后台实验分析中：
 

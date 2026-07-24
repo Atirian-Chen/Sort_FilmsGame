@@ -25,6 +25,10 @@ EVENT_RESULT_VIEWED = "result_viewed"
 EVENT_QR_VIEWED = "qr_viewed"
 EVENT_HOME_CONTENT_RENDERED = "home_content_rendered"
 EVENT_EXPERIMENT_EXPOSED = "experiment_exposed"
+EVENT_HEAVY_CONFIG_VIEWED = "heavy_config_viewed"
+EVENT_DEFAULT_START_CLICKED = "default_start_clicked"
+EVENT_SORTING_SCOPE_REDUCED = "sorting_scope_reduced"
+EVENT_RESULT_SHARE_PROMPT_CLICKED = "result_share_prompt_clicked"
 
 # Backward-compatible names used by older app code and historical rows.
 LEGACY_EVENT_PAGE_VIEW = "page_view"
@@ -57,6 +61,10 @@ TRACKED_EVENTS = [
     EVENT_QR_VIEWED,
     EVENT_HOME_CONTENT_RENDERED,
     EVENT_EXPERIMENT_EXPOSED,
+    EVENT_HEAVY_CONFIG_VIEWED,
+    EVENT_DEFAULT_START_CLICKED,
+    EVENT_SORTING_SCOPE_REDUCED,
+    EVENT_RESULT_SHARE_PROMPT_CLICKED,
 ]
 LEGACY_TRACKED_EVENTS = list(LEGACY_EVENT_MAP)
 
@@ -78,6 +86,10 @@ EVENT_LABELS = {
     EVENT_QR_VIEWED: "查看二维码",
     EVENT_HOME_CONTENT_RENDERED: "首页内容已渲染",
     EVENT_EXPERIMENT_EXPOSED: "实验真实曝光",
+    EVENT_HEAVY_CONFIG_VIEWED: "重链路配置页曝光",
+    EVENT_DEFAULT_START_CLICKED: "推荐快速开始点击",
+    EVENT_SORTING_SCOPE_REDUCED: "排序目标缩短",
+    EVENT_RESULT_SHARE_PROMPT_CLICKED: "结果页快捷分享点击",
     LEGACY_EVENT_PAGE_VIEW: "访问",
     LEGACY_EVENT_CHALLENGE_OPENED: "打开片单",
     LEGACY_EVENT_RANKING_STARTED: "开始整理",
@@ -576,11 +588,12 @@ def get_analytics_executor() -> ThreadPoolExecutor:
     return _ANALYTICS_EXECUTOR
 
 
-def _post_analytics_event(endpoint: str, headers: Dict[str, str], body: Dict[str, Any]) -> None:
+def _post_analytics_event(endpoint: str, headers: Dict[str, str], body: Dict[str, Any]) -> bool:
     try:
         requests.post(endpoint, json=body, headers=headers, timeout=4).raise_for_status()
+        return True
     except Exception:
-        return
+        return False
 
 
 def track_event(
@@ -591,6 +604,7 @@ def track_event(
     template_id: str = "",
     source_channel: str = "",
     payload: Optional[Dict[str, Any]] = None,
+    synchronous: bool = False,
 ) -> bool:
     canonical_name = canonical_event_name(event_name)
     if canonical_name not in TRACKED_EVENTS or not analytics_enabled():
@@ -617,6 +631,8 @@ def track_event(
     }
     endpoint = f"{url}/rest/v1/analytics_events"
     headers = supabase_headers("return=minimal")
+    if synchronous:
+        return _post_analytics_event(endpoint, headers, body)
     get_analytics_executor().submit(_post_analytics_event, endpoint, headers, body)
     return True
 
@@ -625,8 +641,10 @@ def track_once(key: str, event_name: str, **kwargs: Any) -> bool:
     state_key = f"tracked_once_{key}"
     if st.session_state.get(state_key):
         return False
-    st.session_state[state_key] = True
-    return track_event(event_name, **kwargs)
+    tracked = track_event(event_name, **kwargs)
+    if tracked:
+        st.session_state[state_key] = True
+    return tracked
 
 
 def fetch_recent_events(limit: int = 1000) -> List[Dict[str, Any]]:
@@ -1426,7 +1444,13 @@ def build_experiment_metrics(events: List[Dict[str, Any]], *, top_n: int = 100) 
             for event in group_events
             if canonical_event_name(event.get("event_name")) in HOME_ENGAGEMENT_EVENTS
         )
+        started_sessions = _session_set(event for event in group_events if _event_matches(event, EVENT_SORTING_STARTED))
         completed_sessions = _session_set(event for event in group_events if _event_matches(event, EVENT_RANKING_COMPLETED))
+        share_or_poster_sessions = _session_set(
+            event
+            for event in group_events
+            if canonical_event_name(event.get("event_name")) in {EVENT_SHARE_COPIED, EVENT_POSTER_DOWNLOADED}
+        )
         home_exposure_sessions = _session_set(
             event
             for event in group_events
@@ -1446,8 +1470,15 @@ def build_experiment_metrics(events: List[Dict[str, Any]], *, top_n: int = 100) 
         row["exposure_available"] = bool(exposed_sessions)
         row["exposed_action_sessions"] = len(exposed_sessions & action_sessions)
         row["exposed_action_rate"] = _rate(len(exposed_sessions & action_sessions), len(exposed_sessions))
+        row["exposed_started_sessions"] = len(exposed_sessions & started_sessions)
+        row["exposed_start_rate"] = _rate(len(exposed_sessions & started_sessions), len(exposed_sessions))
         row["exposed_completed_sessions"] = len(exposed_sessions & completed_sessions)
         row["exposed_completion_rate"] = _rate(len(exposed_sessions & completed_sessions), len(exposed_sessions))
+        row["exposed_share_or_poster_sessions"] = len(exposed_sessions & share_or_poster_sessions)
+        row["exposed_share_or_poster_rate"] = _rate(
+            len(exposed_sessions & share_or_poster_sessions),
+            len(exposed_sessions),
+        )
         row["home_exposure_sessions"] = len(home_exposure_sessions)
         row["builtin_card_opened_sessions"] = len(builtin_card_opened_sessions)
         row["builtin_card_open_rate"] = _rate(
@@ -1556,6 +1587,7 @@ def summarize_payload(payload: Dict[str, Any]) -> str:
         "defers",
         "surface",
         "poster_type",
+        "poster_item_count",
         "device_type",
         "experiment_id",
         "variant_id",

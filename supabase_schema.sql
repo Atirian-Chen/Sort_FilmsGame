@@ -103,7 +103,12 @@ with check (
     'share_copied',
     'result_viewed',
     'qr_viewed',
-    'home_content_rendered'
+    'home_content_rendered',
+    'experiment_exposed',
+    'heavy_config_viewed',
+    'default_start_clicked',
+    'sorting_scope_reduced',
+    'result_share_prompt_clicked'
   )
 );
 

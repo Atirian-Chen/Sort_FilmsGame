@@ -14,11 +14,13 @@ EXPERIMENTS: List[Dict[str, Any]] = [
     {
         "experiment_id": "post_render_hero_value_v1",
         "experiment_name": "渲染后首屏价值表达实验",
-        "status": "active",  # active / paused
+        "status": "paused",  # active / paused
         "traffic_allocation": 1.0,
         "started_at": "2026-06-27T03:08:50+08:00",
+        "ended_at": "2026-07-24T18:00:55+08:00",
+        "decision_variant_id": "outcome_preview",
         "primary_metric": "exposed_action_rate",
-        "description": "测试更明确的结果预览是否能提升首页内容渲染后的打开/选择片单率。",
+        "description": "测试更明确的结果预览是否能提升首页内容渲染后的打开/选择片单率。严格曝光分母缺失，按代理行动率近似持平、完成与分享质量更高方向性收口到 outcome_preview。",
         "variants": [
             {
                 "variant_id": "control",
@@ -57,11 +59,13 @@ EXPERIMENTS: List[Dict[str, Any]] = [
     {
         "experiment_id": "quick_list_card_framing_v1",
         "experiment_name": "快速片单卡片行动框架实验",
-        "status": "active",
+        "status": "paused",
         "traffic_allocation": 1.0,
         "started_at": "2026-06-27T03:08:50+08:00",
+        "ended_at": "2026-07-24T18:00:55+08:00",
+        "decision_variant_id": "control",
         "primary_metric": "exposed_action_rate",
-        "description": "测试把快速片单卡片从“推荐说明”改成“低成本行动提示”是否提升卡片打开率和渲染后行动率。",
+        "description": "测试把快速片单卡片从“推荐说明”改成“低成本行动提示”是否提升卡片打开率和渲染后行动率。严格曝光分母缺失，control 的完成率和海报转化更高，方向性收口到 control。",
         "variants": [
             {
                 "variant_id": "control",
@@ -90,11 +94,13 @@ EXPERIMENTS: List[Dict[str, Any]] = [
     {
         "experiment_id": "douban_collect_entry_cta_v1",
         "experiment_name": "豆瓣已看入口 CTA 降成本实验",
-        "status": "active",
+        "status": "paused",
         "traffic_allocation": 1.0,
         "started_at": "2026-06-27T03:08:50+08:00",
+        "ended_at": "2026-07-24T18:00:55+08:00",
+        "decision_variant_id": "control",
         "primary_metric": "exposed_action_rate",
-        "description": "测试把豆瓣已看入口改成更明确的下一步提示，是否提升用户从首页进入配置页的比例。",
+        "description": "测试把豆瓣已看入口改成更明确的下一步提示，是否提升用户从首页进入配置页的比例。严格曝光分母缺失，control 的开始率与分享转化更高，方向性收口到 control。",
         "variants": [
             {
                 "variant_id": "control",
@@ -127,11 +133,13 @@ EXPERIMENTS: List[Dict[str, Any]] = [
     {
         "experiment_id": "home_zero_decision_start_v1",
         "experiment_name": "首页零决策开排实验",
-        "status": "active",
+        "status": "paused",
         "traffic_allocation": 1.0,
         "started_at": "2026-06-27T20:56:19+08:00",
+        "ended_at": "2026-07-24T18:00:55+08:00",
+        "decision_variant_id": "control",
         "primary_metric": "exposed_action_rate",
-        "description": "测试在首页提供无需选择片单的一键开排入口，是否提升渲染后打开/开始整理率。",
+        "description": "测试在首页提供无需选择片单的一键开排入口，是否提升渲染后打开/开始整理率。严格曝光分母缺失，control 的首页行动 proxy 与开始率更高，方向性收口到 control。",
         "variants": [
             {
                 "variant_id": "control",
@@ -164,11 +172,13 @@ EXPERIMENTS: List[Dict[str, Any]] = [
     {
         "experiment_id": "home_duel_teaser_v1",
         "experiment_name": "首页先试一题二选一实验",
-        "status": "active",
+        "status": "paused",
         "traffic_allocation": 1.0,
         "started_at": "2026-06-27T20:56:19+08:00",
+        "ended_at": "2026-07-24T18:00:55+08:00",
+        "decision_variant_id": "control",
         "primary_metric": "exposed_action_rate",
-        "description": "测试在首页先给一组二选一，让用户先完成一个轻量选择再进入片单，是否提升渲染后行动率。",
+        "description": "测试在首页先给一组二选一，让用户先完成一个轻量选择再进入片单，是否提升渲染后行动率。严格曝光分母缺失，first_choice 虽提高开始率但降低完成率且首页行动 proxy 更低，方向性收口到 control。",
         "variants": [
             {
                 "variant_id": "control",
@@ -189,6 +199,135 @@ EXPERIMENTS: List[Dict[str, Any]] = [
                     "duel_teaser_template_id": "douban-top50",
                     "duel_teaser_left": "千与千寻",
                     "duel_teaser_right": "星际穿越",
+                },
+            },
+        ],
+    },
+    {
+        "experiment_id": "home_featured_quick_start_v1",
+        "experiment_name": "首页近期高完成片单直达实验",
+        "status": "active",
+        "traffic_allocation": 1.0,
+        "started_at": "2026-07-24T18:09:16+08:00",
+        "primary_metric": "exposed_action_rate",
+        "description": "针对 70.7% 首页渲染后无行动，测试用报告期完成数最高的轻量片单和明确工作量承诺提供单一主行动。",
+        "variants": [
+            {
+                "variant_id": "control",
+                "variant_name": "保持片单网格",
+                "weight": 1,
+                "config": {
+                    "show_featured_quick_start": False,
+                },
+            },
+            {
+                "variant_id": "featured_classic_scifi",
+                "variant_name": "近期高完成片单直达",
+                "weight": 1,
+                "config": {
+                    "show_featured_quick_start": True,
+                    "featured_template_id": "classic-scifi",
+                    "featured_kicker": "近期完成最多 · 直接开排",
+                    "featured_title": "先用一份短片单，排出你的科幻 Top 10",
+                    "featured_copy": "12 部经典科幻，每次只做二选一；不用填参数，完成后可生成 Top 10 海报。",
+                    "featured_cta": "直接开始",
+                },
+            },
+        ],
+    },
+    {
+        "experiment_id": "heavy_default_start_v1",
+        "experiment_name": "豆瓣已看推荐 Top 10 快速开排实验",
+        "status": "active",
+        "traffic_allocation": 1.0,
+        "started_at": "2026-07-24T18:09:16+08:00",
+        "primary_metric": "exposed_start_rate",
+        "description": "针对重链路配置页仅 27.8% 开始，测试在豆瓣已看页提供使用当前筛选直接排 Top 10 的单一推荐行动。",
+        "variants": [
+            {
+                "variant_id": "control",
+                "variant_name": "现有配置与开始按钮",
+                "weight": 1,
+                "config": {
+                    "show_heavy_default_start": False,
+                },
+            },
+            {
+                "variant_id": "recommended_top10",
+                "variant_name": "推荐 Top 10 快速开排",
+                "weight": 1,
+                "config": {
+                    "show_heavy_default_start": True,
+                    "recommended_top_k": 10,
+                    "heavy_default_title": "第一次整理，建议先完成 Top 10",
+                    "heavy_default_copy": "保留当前筛选和片单内容，只把目标缩短为 Top 10；以后仍可回来细排。",
+                    "heavy_default_cta": "按当前片单快速排 Top 10",
+                },
+            },
+        ],
+    },
+    {
+        "experiment_id": "sorting_scope_rescue_v1",
+        "experiment_name": "长流程中途缩短 Top 10 实验",
+        "status": "active",
+        "traffic_allocation": 1.0,
+        "started_at": "2026-07-24T18:09:16+08:00",
+        "primary_metric": "exposed_completion_rate",
+        "description": "针对开始后完成率偏低和 P90 455.8 次取舍，测试在长任务中提供保留当前进度并缩短为 Top 10 的救援入口。",
+        "variants": [
+            {
+                "variant_id": "control",
+                "variant_name": "保持原目标",
+                "weight": 1,
+                "config": {
+                    "show_scope_rescue": False,
+                    "rescue_after_comparisons": 30,
+                    "rescue_min_remaining": 40,
+                    "rescue_target_top_k": 10,
+                },
+            },
+            {
+                "variant_id": "offer_top10",
+                "variant_name": "提供 Top 10 快速完成",
+                "weight": 1,
+                "config": {
+                    "show_scope_rescue": True,
+                    "rescue_after_comparisons": 30,
+                    "rescue_min_remaining": 40,
+                    "rescue_target_top_k": 10,
+                    "rescue_title": "想更快完成？可以保留当前进度",
+                    "rescue_copy": "把目标缩短为 Top 10，不会清空已经做过的取舍。",
+                    "rescue_cta": "改为 Top 10，继续排",
+                },
+            },
+        ],
+    },
+    {
+        "experiment_id": "result_share_bundle_v1",
+        "experiment_name": "结果页一键分享包实验",
+        "status": "active",
+        "traffic_allocation": 1.0,
+        "started_at": "2026-07-24T18:09:16+08:00",
+        "primary_metric": "exposed_share_or_poster_rate",
+        "description": "针对完成后分享/海报行动偏低，测试在结果顶部提供一键生成 Top 10 海报和复制猜冠军文案的紧凑分享包。",
+        "variants": [
+            {
+                "variant_id": "control",
+                "variant_name": "现有海报与分享区",
+                "weight": 1,
+                "config": {
+                    "show_result_share_bundle": False,
+                },
+            },
+            {
+                "variant_id": "quick_share_bundle",
+                "variant_name": "顶部一键分享包",
+                "weight": 1,
+                "config": {
+                    "show_result_share_bundle": True,
+                    "share_bundle_title": "先带走一张最适合分享的 Top 10",
+                    "share_bundle_copy": "一键生成带电影海报的竖版结果图，也可以直接复制“猜冠军”文案。",
+                    "share_bundle_cta": "一键生成 Top 10 海报",
                 },
             },
         ],

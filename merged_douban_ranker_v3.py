@@ -23,7 +23,9 @@ from analytics import (
     EVENT_LABELS,
     EVENT_CHALLENGE_OPENED,
     EVENT_COMPARISON_MADE,
+    EVENT_DEFAULT_START_CLICKED,
     EVENT_EXPERIMENT_EXPOSED,
+    EVENT_HEAVY_CONFIG_VIEWED,
     EVENT_HOME_CONTENT_RENDERED,
     EVENT_LIST_SELECTED,
     EVENT_PAGE_VIEW,
@@ -31,8 +33,10 @@ from analytics import (
     EVENT_QR_VIEWED,
     EVENT_RANKING_COMPLETED,
     EVENT_RANKING_STARTED,
+    EVENT_RESULT_SHARE_PROMPT_CLICKED,
     EVENT_RESULT_VIEWED,
     EVENT_SHARE_LINK_COPIED,
+    EVENT_SORTING_SCOPE_REDUCED,
     MAIN_FUNNEL_STEPS,
     SHARED_FUNNEL_STEPS,
     available_event_date_range,
@@ -338,7 +342,6 @@ DOUBAN_PRESETS = [
 ]
 
 SHARE_POSTER_STYLES = ["留白卡片", "银幕红", "夜场蓝"]
-SHARE_POSTER_FORMATS = ["自适应长图", "长图 9:16", "方图 1:1"]
 SHARE_POSTER_QR_OPTIONS = ["带二维码", "不带二维码"]
 DOUBAN_RATING_VALUES = [5, 4, 3, 2, 1]
 DOUBAN_COLLECT_MEDIA_FILTERS = [(MEDIA_TYPE_MOVIE, "movie"), (MEDIA_TYPE_SERIES, "tv")]
@@ -360,6 +363,7 @@ HISTORY_KEYS = [
     "finished",
     "skipped_items",
     "top_k_boundary_check",
+    "top_k",
     "defers",
     "decision_log",
     "challenge_id",
@@ -402,9 +406,12 @@ RANKING_STATE_KEYS = [
     "source_channel",
     "completion_event_signature",
     "result_view_event_signature",
-    "qr_view_event_signature",
-    "share_poster_bytes",
-    "share_poster_signature",
+    "top10_poster_bytes",
+    "top10_poster_signature",
+    "top100_poster_bytes",
+    "top100_poster_signature",
+    "top10_qr_view_event_signature",
+    "top100_qr_view_event_signature",
 ]
 
 LOCAL_DRAFT_STATE_KEYS = [
@@ -437,7 +444,6 @@ LOCAL_DRAFT_STATE_KEYS = [
     "source_channel",
     "completion_event_signature",
     "result_view_event_signature",
-    "qr_view_event_signature",
 ]
 
 
@@ -714,6 +720,7 @@ def track_experiment_exposure(surface: str, experiment_ids: List[str], *, route:
                 surface=surface,
                 app_version=APP_VERSION,
             ),
+            synchronous=True,
         )
 
 
@@ -2789,9 +2796,15 @@ def init_ranking_state(
     st.session_state[k("source_channel")] = source_channel or get_source_channel()
     st.session_state[k("completion_event_signature")] = ""
     st.session_state[k("result_view_event_signature")] = ""
-    st.session_state[k("qr_view_event_signature")] = ""
-    st.session_state[k("share_poster_bytes")] = b""
-    st.session_state[k("share_poster_signature")] = ""
+    for poster_state_key in (
+        "top10_poster_bytes",
+        "top10_poster_signature",
+        "top100_poster_bytes",
+        "top100_poster_signature",
+        "top10_qr_view_event_signature",
+        "top100_qr_view_event_signature",
+    ):
+        st.session_state[k(poster_state_key)] = b"" if poster_state_key.endswith("_bytes") else ""
 
     safe_source = "custom" if not template_id and not challenge_id else "shared"
     track_event(
@@ -2862,8 +2875,12 @@ def build_local_draft_payload() -> Optional[dict]:
     state["poster_fetch_failed"] = []
     state["poster_prefetch_scheduled"] = []
     state["history"] = []
-    state["share_poster_bytes"] = ""
-    state["share_poster_signature"] = ""
+    state["top10_poster_bytes"] = ""
+    state["top10_poster_signature"] = ""
+    state["top100_poster_bytes"] = ""
+    state["top100_poster_signature"] = ""
+    state["top10_qr_view_event_signature"] = ""
+    state["top100_qr_view_event_signature"] = ""
 
     return {
         "version": LOCAL_DRAFT_VERSION,
@@ -2893,8 +2910,15 @@ def restore_local_draft_payload(draft: dict) -> bool:
     st.session_state[k("poster_fetch_failed")] = []
     st.session_state[k("poster_prefetch_scheduled")] = []
     st.session_state[k("history")] = []
-    st.session_state[k("share_poster_bytes")] = b""
-    st.session_state[k("share_poster_signature")] = ""
+    for poster_state_key in (
+        "top10_poster_bytes",
+        "top10_poster_signature",
+        "top100_poster_bytes",
+        "top100_poster_signature",
+        "top10_qr_view_event_signature",
+        "top100_qr_view_event_signature",
+    ):
+        st.session_state[k(poster_state_key)] = b"" if poster_state_key.endswith("_bytes") else ""
     st.session_state["ui_step"] = 3
     st.session_state["local_draft_restored"] = True
     return True
@@ -3017,8 +3041,15 @@ def restore_history_snapshot(snapshot: dict) -> None:
             st.session_state[k(name)] = value.copy()
         else:
             st.session_state[k(name)] = value
-    st.session_state[k("share_poster_bytes")] = b""
-    st.session_state[k("share_poster_signature")] = ""
+    for poster_state_key in (
+        "top10_poster_bytes",
+        "top10_poster_signature",
+        "top100_poster_bytes",
+        "top100_poster_signature",
+        "top10_qr_view_event_signature",
+        "top100_qr_view_event_signature",
+    ):
+        st.session_state[k(poster_state_key)] = b"" if poster_state_key.endswith("_bytes") else ""
 
 
 def undo_last_step() -> None:
@@ -3350,6 +3381,84 @@ def estimated_remaining_comparisons(total: int, processed: int, top_k: Optional[
                 future_cost += 1 + max(0, math.ceil(math.log2(max(1, top_k - 1))))
 
     return max(0, current_cost + future_cost)
+
+
+def reduce_ranking_scope(target_top_k: int) -> None:
+    target_top_k = max(1, min(int(target_top_k), int(st.session_state.get(k("total"), target_top_k) or target_top_k)))
+    previous_top_k = st.session_state.get(k("top_k"))
+    if previous_top_k is not None and int(previous_top_k) <= target_top_k:
+        return
+
+    push_history_snapshot()
+    ranked = list(st.session_state.get(k("ranked"), []))[:target_top_k]
+    st.session_state[k("ranked")] = ranked
+    st.session_state[k("top_k")] = target_top_k
+
+    if st.session_state.get(k("current_item")) is not None:
+        st.session_state[k("low")] = 0
+        use_boundary_check = len(ranked) >= target_top_k
+        st.session_state[k("top_k_boundary_check")] = use_boundary_check
+        st.session_state[k("high")] = max(0, len(ranked) - 1) if use_boundary_check else len(ranked)
+    else:
+        st.session_state[k("top_k_boundary_check")] = False
+
+    track_event(
+        EVENT_SORTING_SCOPE_REDUCED,
+        challenge_id=st.session_state.get(k("challenge_id"), ""),
+        mode=st.session_state.get(k("mode"), MODE_CUSTOM),
+        template_id=st.session_state.get(k("template_id"), ""),
+        source_channel=st.session_state.get(k("source_channel"), get_source_channel()),
+        payload=build_event_payload(
+            route="sorting",
+            list_id=st.session_state.get(k("challenge_id"), "")
+            or st.session_state.get(k("template_id"), "")
+            or st.session_state.get(k("mode"), MODE_CUSTOM),
+            list_size=st.session_state.get(k("total"), 0),
+            comparison_count=st.session_state.get(k("comparisons"), 0),
+            previous_top_k=previous_top_k,
+            top_k=target_top_k,
+            surface="sorting_scope_rescue",
+        ),
+    )
+    rerun()
+
+
+def render_sorting_scope_rescue(*, remaining_estimate: int, comparisons: int, top_k: Optional[int]) -> None:
+    config = get_experiment_config(
+        get_session_id(),
+        "sorting_scope_rescue_v1",
+        {
+            "show_scope_rescue": False,
+            "rescue_after_comparisons": 30,
+            "rescue_min_remaining": 40,
+            "rescue_target_top_k": 10,
+            "rescue_title": "想更快完成？可以保留当前进度",
+            "rescue_copy": "把目标缩短为 Top 10，不会清空已经做过的取舍。",
+            "rescue_cta": "改为 Top 10，继续排",
+        },
+    )
+    target_top_k = max(1, int(config.get("rescue_target_top_k") or 10))
+    eligible = (
+        comparisons >= max(1, int(config.get("rescue_after_comparisons") or 30))
+        and remaining_estimate >= max(1, int(config.get("rescue_min_remaining") or 40))
+        and (top_k is None or int(top_k) > target_top_k)
+    )
+    if not eligible:
+        return
+
+    track_experiment_exposure("sorting_scope_rescue", ["sorting_scope_rescue_v1"], route="sorting")
+    if not bool(config.get("show_scope_rescue", False)):
+        return
+
+    with bordered_container():
+        st.markdown(f"**{str(config.get('rescue_title') or '想更快完成？可以保留当前进度')}**")
+        st.caption(str(config.get("rescue_copy") or "把目标缩短为 Top 10，不会清空已经做过的取舍。"))
+        if render_button_compat(
+            str(config.get("rescue_cta") or f"改为 Top {target_top_k}，继续排"),
+            key="btn_reduce_ranking_scope",
+            use_container_width=True,
+        ):
+            reduce_ranking_scope(target_top_k)
 
 
 def filter_items(items: List[str], query: str) -> List[str]:
@@ -5894,8 +6003,21 @@ def admin_group_df(rows: List[Dict[str, Any]], label_key: str, label_name: str, 
                 if int(row.get("exposed_sessions", 0) or 0) > 0
                 else "真实曝光分母不可用"
             )
-            item["实验主指标"] = (
+            item["曝光后开始"] = int(row.get("exposed_started_sessions", 0))
+            item["曝光后开始率"] = (
+                admin_percent(row.get("exposed_start_rate"))
+                if int(row.get("exposed_sessions", 0) or 0) > 0
+                else "真实曝光分母不可用"
+            )
+            item["曝光后完成"] = int(row.get("exposed_completed_sessions", 0))
+            item["曝光后完成率"] = (
                 admin_percent(row.get("exposed_completion_rate"))
+                if int(row.get("exposed_sessions", 0) or 0) > 0
+                else "真实曝光分母不可用"
+            )
+            item["曝光后分享/海报"] = int(row.get("exposed_share_or_poster_sessions", 0))
+            item["曝光后分享/海报率"] = (
+                admin_percent(row.get("exposed_share_or_poster_rate"))
                 if int(row.get("exposed_sessions", 0) or 0) > 0
                 else "真实曝光分母不可用"
             )
@@ -5958,6 +6080,13 @@ def admin_experiment_config_df(experiment: Dict[str, Any]) -> pd.DataFrame:
     ended_at = admin_short_time(experiment.get("ended_at"))
     if not ended_at:
         ended_at = "进行中" if experiment.get("status") == "active" else "未记录"
+    primary_metric = str(experiment.get("primary_metric") or "")
+    primary_metric_label = {
+        "exposed_action_rate": "曝光后行动率",
+        "exposed_start_rate": "曝光后开始率",
+        "exposed_completion_rate": "曝光后完成率",
+        "exposed_share_or_poster_rate": "曝光后分享/海报率",
+    }.get(primary_metric, primary_metric or "未配置")
     return pd.DataFrame(
         [
             {
@@ -5966,6 +6095,7 @@ def admin_experiment_config_df(experiment: Dict[str, Any]) -> pd.DataFrame:
                 "状态": experiment.get("status") or "unknown",
                 "总流量": admin_percent(experiment.get("traffic_allocation")),
                 "版本比例": admin_experiment_variant_ratio_text(experiment),
+                "主指标": primary_metric_label,
                 "开始时间": admin_short_time(experiment.get("started_at")) or "未记录",
                 "结束时间": ended_at,
                 "收口版本": admin_experiment_decision_text(experiment),
@@ -6041,8 +6171,8 @@ def render_admin_experiment_analysis(events: List[Dict[str, Any]]) -> None:
 
     st.caption(
         "说明：实验配置来自 experiments.py。Assigned sessions 只表示事件 payload 带有该 variant；"
-        "严格 A/B 主分母必须使用 experiment_exposed 的 Exposed sessions。曝光后行动率表示曝光后发生打开/选择片单或开始整理的 session 比例；"
-        "历史实验没有真实曝光事件时，实验主指标显示为不可用。"
+        "严格 A/B 主分母必须使用 experiment_exposed 的 Exposed sessions。表格分别展示曝光后行动、开始、完成和分享/海报率；"
+        "每个实验采用配置表中的主指标，历史实验没有真实曝光事件时这些指标显示为不可用。"
     )
 
 
@@ -6448,28 +6578,28 @@ def render_cover_header() -> None:
         get_session_id(),
         "post_render_hero_value_v1",
         {
-            "hero_title": HERO_TITLE,
-            "hero_subtitle": HERO_SUBTITLE,
-            "hero_tagline": HERO_TAGLINE,
+            "hero_title": "先选几次，得到你的电影 Top 榜",
+            "hero_subtitle": "不用先准备完整片单，从一份现成主题开始也可以。",
+            "hero_tagline": "完成后会生成冠军、Top 排名、海报和可分享链接。",
             "hero_outcomes": [
-                "得到一份 Top 榜单",
-                "看见你的冠军电影",
-                "生成结果海报",
-                "复制链接给朋友同题挑战",
+                "先从现成片单开始",
+                "每次只做二选一",
+                "直接看到冠军电影",
+                "带走海报和分享链接",
             ],
         },
     )
     track_experiment_exposure("hero_cta", ["post_render_hero_value_v1"])
-    hero_title = str(experiment_config.get("hero_title") or HERO_TITLE)
-    hero_subtitle = str(experiment_config.get("hero_subtitle") or HERO_SUBTITLE)
-    hero_tagline = str(experiment_config.get("hero_tagline") or HERO_TAGLINE)
+    hero_title = str(experiment_config.get("hero_title") or "先选几次，得到你的电影 Top 榜")
+    hero_subtitle = str(experiment_config.get("hero_subtitle") or "不用先准备完整片单，从一份现成主题开始也可以。")
+    hero_tagline = str(experiment_config.get("hero_tagline") or "完成后会生成冠军、Top 排名、海报和可分享链接。")
     hero_outcomes = experiment_config.get("hero_outcomes")
     if not isinstance(hero_outcomes, list) or not hero_outcomes:
         hero_outcomes = [
-            "得到一份 Top 榜单",
-            "看见你的冠军电影",
-            "生成结果海报",
-            "复制链接给朋友同题挑战",
+            "先从现成片单开始",
+            "每次只做二选一",
+            "直接看到冠军电影",
+            "带走海报和分享链接",
         ]
     outcome_html = "".join(
         f'<div class="hero-outcome">{html.escape(str(outcome))}</div>'
@@ -6674,106 +6804,124 @@ def get_result_poster_bytes(title: str) -> Optional[bytes]:
     return poster_bytes
 
 
-def generate_share_poster_bytes(
+def fit_poster_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    max_width: int,
+    *,
+    start_size: int,
+    min_size: int,
+    max_lines: int = 2,
+) -> Tuple[ImageFont.FreeTypeFont, List[str]]:
+    clean_text = str(text or "").strip() or "未命名"
+    for size in range(start_size, min_size - 1, -2):
+        current_font = load_font(size)
+        lines = wrap_text(draw, clean_text, current_font, max_width)
+        if len(lines) <= max_lines:
+            return current_font, lines
+
+    current_font = load_font(min_size)
+    lines = wrap_text(draw, clean_text, current_font, max_width)
+    if len(lines) <= max_lines:
+        return current_font, lines
+    visible = lines[:max_lines]
+    last = visible[-1]
+    while last and draw.textlength(last + "…", font=current_font) > max_width:
+        last = last[:-1]
+    visible[-1] = (last or visible[-1][:1]) + "…"
+    return current_font, visible
+
+
+def result_poster_items(ranked: List[str], limit: int) -> List[str]:
+    return [str(item).strip() for item in ranked[:limit] if str(item).strip()]
+
+
+def top100_column_layout(ranked: List[str]) -> List[List[str]]:
+    items = result_poster_items(ranked, 100)
+    return [items[start : start + 25] for start in range(0, len(items), 25)]
+
+
+def result_poster_scope(display_count: int, total_count: int, limit: int) -> str:
+    if display_count <= 0:
+        return "暂无排名"
+    if total_count > limit:
+        return f"Top {limit} · 完整结果共 {total_count} 名"
+    return f"Top {display_count}"
+
+
+def generate_top10_poster_bytes(
     theme: str,
     ranked: List[str],
-    skipped_items: List[str],
-    top_k: Optional[int],
-    mode: str,
     user_name: str,
     poster_style: str,
-    poster_format: str,
     share_url: str = "",
     include_qr: bool = True,
     poster_bytes_map: Optional[Dict[str, Optional[bytes]]] = None,
 ) -> bytes:
     ensure_pillow()
-    width = 1080
-    fixed_height = None
-    if poster_format == "长图 9:16":
-        fixed_height = 1920
-    elif poster_format == "方图 1:1":
-        fixed_height = 1080
-
+    width, height = 1080, 1920
     padding = 64
-    row_height = 144
-    row_gap = 12
-    thumb_size = (86, 124)
+    row_height = 122
+    row_gap = 8
+    thumb_size = (72, 104)
     palette = get_share_palette(poster_style)
     poster_bytes_map = poster_bytes_map or {}
     share_url = share_url or get_public_app_url()
+    display_ranked = result_poster_items(ranked, 10)
+    if not display_ranked:
+        raise ValueError("Top 10 poster requires at least one ranked item")
 
     measure_img = Image.new("RGB", (1, 1))
     measure_draw = ImageDraw.Draw(measure_img)
 
-    title_font = load_font(50, bold=True)
-    subtitle_font = load_font(26)
-    item_font = load_font(32)
-    small_font = load_font(22)
-    tiny_font = load_font(18)
-
-    title_lines = wrap_text(measure_draw, theme, title_font, width - padding * 2)
-    title_height = len(title_lines) * 60
-    header_height = title_height + 54 + (34 if user_name else 0) + 34
-    qr_block_height = 184 if include_qr else 0
-    bottom_margin = 48
-
-    display_ranked = ranked
-    if fixed_height is not None:
-        available = fixed_height - padding - header_height - qr_block_height - bottom_margin
-        max_rows = max(3, available // (row_height + row_gap))
-        display_ranked = ranked[: min(len(ranked), max_rows)]
-
-    text_x = padding + 56 + thumb_size[0] + 28
-    max_text_width = width - text_x - padding
-    ranked_layout = []
-    for item in display_ranked:
-        wrapped = wrap_text(measure_draw, item, item_font, max_text_width)
-        ranked_layout.append((item, wrapped))
-
-    content_height = padding + header_height + len(ranked_layout) * (row_height + row_gap)
-    if len(display_ranked) < len(ranked):
-        content_height += 38
-    content_height += (qr_block_height + 20 if include_qr else 0) + bottom_margin
-    height = fixed_height or max(900, content_height)
+    title_font, title_lines = fit_poster_text(
+        measure_draw,
+        theme,
+        width - padding * 2,
+        start_size=48,
+        min_size=34,
+        max_lines=2,
+    )
+    subtitle_font = load_font(25)
+    item_font = load_font(29)
+    small_font = load_font(21)
+    tiny_font = load_font(17)
 
     img = Image.new("RGB", (width, height), palette["bg"])
     draw = ImageDraw.Draw(img)
-
     draw.rounded_rectangle((36, 36, width - 36, height - 36), radius=36, fill=palette["card"], outline=palette["outline"], width=2)
 
     y = padding
     for line in title_lines:
         draw.text((padding, y), line, font=title_font, fill=palette["title"])
-        y += 60
-
-    if top_k is None:
-        subtitle = "完整偏爱顺序"
-    elif mode == MODE_DOUBAN:
-        subtitle = f"豆瓣电影前 {min(top_k, len(ranked))} 名"
-    else:
-        subtitle = f"保留前 {min(top_k, len(ranked))} 名"
-    draw.text((padding, y), subtitle, font=subtitle_font, fill=palette["muted"])
-    y += 54
+        y += title_font.size + 8
+    draw.text(
+        (padding, y + 2),
+        result_poster_scope(len(display_ranked), len(ranked), 10),
+        font=subtitle_font,
+        fill=palette["accent"],
+    )
+    y += 40
     if user_name:
         draw.text((padding, y), f"by {user_name}", font=small_font, fill=palette["muted"])
-        y += 34
-
+        y += 30
     draw.line((padding, y, width - padding, y), fill=palette["outline"], width=2)
-    y += 28
+    y += 18
 
     thumb_mask = make_rounded_rect_mask(thumb_size, 12)
-    for idx, (item, wrapped) in enumerate(ranked_layout, 1):
+    text_x = padding + 54 + thumb_size[0] + 22
+    max_text_width = width - text_x - padding - 18
+    for idx, item in enumerate(display_ranked, 1):
         row_bottom = y + row_height
-        draw.rounded_rectangle((padding, y, width - padding, row_bottom), radius=20, fill=palette.get("row", palette["card"]))
+        draw.rounded_rectangle((padding, y, width - padding, row_bottom), radius=18, fill=palette.get("row", palette["card"]))
         if idx <= 3:
-            draw_medal_icon(draw, padding + 4, y + 42, idx, small_font)
+            draw_medal_icon(draw, padding + 2, y + 33, idx, small_font)
         else:
             rank_text = f"{idx:02d}"
-            draw.text((padding + 2, y + 44), rank_text, font=item_font, fill=palette["accent"])
+            draw.text((padding + 2, y + 38), rank_text, font=item_font, fill=palette["accent"])
 
-        thumb_x = padding + 58
-        thumb_y = y + 10
+        thumb_x = padding + 54
+        thumb_y = y + 9
         poster_thumb = render_poster_thumb(poster_bytes_map.get(item), thumb_size, (238, 239, 243))
         if poster_bytes_map.get(item):
             img.paste(poster_thumb, (thumb_x, thumb_y), thumb_mask)
@@ -6785,33 +6933,160 @@ def generate_share_poster_bytes(
                 outline=palette["outline"],
                 width=1,
             )
-            draw.text((thumb_x + 15, thumb_y + 42), "暂无\n海报", font=tiny_font, fill=(112, 118, 130), spacing=4)
+            draw.text((thumb_x + 12, thumb_y + 33), "暂无\n海报", font=tiny_font, fill=(112, 118, 130), spacing=3)
 
-        text_y = y + max(24, (row_height - len(wrapped) * 38) // 2)
-        for j, line in enumerate(wrapped):
-            draw.text((text_x, text_y + j * 38), line, font=item_font, fill=palette["text"])
+        fitted_font, wrapped = fit_poster_text(
+            draw,
+            item,
+            max_text_width,
+            start_size=item_font.size,
+            min_size=21,
+            max_lines=2,
+        )
+        line_height = fitted_font.size + 5
+        text_y = y + max(14, (row_height - len(wrapped) * line_height) // 2)
+        for line_index, line in enumerate(wrapped):
+            draw.text((text_x, text_y + line_index * line_height), line, font=fitted_font, fill=palette["text"])
         y = row_bottom + row_gap
 
-    if len(display_ranked) < len(ranked):
-        draw.text((text_x, y), f"还有 {len(ranked) - len(display_ranked)} 项完整名单", font=small_font, fill=palette["muted"])
-        y += 38
-
     if include_qr:
-        qr_y = min(max(y + 12, height - padding - qr_block_height), height - padding - qr_block_height)
-        draw.rounded_rectangle((padding, qr_y, width - padding, qr_y + qr_block_height), radius=24, fill=(255, 255, 255), outline=palette["outline"], width=2)
-        qr_img = make_qr_image(share_url, 144)
+        qr_y = 1640
+        draw.rounded_rectangle((padding, qr_y, width - padding, qr_y + 174), radius=22, fill=(255, 255, 255), outline=palette["outline"], width=2)
+        qr_img = make_qr_image(share_url, 134)
         img.paste(qr_img, (padding + 20, qr_y + 20))
-        qr_text_x = padding + 188
-        draw.text((qr_text_x, qr_y + 30), "扫码打开电影审美名单", font=subtitle_font, fill=(31, 35, 40))
-        draw.text((qr_text_x, qr_y + 72), "发给朋友，让 TA 也排同一份片单。", font=small_font, fill=(98, 106, 120))
-        for idx, line in enumerate(wrap_text(draw, share_url, tiny_font, width - qr_text_x - padding - 20)[:2]):
-            draw.text((qr_text_x, qr_y + 112 + idx * 24), line, font=tiny_font, fill=(112, 118, 130))
+        qr_text_x = padding + 174
+        draw.text((qr_text_x, qr_y + 28), "扫码打开同一份电影名单", font=subtitle_font, fill=(31, 35, 40))
+        draw.text((qr_text_x, qr_y + 70), "发给朋友，看看你们的冠军是否一样。", font=small_font, fill=(98, 106, 120))
+        for line_index, line in enumerate(wrap_text(draw, share_url, tiny_font, width - qr_text_x - padding - 20)[:2]):
+            draw.text((qr_text_x, qr_y + 108 + line_index * 22), line, font=tiny_font, fill=(112, 118, 130))
 
     footer = f"{APP_TITLE} · {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     draw.text((padding, height - 70), footer, font=small_font, fill=palette["muted"])
 
     out = io.BytesIO()
     img.save(out, format="PNG")
+    return out.getvalue()
+
+
+def generate_top100_poster_bytes(
+    theme: str,
+    ranked: List[str],
+    user_name: str,
+    poster_style: str,
+    share_url: str = "",
+    include_qr: bool = True,
+) -> bytes:
+    ensure_pillow()
+    width, height = 1800, 2400
+    padding = 80
+    palette = get_share_palette(poster_style)
+    share_url = share_url or get_public_app_url()
+    columns = top100_column_layout(ranked)
+    if not columns:
+        raise ValueError("Top 100 poster requires at least one ranked item")
+
+    img = Image.new("RGB", (width, height), palette["bg"])
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle((40, 40, width - 40, height - 40), radius=42, fill=palette["card"], outline=palette["outline"], width=3)
+
+    title_font, title_lines = fit_poster_text(
+        draw,
+        theme,
+        width - padding * 2 - 300,
+        start_size=64,
+        min_size=42,
+        max_lines=2,
+    )
+    y = padding
+    for line in title_lines:
+        draw.text((padding, y), line, font=title_font, fill=palette["title"])
+        y += title_font.size + 8
+
+    display_count = sum(len(column) for column in columns)
+    scope = result_poster_scope(display_count, len(ranked), 100)
+    scope_font = load_font(34, bold=True)
+    scope_width = int(draw.textlength(scope, font=scope_font)) + 44
+    scope_x = width - padding - scope_width
+    draw.rounded_rectangle((scope_x, padding, width - padding, padding + 58), radius=18, fill=palette["row"], outline=palette["outline"], width=2)
+    draw.text((scope_x + 22, padding + 10), scope, font=scope_font, fill=palette["accent"])
+
+    meta_font = load_font(26)
+    meta = datetime.now().strftime("%Y-%m-%d")
+    if user_name:
+        meta = f"by {user_name} · {meta}"
+    draw.text((padding, y + 4), meta, font=meta_font, fill=palette["muted"])
+    y += 58
+    draw.line((padding, y, width - padding, y), fill=palette["outline"], width=3)
+
+    column_top = y + 24
+    column_gap = 24
+    available_width = width - padding * 2
+    column_count = len(columns)
+    if column_count == 1:
+        column_width = min(1040, available_width)
+        content_left = (width - column_width) // 2
+    else:
+        column_width = (available_width - column_gap * (column_count - 1)) // column_count
+        content_left = padding
+
+    column_header_font = load_font(24, bold=True)
+    rank_font = load_font(28, bold=True)
+    row_height = 66
+    row_start_y = column_top + 48
+    for column_index, column in enumerate(columns):
+        column_x = content_left + column_index * (column_width + column_gap)
+        first_rank = column_index * 25 + 1
+        last_rank = first_rank + len(column) - 1
+        draw.text(
+            (column_x + 10, column_top),
+            f"#{first_rank:02d}–#{last_rank:02d}",
+            font=column_header_font,
+            fill=palette["muted"],
+        )
+        for row_index, item in enumerate(column):
+            rank = first_rank + row_index
+            row_y = row_start_y + row_index * row_height
+            row_fill = palette["row"] if row_index % 2 == 0 else palette["card"]
+            outline = palette["accent"] if rank <= 3 else palette["outline"]
+            draw.rounded_rectangle(
+                (column_x, row_y, column_x + column_width, row_y + row_height - 4),
+                radius=12,
+                fill=row_fill,
+                outline=outline,
+                width=2 if rank <= 3 else 1,
+            )
+            draw.text((column_x + 12, row_y + 13), f"{rank:02d}", font=rank_font, fill=palette["accent"])
+            title_x = column_x + 72
+            title_width = column_width - 84
+            start_size = 32 if column_count <= 2 else 28
+            fitted_font, lines = fit_poster_text(
+                draw,
+                item,
+                title_width,
+                start_size=start_size,
+                min_size=20,
+                max_lines=2,
+            )
+            line_height = fitted_font.size + 2
+            text_y = row_y + max(5, (row_height - 4 - len(lines) * line_height) // 2)
+            for line_index, line in enumerate(lines):
+                draw.text((title_x, text_y + line_index * line_height), line, font=fitted_font, fill=palette["text"])
+
+    if include_qr:
+        qr_y = 2134
+        draw.rounded_rectangle((padding, qr_y, width - padding, qr_y + 170), radius=22, fill=(255, 255, 255), outline=palette["outline"], width=2)
+        qr_img = make_qr_image(share_url, 130)
+        img.paste(qr_img, (padding + 20, qr_y + 20))
+        qr_text_x = padding + 174
+        qr_title_font = load_font(28, bold=True)
+        draw.text((qr_text_x, qr_y + 34), "扫码打开同一份电影名单", font=qr_title_font, fill=(31, 35, 40))
+        draw.text((qr_text_x, qr_y + 82), "让朋友也排一次，再交换你们的 Top 榜。", font=meta_font, fill=(98, 106, 120))
+
+    footer = f"{APP_TITLE} · 最多展示前 100 名"
+    draw.text((padding, height - 72), footer, font=meta_font, fill=palette["muted"])
+
+    out = io.BytesIO()
+    img.save(out, format="PNG", optimize=True)
     return out.getvalue()
 
 
@@ -7053,47 +7328,76 @@ def generate_contested_poster_bytes(
     return out.getvalue()
 
 
-def ensure_share_poster_generated(share_url: str = "") -> None:
+def current_result_poster_signature(poster_type: str, share_url: str = "") -> str:
+    ranked = st.session_state.get(k("ranked"), [])
+    if not ranked:
+        return ""
+    share_url = share_url or get_public_app_url()
+    theme = st.session_state.get(k("theme"), "我的排序")
+    mode = st.session_state.get(k("mode"), MODE_CUSTOM)
+    user_name = st.session_state.get(k("user_name"), "")
+    poster_style = st.session_state.get(k("share_poster_style"), SHARE_POSTER_STYLES[0])
+    qr_option = st.session_state.get(k("share_poster_qr_option"), SHARE_POSTER_QR_OPTIONS[0])
+    limit = 10 if poster_type == "result_top10" else 100
+    poster_items = result_poster_items(ranked, limit)
+    return build_share_poster_signature(
+        theme,
+        poster_items,
+        [],
+        len(poster_items),
+        mode,
+        user_name,
+        poster_style,
+        poster_type,
+        share_url,
+        qr_option,
+    )
+
+
+def ensure_top10_poster_generated(share_url: str = "") -> None:
     ranked = st.session_state.get(k("ranked"), [])
     if not ranked:
         return
     share_url = share_url or get_public_app_url()
+    signature = current_result_poster_signature("result_top10", share_url)
 
-    theme = st.session_state.get(k("theme"), "我的排序")
-    skipped_items = st.session_state.get(k("skipped_items"), [])
-    top_k = st.session_state.get(k("top_k"))
-    mode = st.session_state.get(k("mode"), MODE_CUSTOM)
-    user_name = st.session_state.get(k("user_name"), "")
-    poster_style = st.session_state.get(k("share_poster_style"), SHARE_POSTER_STYLES[0])
-    poster_format = st.session_state.get(k("share_poster_format"), SHARE_POSTER_FORMATS[0])
-    qr_option = st.session_state.get(k("share_poster_qr_option"), SHARE_POSTER_QR_OPTIONS[0])
-    include_qr = qr_option == SHARE_POSTER_QR_OPTIONS[0]
-    signature = build_share_poster_signature(theme, ranked, skipped_items, top_k, mode, user_name, poster_style, poster_format, share_url, qr_option)
-
-    if st.session_state.get(k("share_poster_signature")) == signature and st.session_state.get(k("share_poster_bytes")):
+    if st.session_state.get(k("top10_poster_signature")) == signature and st.session_state.get(k("top10_poster_bytes")):
         return
 
-    display_count = len(ranked)
-    if poster_format == "方图 1:1":
-        display_count = min(display_count, 5)
-    elif poster_format == "长图 9:16":
-        display_count = min(display_count, 10)
-    poster_bytes_map = {title: get_result_poster_bytes(title) for title in ranked[:display_count]}
-    poster_bytes = generate_share_poster_bytes(
-        theme,
+    poster_items = result_poster_items(ranked, 10)
+    poster_bytes_map = {title: get_result_poster_bytes(title) for title in poster_items}
+    poster_bytes = generate_top10_poster_bytes(
+        st.session_state.get(k("theme"), "我的排序"),
         ranked,
-        skipped_items,
-        top_k,
-        mode,
-        user_name,
-        poster_style,
-        poster_format,
+        st.session_state.get(k("user_name"), ""),
+        st.session_state.get(k("share_poster_style"), SHARE_POSTER_STYLES[0]),
         share_url=share_url,
-        include_qr=include_qr,
+        include_qr=st.session_state.get(k("share_poster_qr_option"), SHARE_POSTER_QR_OPTIONS[0]) == SHARE_POSTER_QR_OPTIONS[0],
         poster_bytes_map=poster_bytes_map,
     )
-    st.session_state[k("share_poster_bytes")] = poster_bytes
-    st.session_state[k("share_poster_signature")] = signature
+    st.session_state[k("top10_poster_bytes")] = poster_bytes
+    st.session_state[k("top10_poster_signature")] = signature
+
+
+def ensure_top100_poster_generated(share_url: str = "") -> None:
+    ranked = st.session_state.get(k("ranked"), [])
+    if not ranked:
+        return
+    share_url = share_url or get_public_app_url()
+    signature = current_result_poster_signature("result_top100", share_url)
+    if st.session_state.get(k("top100_poster_signature")) == signature and st.session_state.get(k("top100_poster_bytes")):
+        return
+
+    poster_bytes = generate_top100_poster_bytes(
+        st.session_state.get(k("theme"), "我的排序"),
+        ranked,
+        st.session_state.get(k("user_name"), ""),
+        st.session_state.get(k("share_poster_style"), SHARE_POSTER_STYLES[0]),
+        share_url=share_url,
+        include_qr=st.session_state.get(k("share_poster_qr_option"), SHARE_POSTER_QR_OPTIONS[0]) == SHARE_POSTER_QR_OPTIONS[0],
+    )
+    st.session_state[k("top100_poster_bytes")] = poster_bytes
+    st.session_state[k("top100_poster_signature")] = signature
 
 
 def ensure_contested_poster_generated(share_url: str = "") -> None:
@@ -7283,15 +7587,86 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
         ]
     )
 
+    share_bundle_config = get_experiment_config(
+        get_session_id(),
+        "result_share_bundle_v1",
+        {
+            "show_result_share_bundle": False,
+            "share_bundle_title": "先带走一张最适合分享的 Top 10",
+            "share_bundle_copy": "一键生成带电影海报的竖版结果图，也可以直接复制“猜冠军”文案。",
+            "share_bundle_cta": "一键生成 Top 10 海报",
+        },
+    )
+    track_experiment_exposure("result_share_bundle", ["result_share_bundle_v1"], route="result")
+    if bool(share_bundle_config.get("show_result_share_bundle", False)):
+        if st.session_state.get(k("share_poster_style")) not in SHARE_POSTER_STYLES:
+            st.session_state[k("share_poster_style")] = SHARE_POSTER_STYLES[0]
+        if st.session_state.get(k("share_poster_qr_option")) not in SHARE_POSTER_QR_OPTIONS:
+            st.session_state[k("share_poster_qr_option")] = SHARE_POSTER_QR_OPTIONS[0]
+        with bordered_container():
+            st.markdown(
+                f"**{str(share_bundle_config.get('share_bundle_title') or '先带走一张最适合分享的 Top 10')}**"
+            )
+            st.caption(
+                str(
+                    share_bundle_config.get("share_bundle_copy")
+                    or "一键生成带电影海报的竖版结果图，也可以直接复制“猜冠军”文案。"
+                )
+            )
+            bundle_col1, bundle_col2 = st.columns(2)
+            with bundle_col1:
+                if render_button_compat(
+                    str(share_bundle_config.get("share_bundle_cta") or "一键生成 Top 10 海报"),
+                    key="btn_result_share_bundle_generate",
+                    use_container_width=True,
+                    button_type="primary",
+                ):
+                    track_event(
+                        EVENT_RESULT_SHARE_PROMPT_CLICKED,
+                        challenge_id=challenge_id,
+                        mode=mode,
+                        template_id=template_id,
+                        source_channel=source_channel,
+                        payload=build_event_payload(
+                            route="result",
+                            list_id=challenge_id or template_id or mode,
+                            list_size=total,
+                            comparison_count=comparisons,
+                            surface="quick_share_top10",
+                        ),
+                    )
+                    with st.spinner("正在生成 Top 10 海报…"):
+                        ensure_top10_poster_generated(challenge_url)
+                    st.success("Top 10 海报已生成，可在下方预览和下载。")
+            with bundle_col2:
+                if render_copy_button(
+                    "复制猜冠军文案",
+                    challenge_invite_text,
+                    "copy_result_share_bundle_caption",
+                    "猜冠军文案",
+                ):
+                    track_event(
+                        EVENT_SHARE_LINK_COPIED,
+                        challenge_id=challenge_id,
+                        mode=mode,
+                        template_id=template_id,
+                        source_channel=source_channel,
+                        payload=build_event_payload(
+                            route="result",
+                            list_id=challenge_id or template_id or mode,
+                            list_size=total,
+                            comparison_count=comparisons,
+                            surface="quick_share_bundle",
+                        ),
+                    )
+
     st.subheader("把结果变成海报")
     if st.session_state.get(k("share_poster_style")) not in SHARE_POSTER_STYLES:
         st.session_state[k("share_poster_style")] = SHARE_POSTER_STYLES[0]
-    if st.session_state.get(k("share_poster_format")) not in SHARE_POSTER_FORMATS:
-        st.session_state[k("share_poster_format")] = SHARE_POSTER_FORMATS[0]
     if st.session_state.get(k("share_poster_qr_option")) not in SHARE_POSTER_QR_OPTIONS:
         st.session_state[k("share_poster_qr_option")] = SHARE_POSTER_QR_OPTIONS[0]
 
-    control_col1, control_col2, control_col3 = st.columns(3)
+    control_col1, control_col2 = st.columns(2)
     with control_col1:
         st.selectbox(
             "海报风格",
@@ -7299,38 +7674,66 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
             key=k("share_poster_style"),
         )
     with control_col2:
-        st.selectbox(
-            "海报尺寸",
-            SHARE_POSTER_FORMATS,
-            key=k("share_poster_format"),
-        )
-    with control_col3:
         st.radio(
             "二维码版本",
             SHARE_POSTER_QR_OPTIONS,
             key=k("share_poster_qr_option"),
+            horizontal=True,
         )
-    ensure_share_poster_generated(challenge_url)
+
+    generate_col1, generate_col2 = st.columns(2)
+    with generate_col1:
+        if render_button_compat("生成 Top 10 海报（带电影海报）", key="btn_generate_top10_poster", use_container_width=True):
+            with st.spinner("正在生成 Top 10 海报…"):
+                ensure_top10_poster_generated(challenge_url)
+    with generate_col2:
+        if render_button_compat("生成 Top 100 海报（无电影海报）", key="btn_generate_top100_poster", use_container_width=True):
+            with st.spinner("正在排版 Top 100 海报…"):
+                ensure_top100_poster_generated(challenge_url)
+    st.caption(
+        f"当前有 {len(ranked)} 个可靠名次；两种海报都会按实际结果显示 Top {min(len(ranked), 10)} / Top {min(len(ranked), 100)}。"
+    )
+
     ensure_contested_poster_generated(challenge_url)
 
-    poster_bytes = st.session_state.get(k("share_poster_bytes"), b"")
+    top10_signature = current_result_poster_signature("result_top10", challenge_url)
+    top100_signature = current_result_poster_signature("result_top100", challenge_url)
+    top10_poster_bytes = (
+        st.session_state.get(k("top10_poster_bytes"), b"")
+        if st.session_state.get(k("top10_poster_signature")) == top10_signature
+        else b""
+    )
+    top100_poster_bytes = (
+        st.session_state.get(k("top100_poster_bytes"), b"")
+        if st.session_state.get(k("top100_poster_signature")) == top100_signature
+        else b""
+    )
     contested_poster_bytes = st.session_state.get(k("contested_poster_bytes"), b"")
-    if poster_bytes:
-        file_name = f"{slugify_filename(st.session_state.get(k('theme'), 'ranking'))}_ranking.png"
-        contested_file_name = f"{slugify_filename(st.session_state.get(k('theme'), 'ranking'))}_choice.png"
-        preview_col, action_col = st.columns([0.95, 1.05])
-        with preview_col:
-            if contested_poster_bytes:
-                ranking_tab, choice_tab = st.tabs(["名单海报", "最纠结取舍海报"])
-                with ranking_tab:
-                    render_poster_preview_html(poster_bytes)
-                with choice_tab:
-                    render_poster_preview_html(contested_poster_bytes)
-            else:
-                render_poster_preview_html(poster_bytes)
-        with action_col:
-            has_qr = st.session_state.get(k("share_poster_qr_option")) == SHARE_POSTER_QR_OPTIONS[0]
-            if has_qr and st.session_state.get(k("qr_view_event_signature")) != completion_signature:
+    base_file_name = slugify_filename(st.session_state.get(k("theme"), "ranking"))
+    preview_col, action_col = st.columns([0.95, 1.05])
+    with preview_col:
+        preview_items: List[Tuple[str, bytes]] = []
+        if top10_poster_bytes:
+            preview_items.append(("Top 10 海报", top10_poster_bytes))
+        if top100_poster_bytes:
+            preview_items.append(("Top 100 海报", top100_poster_bytes))
+        if contested_poster_bytes:
+            preview_items.append(("最纠结取舍海报", contested_poster_bytes))
+        if preview_items:
+            preview_tabs = st.tabs([label for label, _ in preview_items])
+            for preview_tab, (_, preview_bytes) in zip(preview_tabs, preview_items):
+                with preview_tab:
+                    render_poster_preview_html(preview_bytes)
+        else:
+            st.info("选择一种榜单海报生成后，会在这里显示预览。")
+
+    with action_col:
+        has_qr = st.session_state.get(k("share_poster_qr_option")) == SHARE_POSTER_QR_OPTIONS[0]
+        for poster_type, poster_bytes, signature, event_key, item_count in (
+            ("result_top10", top10_poster_bytes, top10_signature, "top10_qr_view_event_signature", min(10, len(ranked))),
+            ("result_top100", top100_poster_bytes, top100_signature, "top100_qr_view_event_signature", min(100, len(ranked))),
+        ):
+            if has_qr and poster_bytes and st.session_state.get(k(event_key)) != signature:
                 track_event(
                     EVENT_QR_VIEWED,
                     challenge_id=challenge_id,
@@ -7342,32 +7745,36 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                         list_id=challenge_id or template_id or mode,
                         list_size=total,
                         comparison_count=comparisons,
-                        poster_type="result",
+                        poster_type=poster_type,
+                        poster_item_count=item_count,
                     ),
                 )
-                st.session_state[k("qr_view_event_signature")] = completion_signature
-            qr_copy = "、项目名称和二维码" if has_qr else "和项目名称"
-            st.markdown(
-                f"""
-                <div class="poster-side-panel">
-                  <div class="poster-panel-title">两张图晒出你的电影审美</div>
-                  <div class="poster-panel-copy">名单海报展示前三名奖牌和前列名单{qr_copy}；取舍海报展示你最纠结的一组选择，更适合发出去让朋友参与讨论。</div>
-                  <div class="challenge-invite">
-                    <div class="challenge-invite-title">发给朋友，让 TA 猜你的冠军</div>
-                    <div class="challenge-invite-copy">复制同题挑战链接，朋友排完后可以拿 JSON 和你对比差异。</div>
-                  </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            a1, a2 = st.columns(2)
-            with a1:
+                st.session_state[k(event_key)] = signature
+
+        qr_copy = "，也可附二维码" if has_qr else ""
+        st.markdown(
+            f"""
+            <div class="poster-side-panel">
+              <div class="poster-panel-title">一份结果，两种榜单海报</div>
+              <div class="poster-panel-copy">Top 10 用电影海报突出前十；Top 100 用纯文字四栏保留更完整的顺序{qr_copy}。</div>
+              <div class="challenge-invite">
+                <div class="challenge-invite-title">发给朋友，让 TA 猜你的冠军</div>
+                <div class="challenge-invite-copy">复制同题挑战链接，朋友排完后可以拿 JSON 和你对比差异。</div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        download_col1, download_col2 = st.columns(2)
+        with download_col1:
+            if top10_poster_bytes:
                 render_download_button_compat(
-                    "下载名单海报",
-                    data=poster_bytes,
-                    file_name=file_name,
+                    "下载 Top 10 海报",
+                    data=top10_poster_bytes,
+                    file_name=f"{base_file_name}_top10.png",
                     mime="image/png",
-                    key="btn_download_share_poster",
+                    key="btn_download_top10_poster",
                     on_click=lambda: track_event(
                         EVENT_POSTER_DOWNLOADED,
                         challenge_id=challenge_id,
@@ -7379,38 +7786,46 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                             list_id=challenge_id or template_id or mode,
                             list_size=total,
                             comparison_count=comparisons,
-                            poster_type="result",
+                            poster_type="result_top10",
+                            poster_item_count=min(10, len(ranked)),
                         ),
                     ),
                 )
-            with a2:
-                if contested_poster_bytes:
-                    render_download_button_compat(
-                        "下载取舍海报",
-                        data=contested_poster_bytes,
-                        file_name=contested_file_name,
-                        mime="image/png",
-                        key="btn_download_contested_poster",
-                        on_click=lambda: track_event(
-                            EVENT_POSTER_DOWNLOADED,
-                            challenge_id=challenge_id,
-                            mode=st.session_state.get(k("mode"), MODE_CUSTOM),
-                            template_id=template_id,
-                            source_channel=source_channel,
-                            payload=build_event_payload(
-                                route="result",
-                                list_id=challenge_id or template_id or mode,
-                                list_size=total,
-                                comparison_count=comparisons,
-                                poster_type="contested_choice",
-                            ),
+        with download_col2:
+            if top100_poster_bytes:
+                render_download_button_compat(
+                    "下载 Top 100 海报",
+                    data=top100_poster_bytes,
+                    file_name=f"{base_file_name}_top100.png",
+                    mime="image/png",
+                    key="btn_download_top100_poster",
+                    on_click=lambda: track_event(
+                        EVENT_POSTER_DOWNLOADED,
+                        challenge_id=challenge_id,
+                        mode=st.session_state.get(k("mode"), MODE_CUSTOM),
+                        template_id=template_id,
+                        source_channel=source_channel,
+                        payload=build_event_payload(
+                            route="result",
+                            list_id=challenge_id or template_id or mode,
+                            list_size=total,
+                            comparison_count=comparisons,
+                            poster_type="result_top100",
+                            poster_item_count=min(100, len(ranked)),
                         ),
-                    )
-            if render_copy_button("复制链接", challenge_url, "copy_result_challenge_link", "片单链接"):
-                track_event(
-                    EVENT_SHARE_LINK_COPIED,
+                    ),
+                )
+        if contested_poster_bytes:
+            render_download_button_compat(
+                "下载取舍海报",
+                data=contested_poster_bytes,
+                file_name=f"{base_file_name}_choice.png",
+                mime="image/png",
+                key="btn_download_contested_poster",
+                on_click=lambda: track_event(
+                    EVENT_POSTER_DOWNLOADED,
                     challenge_id=challenge_id,
-                    mode=mode,
+                    mode=st.session_state.get(k("mode"), MODE_CUSTOM),
                     template_id=template_id,
                     source_channel=source_channel,
                     payload=build_event_payload(
@@ -7418,32 +7833,49 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
                         list_id=challenge_id or template_id or mode,
                         list_size=total,
                         comparison_count=comparisons,
-                        surface="result_link",
+                        poster_type="contested_choice",
+                        poster_item_count=2,
                     ),
-                )
-            if render_copy_button("复制猜冠军文案", challenge_invite_text, "copy_guess_champion_caption", "猜冠军文案"):
-                track_event(
-                    EVENT_SHARE_LINK_COPIED,
-                    challenge_id=challenge_id,
-                    mode=mode,
-                    template_id=template_id,
-                    source_channel=source_channel,
-                    payload=build_event_payload(
-                        route="result",
-                        list_id=challenge_id or template_id or mode,
-                        list_size=total,
-                        comparison_count=comparisons,
-                        surface="guess_champion",
-                    ),
-                )
-            render_peer_contact_section(
-                ranked=ranked,
-                mode=mode,
-                challenge_id=challenge_id,
-                template_id=template_id,
-                total=total,
-                compact=True,
+                ),
             )
+        if render_copy_button("复制链接", challenge_url, "copy_result_challenge_link", "片单链接"):
+            track_event(
+                EVENT_SHARE_LINK_COPIED,
+                challenge_id=challenge_id,
+                mode=mode,
+                template_id=template_id,
+                source_channel=source_channel,
+                payload=build_event_payload(
+                    route="result",
+                    list_id=challenge_id or template_id or mode,
+                    list_size=total,
+                    comparison_count=comparisons,
+                    surface="result_link",
+                ),
+            )
+        if render_copy_button("复制猜冠军文案", challenge_invite_text, "copy_guess_champion_caption", "猜冠军文案"):
+            track_event(
+                EVENT_SHARE_LINK_COPIED,
+                challenge_id=challenge_id,
+                mode=mode,
+                template_id=template_id,
+                source_channel=source_channel,
+                payload=build_event_payload(
+                    route="result",
+                    list_id=challenge_id or template_id or mode,
+                    list_size=total,
+                    comparison_count=comparisons,
+                    surface="guess_champion",
+                ),
+            )
+        render_peer_contact_section(
+            ranked=ranked,
+            mode=mode,
+            challenge_id=challenge_id,
+            template_id=template_id,
+            total=total,
+            compact=True,
+        )
 
     with st.expander("发布文案", expanded=False):
         st.text_area("文案", value=share_caption, height=220)
@@ -7566,6 +7998,11 @@ def render_right_panel() -> None:
         unsafe_allow_html=True,
     )
     st.caption(f"{mode_label}。快捷键：A/← 选择左侧，D/→ 选择右侧。{'已隐藏过程名单，结束后再揭晓。' if blind_mode else ''}")
+    render_sorting_scope_rescue(
+        remaining_estimate=remaining_estimate,
+        comparisons=comparisons,
+        top_k=top_k,
+    )
 
     if top_k is None:
         st.markdown("### 你更喜欢哪一个？")
@@ -7876,6 +8313,70 @@ def build_home_action_url(params: Dict[str, Any]) -> str:
     return f"?{urlencode(query)}"
 
 
+def render_featured_quick_start() -> None:
+    config = get_experiment_config(
+        get_session_id(),
+        "home_featured_quick_start_v1",
+        {
+            "show_featured_quick_start": False,
+            "featured_template_id": "classic-scifi",
+            "featured_kicker": "近期完成最多 · 直接开排",
+            "featured_title": "先用一份短片单，排出你的科幻 Top 10",
+            "featured_copy": "12 部经典科幻，每次只做二选一；不用填参数，完成后可生成 Top 10 海报。",
+            "featured_cta": "直接开始",
+        },
+    )
+    track_experiment_exposure("home_featured_quick_start", ["home_featured_quick_start_v1"])
+    if not bool(config.get("show_featured_quick_start", False)):
+        return
+
+    template_id = str(config.get("featured_template_id") or "classic-scifi")
+    template = get_template(template_id)
+    if not template:
+        return
+
+    template_name = str(template.get("name") or template_id)
+    top_k = int(template.get("top_k") or 10)
+    item_count = len(template.get("items", []))
+    href = html.escape(
+        build_home_action_url(
+            {
+                "list": template_id,
+                "entry_surface": "home_featured_quick_start",
+            }
+        ),
+        quote=True,
+    )
+    poster_asset = Path(str(template.get("card_poster_asset") or ""))
+    poster_src = image_file_data_uri(Path(__file__).parent / poster_asset) if poster_asset else ""
+    poster_html = (
+        f'<img class="zero-start-poster" src="{html.escape(str(poster_src), quote=True)}" '
+        f'alt="{html.escape(str(template.get("card_poster_title") or template_name), quote=True)}海报" loading="eager">'
+        if poster_src
+        else ""
+    )
+    st.markdown(
+        f"""
+        <a class="zero-start-strip" href="{href}" target="_self" aria-label="直接开始整理 {html.escape(template_name, quote=True)}">
+          <div class="zero-start-main">
+            <div class="zero-start-kicker">{html.escape(str(config.get("featured_kicker") or "近期完成最多 · 直接开排"))}</div>
+            <div class="zero-start-title">{html.escape(str(config.get("featured_title") or template_name))}</div>
+            <div class="zero-start-copy">{html.escape(str(config.get("featured_copy") or ""))}</div>
+          </div>
+          <div class="zero-start-pick">
+            {poster_html}
+            <div>
+              <div class="zero-start-template">{html.escape(template_name)}</div>
+              <div class="zero-start-meta">{item_count} 部电影 · Top {top_k}</div>
+            </div>
+          </div>
+          <div class="zero-start-cta">{html.escape(str(config.get("featured_cta") or "直接开始"))}</div>
+        </a>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def choose_zero_decision_template(template_ids: Any) -> Optional[Dict[str, object]]:
     ids = template_ids if isinstance(template_ids, list) else []
     active_templates, _ = get_home_light_list_view()
@@ -8044,6 +8545,7 @@ def render_mode_selection_page() -> None:
         "不用先想完整顺序，只在两部电影之间作一次取舍。",
         compact=True,
     )
+    render_featured_quick_start()
     render_zero_decision_start()
     render_home_duel_teaser()
 
@@ -8732,9 +9234,126 @@ def render_douban_parameter_page(mode: str) -> None:
                 rerun()
 
 
+def queue_douban_collect_ranking(
+    *,
+    mode: str,
+    clean_import_id_value: str,
+    clean_user_id: str,
+    preview_entries: List[Dict[str, Any]],
+    final_entries: List[Dict[str, Any]],
+    selected_media_types: List[str],
+    include_unknown_media_type: bool,
+    selected_ratings: List[int],
+    include_unrated: bool,
+    selected_years: Optional[List[int]],
+    include_unknown_year: bool,
+    top_k: Optional[int],
+    show_poster: bool,
+    personalization: Dict[str, Any],
+) -> bool:
+    if clean_import_id_value:
+        working_preview_entries = preview_entries
+        if not working_preview_entries:
+            imported = fetch_imported_movie_list(clean_import_id_value)
+            if imported:
+                store_imported_movie_list_state(imported, update_collect_input=False)
+                working_preview_entries = normalize_collect_entries(imported.entries)
+            else:
+                st.error("没有读到这份片单。请先点击“读取 / 预览片单”。")
+                return False
+        working_filtered_entries = filter_collect_entries(
+            working_preview_entries,
+            selected_media_types,
+            include_unknown_media_type,
+            selected_ratings,
+            include_unrated,
+            selected_years,
+            include_unknown_year,
+        )
+        working_final_entries = apply_excluded_titles(
+            working_filtered_entries,
+            list(st.session_state.get("ui_douban_collect_excluded_titles", [])),
+        )
+        if len(working_final_entries) < 2:
+            st.warning("当前筛选和手动移除后不足 2 个条目，无法开始整理。")
+            return False
+        effective_top_k = min(int(top_k), len(working_final_entries)) if top_k is not None else None
+        st.session_state["ui_pending_douban"] = {
+            "source_type": "collect_import",
+            "mode": mode,
+            "theme": (st.session_state.get("ui_douban_collect_theme", "") or "").strip() or "我的豆瓣已看电影总榜",
+            "top_k": effective_top_k,
+            "user_id": "",
+            "import_id": clean_import_id_value,
+            "entries": working_final_entries,
+            "selected_media_types": selected_media_types,
+            "include_unknown_media_type": include_unknown_media_type,
+            "selected_ratings": selected_ratings,
+            "include_unrated": include_unrated,
+            "selected_years": selected_years,
+            "include_unknown_year": include_unknown_year,
+            "show_poster": show_poster,
+            "user_name": personalization["user_name"],
+            "seed_text": personalization["seed_text"] or f"douban-import-{clean_import_id_value}",
+            "blind_mode": personalization["blind_mode"],
+            "side_shuffle": personalization["side_shuffle"],
+        }
+    elif clean_user_id:
+        if preview_entries and len(final_entries) < 2:
+            st.warning("当前筛选和手动移除后不足 2 个条目，无法开始整理。")
+            return False
+        effective_top_k = min(int(top_k), len(final_entries)) if top_k is not None and final_entries else top_k
+        st.session_state["ui_pending_douban"] = {
+            "source_type": "collect",
+            "mode": mode,
+            "theme": (st.session_state.get("ui_douban_collect_theme", "") or "").strip() or "我的豆瓣已看电影总榜",
+            "top_k": effective_top_k,
+            "user_id": clean_user_id,
+            "entries": final_entries if preview_entries else None,
+            "selected_media_types": selected_media_types,
+            "include_unknown_media_type": include_unknown_media_type,
+            "selected_ratings": selected_ratings,
+            "include_unrated": include_unrated,
+            "selected_years": selected_years,
+            "include_unknown_year": include_unknown_year,
+            "show_poster": show_poster,
+            "user_name": personalization["user_name"],
+            "seed_text": personalization["seed_text"] or f"douban-collect-{clean_user_id}",
+            "blind_mode": personalization["blind_mode"],
+            "side_shuffle": personalization["side_shuffle"],
+        }
+    else:
+        st.warning("请先输入有效的豆瓣 ID、看过页面链接，或片单 ID。")
+        return False
+
+    st.session_state["ui_step"] = 4
+    rerun()
+    return True
+
+
 def render_douban_collect_parameter_page(mode: str) -> None:
     if st.session_state.pop("ui_reset_douban_collect_requested", False):
         reset_douban_collect_parameter_defaults()
+
+    default_start_config = get_experiment_config(
+        get_session_id(),
+        "heavy_default_start_v1",
+        {
+            "show_heavy_default_start": False,
+            "recommended_top_k": 10,
+            "heavy_default_title": "第一次整理，建议先完成 Top 10",
+            "heavy_default_copy": "保留当前筛选和片单内容，只把目标缩短为 Top 10；以后仍可回来细排。",
+            "heavy_default_cta": "按当前片单快速排 Top 10",
+        },
+    )
+    track_experiment_exposure("douban_collect_config", ["heavy_default_start_v1"], route="config")
+    track_once(
+        "heavy_config_viewed_douban_collect",
+        EVENT_HEAVY_CONFIG_VIEWED,
+        mode=mode,
+        source_channel=get_source_channel(),
+        payload=build_event_payload(route="config", mode=mode, list_id=mode),
+    )
 
     if st.session_state.pop("ui_import_loaded_notice", False):
         st.success("导入成功。你可以先按类型、评分和标记年份筛选，再开始整理。")
@@ -8883,6 +9502,54 @@ def render_douban_collect_parameter_page(mode: str) -> None:
                 empty_text="当前候选已被筛选或手动移除为空。",
             )
 
+    if bool(default_start_config.get("show_heavy_default_start", False)):
+        recommended_top_k = max(1, int(default_start_config.get("recommended_top_k") or 10))
+        with bordered_container():
+            st.markdown(f"**{str(default_start_config.get('heavy_default_title') or '第一次整理，建议先完成 Top 10')}**")
+            st.caption(
+                str(
+                    default_start_config.get("heavy_default_copy")
+                    or "保留当前筛选和片单内容，只把目标缩短为 Top 10；以后仍可回来细排。"
+                )
+            )
+            if render_button_compat(
+                str(default_start_config.get("heavy_default_cta") or "按当前片单快速排 Top 10"),
+                key="btn_douban_collect_default_start",
+                use_container_width=True,
+                button_type="primary",
+            ):
+                if not clean_import_id_value and not clean_user_id:
+                    st.warning("先填写豆瓣 ID、看过页面链接或片单 ID，再使用快速开排。")
+                else:
+                    track_event(
+                        EVENT_DEFAULT_START_CLICKED,
+                        mode=mode,
+                        source_channel=get_source_channel(),
+                        payload=build_event_payload(
+                            route="config",
+                            mode=mode,
+                            list_id=clean_import_id_value or MODE_DOUBAN_COLLECT,
+                            top_k=recommended_top_k,
+                            surface="douban_collect_recommended_top10",
+                        ),
+                    )
+                    queue_douban_collect_ranking(
+                        mode=mode,
+                        clean_import_id_value=clean_import_id_value,
+                        clean_user_id=clean_user_id,
+                        preview_entries=preview_entries,
+                        final_entries=final_entries,
+                        selected_media_types=selected_media_types,
+                        include_unknown_media_type=include_unknown_media_type,
+                        selected_ratings=selected_ratings,
+                        include_unrated=include_unrated,
+                        selected_years=selected_years,
+                        include_unknown_year=include_unknown_year,
+                        top_k=recommended_top_k,
+                        show_poster=show_poster,
+                        personalization=personalization,
+                    )
+
     nav1, nav2, nav3 = st.columns(3)
     with nav1:
         if render_button_compat("返回", key="btn_douban_collect_back_step1", use_container_width=True):
@@ -8894,77 +9561,22 @@ def render_douban_collect_parameter_page(mode: str) -> None:
             rerun()
     with nav3:
         if render_button_compat("开始整理", key="btn_start_douban_collect_step2", use_container_width=True, button_type="primary"):
-            if clean_import_id_value:
-                if not preview_entries:
-                    imported = fetch_imported_movie_list(clean_import_id_value)
-                    if imported:
-                        store_imported_movie_list_state(imported, update_collect_input=False)
-                        preview_entries = normalize_collect_entries(imported.entries)
-                    else:
-                        st.error("没有读到这份片单。请先点击“读取 / 预览片单”。")
-                        return
-                filtered_entries = filter_collect_entries(
-                    preview_entries,
-                    selected_media_types,
-                    include_unknown_media_type,
-                    selected_ratings,
-                    include_unrated,
-                    selected_years,
-                    include_unknown_year,
-                )
-                final_entries = apply_excluded_titles(filtered_entries, list(st.session_state.get("ui_douban_collect_excluded_titles", [])))
-                if len(final_entries) < 2:
-                    st.warning("当前筛选和手动移除后不足 2 个条目，无法开始整理。")
-                    return
-                st.session_state["ui_pending_douban"] = {
-                    "source_type": "collect_import",
-                    "mode": mode,
-                    "theme": (st.session_state.get("ui_douban_collect_theme", "") or "").strip() or "我的豆瓣已看电影总榜",
-                    "top_k": top_k,
-                    "user_id": "",
-                    "import_id": clean_import_id_value,
-                    "entries": final_entries,
-                    "selected_media_types": selected_media_types,
-                    "include_unknown_media_type": include_unknown_media_type,
-                    "selected_ratings": selected_ratings,
-                    "include_unrated": include_unrated,
-                    "selected_years": selected_years,
-                    "include_unknown_year": include_unknown_year,
-                    "show_poster": show_poster,
-                    "user_name": personalization["user_name"],
-                    "seed_text": personalization["seed_text"] or f"douban-import-{clean_import_id_value}",
-                    "blind_mode": personalization["blind_mode"],
-                    "side_shuffle": personalization["side_shuffle"],
-                }
-                st.session_state["ui_step"] = 4
-                rerun()
-            elif clean_user_id:
-                if preview_entries and len(final_entries) < 2:
-                    st.warning("当前筛选和手动移除后不足 2 个条目，无法开始整理。")
-                    return
-                st.session_state["ui_pending_douban"] = {
-                    "source_type": "collect",
-                    "mode": mode,
-                    "theme": (st.session_state.get("ui_douban_collect_theme", "") or "").strip() or "我的豆瓣已看电影总榜",
-                    "top_k": top_k,
-                    "user_id": clean_user_id,
-                    "entries": final_entries if preview_entries else None,
-                    "selected_media_types": selected_media_types,
-                    "include_unknown_media_type": include_unknown_media_type,
-                    "selected_ratings": selected_ratings,
-                    "include_unrated": include_unrated,
-                    "selected_years": selected_years,
-                    "include_unknown_year": include_unknown_year,
-                    "show_poster": show_poster,
-                    "user_name": personalization["user_name"],
-                    "seed_text": personalization["seed_text"] or f"douban-collect-{clean_user_id}",
-                    "blind_mode": personalization["blind_mode"],
-                    "side_shuffle": personalization["side_shuffle"],
-                }
-                st.session_state["ui_step"] = 4
-                rerun()
-            else:
-                st.warning("请先输入有效的豆瓣 ID、看过页面链接，或片单 ID。")
+            queue_douban_collect_ranking(
+                mode=mode,
+                clean_import_id_value=clean_import_id_value,
+                clean_user_id=clean_user_id,
+                preview_entries=preview_entries,
+                final_entries=final_entries,
+                selected_media_types=selected_media_types,
+                include_unknown_media_type=include_unknown_media_type,
+                selected_ratings=selected_ratings,
+                include_unrated=include_unrated,
+                selected_years=selected_years,
+                include_unknown_year=include_unknown_year,
+                top_k=top_k,
+                show_poster=show_poster,
+                personalization=personalization,
+            )
 
 
 def render_parameter_page() -> None:

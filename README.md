@@ -36,7 +36,7 @@ The case study publishes aggregate findings only, not raw user events, session i
 - 内置豆瓣高分、导演作品、华语高分、主题片单等多种起始片单。
 - 支持自定义电影片单，并生成可分享的同题挑战链接。
 - 支持豆瓣已看导入，适合整理自己的已看电影总榜，并可按电影 / 剧集类型筛选与开始前预编辑。
-- 支持结果海报、二维码分享、复制分享文案和移动端优先交互。
+- 支持带电影海报的 Top 10 结果图、纯文字 Top 100 长榜、二维码分享、复制分享文案和移动端优先交互。
 - 支持匿名行为埋点和私密后台数据看板。
 
 ## 数据分析与事件埋点
@@ -104,15 +104,22 @@ python promo_assets/generate_builtin_list_thumbnails.py
 
 ## A/B 实验框架
 
-实验配置位于 [experiments.py](experiments.py)。当前 active 实验目标是优化“渲染后行动率”：`home_content_rendered` 后发生 `list_opened` / `list_selected` / `sorting_started` 的去重 session 比例。新实验都使用 `experiment_exposed` 作为严格曝光分母：
+实验配置位于 [experiments.py](experiments.py)。v3.8 已停止 v3.4 / v3.5 的 5 个实验，并按截至 2026-07-24 的代理指标与下游结果方向性收口：
 
-- `post_render_hero_value_v1`：首屏价值表达实验，对比原首屏表达与更明确的结果预览表达。
-- `quick_list_card_framing_v1`：快速片单卡片行动框架实验，对比“推荐理由 + 开始整理”与更低成本的“先排 Top N”行动提示。
-- `douban_collect_entry_cta_v1`：豆瓣已看入口 CTA 降成本实验，对比总榜叙事与下一步低门槛提示。
-- `home_zero_decision_start_v1`：首页零决策开排实验，对比不显示新入口与一键进入稳定推荐片单。
-- `home_duel_teaser_v1`：首页先试一题实验，对比不显示试看题与点击一组二选一后进入同一份片单。
+- `post_render_hero_value_v1 → outcome_preview`
+- `quick_list_card_framing_v1 → control`
+- `douban_collect_entry_cta_v1 → control`
+- `home_zero_decision_start_v1 → control`
+- `home_duel_teaser_v1 → control`
 
-`home_layout_order_v1` 和 `builtin_card_poster_v1` 已停止并全量收口，首页默认先展示内置快速片单，内置片单卡默认显示预制代表电影海报。历史实验配置和事件 payload 仍保留在后台，用于继续复盘分版本表现。
+历史实验的 `experiment_exposed` 被 Supabase 写入策略拒绝，因此没有严格曝光分母；上述结论不声称统计显著。v3.8 通过 [20260724_abtest_v38_events.sql](supabase/migrations/20260724_abtest_v38_events.sql) 修复策略，并上线 4 个 active 实验：
+
+- `home_featured_quick_start_v1`：针对首页渲染后 70.7% 无行动，测试近期高完成片单单一主行动。
+- `heavy_default_start_v1`：针对重链路仅 27.8% 从配置进入开排，测试豆瓣已看推荐 Top 10 快速开始。
+- `sorting_scope_rescue_v1`：针对开始后完成率偏低与 P90 455.8 次取舍，测试保留进度并中途缩短为 Top 10。
+- `result_share_bundle_v1`：针对完成后分享/海报行动偏低，测试结果顶部一键分享包。
+
+新实验使用 `experiment_exposed` 作为严格分母；后台分别展示曝光后行动率、开始率、完成率和分享/海报率，并按实验配置选择主指标。`home_layout_order_v1` 和 `builtin_card_poster_v1` 仍保持已收口状态。
 
 以后新增实验时，一般不需要改后台看板或埋点聚合逻辑。常规流程是：
 
@@ -137,7 +144,7 @@ streamlit run merged_douban_ranker_v3.py
 
 ```bash
 python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py light_list_catalog.py light_list_runtime.py release_history.py promo_assets/generate_builtin_list_thumbnails.py
-python -m unittest tests.test_light_list_catalog -v
+python -m unittest tests.test_abtest_v38 tests.test_result_posters tests.test_light_list_catalog -v
 ```
 
 ## 隐私说明
@@ -200,7 +207,8 @@ python -m unittest tests.test_light_list_catalog -v
 - 海报来源包括豆瓣页面原图、豆瓣 Top250 索引、IMDb 备用源、导入片单附带的原始海报 URL。
 - 使用本地缓存和预加载，减少每次选择后的等待。
 - 如果没有拿到真实海报，不显示意义不明的错误图片。
-- 结果海报可选择带或不带网站二维码，带二维码时默认指向同一份片单或应用首页，方便二次传播。
+- 结果页可生成固定 9:16 的 Top 10 海报（带电影海报）和固定 3:4 的 Top 100 海报（纯文字），两者都可选择带或不带二维码。
+- 当结果不足 10/100 名时，海报按已有可靠名次显示真实 `Top N`；超过 100 名时，长榜只展示前 100 名并注明完整结果数量。
 - 结果页突出冠军电影和最纠结的一组选择，支持复制“猜冠军”文案和同题挑战链接。
 - 支持结果海报和片单海报两种素材。
 - 支持 TXT、CSV、Markdown、片单 JSON 导出。
@@ -292,7 +300,7 @@ streamlit run merged_douban_ranker_v3.py
 
 ```bash
 python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py light_list_catalog.py light_list_runtime.py release_history.py promo_assets/generate_builtin_list_thumbnails.py
-python -m unittest tests.test_light_list_catalog -v
+python -m unittest tests.test_abtest_v38 tests.test_result_posters tests.test_light_list_catalog -v
 ```
 
 没有配置 Supabase 时，应用仍然可以运行；公开统计、短片单链接、豆瓣已看跨设备导入会自动降级或隐藏。
@@ -334,7 +342,7 @@ ADMIN_DASHBOARD_TOKEN = "change-this-token"
 3. 入口文件选择 `merged_douban_ranker_v3.py`。
 4. 配置上面的 Secrets。
 5. 确认 `packages.txt` 已包含 `fonts-noto-cjk`，否则中文海报可能显示为方块。
-6. 打开公网链接，完整测试一次内置片单、结果海报、复制链接、豆瓣已看导入。
+6. 打开公网链接，完整测试一次内置片单、Top 10 / Top 100 结果海报、复制链接、豆瓣已看导入。
 7. 用 `?admin=<ADMIN_DASHBOARD_TOKEN>` 检查匿名数据看板、时间筛选、漏斗和最近事件导出。
 
 ---
@@ -722,6 +730,22 @@ https://movie.douban.com/people/123456/collect
 - 为新增的 24 份轮换模板补齐静态代表电影海报，至此 32 份轻量片单全部具备卡片缩略图。
 - Admin 新增“轻量片单维护”tab，Supabase 新增 roster、日统计和轮换记录。
 - 新增 [docs/version_updates/version3.6.md](docs/version_updates/version3.6.md) 和 [20260629_light_list_auto_rotation.sql](supabase/migrations/20260629_light_list_auto_rotation.sql)。
+
+### v3.7 Top 10 / Top 100 结果海报
+
+- 结果页新增两个按需生成入口：Top 10 带电影海报，Top 100 使用纯文字多栏长榜。
+- Top 10 固定为 `1080×1920`，Top 100 固定为 `1800×2400`，共享海报风格和二维码设置。
+- 海报标题使用实际可靠名次；不足目标数量时显示真实 `Top N`，超过 100 名时只展示前 100 名。
+- `poster_downloaded` 和 `qr_viewed` 使用 `result_top10` / `result_top100` 区分，并记录 `poster_item_count`。
+- 新增 [docs/version_updates/version3.7.md](docs/version_updates/version3.7.md)。
+
+### v3.8 漏斗修复与新一轮 A/B 实验
+
+- 根据 2026-06-25 至 2026-07-24 的聚合报告，停止 5 个旧实验并记录方向性胜出版本。
+- 新增首页近期高完成片单直达、豆瓣已看推荐 Top 10、长流程 Top 10 救援和结果页一键分享包 4 个 A/B 实验。
+- 修复 Supabase anon insert policy 遗漏 `experiment_exposed` 的问题，并新增 4 个功能交互事件。
+- 后台实验分析新增曝光后开始、完成、分享/海报指标，配置表明确每个实验的主指标。
+- 上线前必须执行 [20260724_abtest_v38_events.sql](supabase/migrations/20260724_abtest_v38_events.sql)；完整说明见 [docs/version_updates/version3.8.md](docs/version_updates/version3.8.md)。
 
 ---
 
