@@ -181,17 +181,17 @@
         .replaceAll("'", "&#039;");
     }
 
-    function cardHtml(side, data) {
-      const label = escapeHtml(data?.label || (side === "left" ? "选项 A" : "选项 B"));
+    function cardHtml(side, data, copy) {
+      const label = escapeHtml(data?.label || (side === "left" ? copy.leftLabel : copy.rightLabel));
       const title = escapeHtml(data?.title || "");
       const hotkey = escapeHtml(data?.hotkey || (side === "left" ? "A / ←" : "D / →"));
       const poster = data?.poster
         ? `<img class="poster" src="${data.poster}" alt="${title}">`
-        : `<div class="fallback">暂无真实海报<br>只按片名判断</div>`;
+        : `<div class="fallback">${escapeHtml(copy.noPoster)}<br>${escapeHtml(copy.titleOnly)}</div>`;
       const choice = side === "left" ? "A" : "B";
       return `
-        <button class="card" type="button" data-choice="${side}" aria-label="选择 ${label}">
-          <div class="head"><span>${label}</span><span>取舍</span></div>
+        <button class="card" type="button" data-choice="${side}" aria-label="${escapeHtml(copy.choose)} ${label}">
+          <div class="head"><span>${label}</span><span>${escapeHtml(copy.pick)}</span></div>
           <div class="title">${title}</div>
           <div class="poster-frame">${poster}</div>
           <div class="choice"><span>${choice}</span><span class="hotkey">${hotkey}</span></div>
@@ -200,10 +200,18 @@
     }
 
     function render(args) {
+      const copy = {
+        leftLabel: String(args.copy?.leftLabel || "选项 A"),
+        rightLabel: String(args.copy?.rightLabel || "选项 B"),
+        noPoster: String(args.copy?.noPoster || "暂无真实海报"),
+        titleOnly: String(args.copy?.titleOnly || "只按片名判断"),
+        choose: String(args.copy?.choose || "选择"),
+        pick: String(args.copy?.pick || "取舍"),
+      };
       root.innerHTML = `
         <div class="grid">
-          ${cardHtml("left", args.left)}
-          ${cardHtml("right", args.right)}
+          ${cardHtml("left", args.left, copy)}
+          ${cardHtml("right", args.right, copy)}
         </div>
       `;
       for (const card of root.querySelectorAll(".card")) {

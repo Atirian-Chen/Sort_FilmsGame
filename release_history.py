@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional
 
 
-APP_VERSION = "v3.8"
-APP_RELEASE_ID = "v3.8-abtest-funnel-recovery"
-APP_RELEASE_NAME = "漏斗修复与新一轮 A/B 实验"
-APP_RELEASED_AT = "2026-07-24T18:09:16+08:00"
+APP_VERSION = "v3.9"
+APP_RELEASE_ID = "v3.9-english-core-flow"
+APP_RELEASE_NAME = "中英文切换与英文核心流程"
+APP_RELEASED_AT = "2026-07-27T20:56:52+08:00"
 
 
 # Version starts are based on the first push/deploy commit of each feature phase
@@ -201,6 +201,13 @@ RELEASE_TIMELINE = [
         "release_name": "Top 10 / Top 100 结果海报",
         "released_at": "2026-07-03T16:40:50+08:00",
         "commit": "",
+    },
+    {
+        "app_version": "v3.8",
+        "release_id": "v3.8-abtest-funnel-recovery",
+        "release_name": "漏斗修复与新一轮 A/B 实验",
+        "released_at": "2026-07-24T18:09:16+08:00",
+        "commit": "401a63b",
     },
     {
         "app_version": APP_VERSION,

@@ -8,6 +8,10 @@ Sort_FilmsGame 是一个影视偏好排序 Web App。它把“手动给几十部
 
 [https://sortfilmsgamegit.streamlit.app](https://sortfilmsgamegit.streamlit.app)
 
+英文首页：[https://sortfilmsgamegit.streamlit.app/?lang=en](https://sortfilmsgamegit.streamlit.app/?lang=en)
+
+英文诺兰片单：[https://sortfilmsgamegit.streamlit.app/?list=nolan&lang=en](https://sortfilmsgamegit.streamlit.app/?list=nolan&lang=en)
+
 ## Analytics and Product Insights
 
 Film Sort has anonymous product analytics backed by Supabase `analytics_events`.
@@ -33,6 +37,7 @@ The case study publishes aggregate findings only, not raw user events, session i
 ## 核心功能
 
 - 1v1 电影偏好排序，支持 Top N 和完整排序。
+- 支持中文 / English 切换；英文模式覆盖首页、6 份内置片单、自定义片单、二选一流程、结果页和同题分享链接。
 - 内置豆瓣高分、导演作品、华语高分、主题片单等多种起始片单。
 - 支持自定义电影片单，并生成可分享的同题挑战链接。
 - 支持豆瓣已看导入，适合整理自己的已看电影总榜，并可按电影 / 剧集类型筛选与开始前预编辑。
@@ -143,8 +148,8 @@ streamlit run merged_douban_ranker_v3.py
 语法检查：
 
 ```bash
-python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py light_list_catalog.py light_list_runtime.py release_history.py promo_assets/generate_builtin_list_thumbnails.py
-python -m unittest tests.test_abtest_v38 tests.test_result_posters tests.test_light_list_catalog -v
+python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py i18n.py launch_copy.py light_list_catalog.py light_list_runtime.py release_history.py promo_assets/generate_builtin_list_thumbnails.py
+python -m unittest tests.test_abtest_v38 tests.test_i18n_v39 tests.test_result_posters tests.test_light_list_catalog -v
 ```
 
 ## 隐私说明
@@ -746,6 +751,14 @@ https://movie.douban.com/people/123456/collect
 - 修复 Supabase anon insert policy 遗漏 `experiment_exposed` 的问题，并新增 4 个功能交互事件。
 - 后台实验分析新增曝光后开始、完成、分享/海报指标，配置表明确每个实验的主指标。
 - 上线前必须执行 [20260724_abtest_v38_events.sql](supabase/migrations/20260724_abtest_v38_events.sql)；完整说明见 [docs/version_updates/version3.8.md](docs/version_updates/version3.8.md)。
+
+### v3.9 中英文切换与英文核心流程
+
+- 新增页面级中文 / English 切换，英文状态写入 `lang=en`，并在内置片单、同题挑战和自定义片单链接中持续保留。
+- 英文首页提供诺兰、宫崎骏、新海诚、迪士尼动画、双人片单和豆瓣高分 6 份起始片单，并补齐这些片单的英文名称、说明和电影标题。
+- 英文化自定义片单设置、排序状态、二选一卡片、复制组件、结果榜单和分享文案；匿名事件 payload 新增 `language`。
+- 豆瓣 Top250 / 豆瓣已看导入继续保留在中文模式，避免把依赖中文站点的流程误包装成完整英文功能。
+- 新增 [i18n.py](i18n.py)、[tests/test_i18n_v39.py](tests/test_i18n_v39.py) 和 [docs/version_updates/version3.9.md](docs/version_updates/version3.9.md)。
 
 ---
 

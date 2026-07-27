@@ -98,6 +98,16 @@ from import_store import (
 )
 from release_history import APP_VERSION
 from light_list_runtime import resolve_home_light_list_state
+from i18n import (
+    ENGLISH_HOME_TEMPLATE_IDS,
+    LANG_EN,
+    LANG_ZH,
+    normalize_language,
+    translate_movie_title,
+    translate_template_field,
+    translate_theme,
+    with_language_param,
+)
 from launch_copy import (
     FILM_CHALLENGE_TEMPLATES,
     HERO_SUBTITLE,
@@ -499,9 +509,9 @@ def show_image_compat(image_data: bytes) -> bool:
 
 def render_boot_loading_notice() -> None:
     st.markdown(
-        """
+        f"""
         <div style="margin: 0 0 12px; padding: 10px 14px; border: 1px solid #d8dee8; border-radius: 8px; background: #f6f8fb; color: #3f4957; font-size: 14px; font-weight: 700;">
-          第一次打开可能需要几秒
+          {html.escape(tr("第一次打开可能需要几秒", "The first load may take a few seconds"))}
         </div>
         """,
         unsafe_allow_html=True,
@@ -510,7 +520,7 @@ def render_boot_loading_notice() -> None:
 
 def render_home_collab_badge() -> None:
     st.markdown(
-        '<div class="home-collab-badge">合作：13823698639@163.com</div>',
+        f'<div class="home-collab-badge">{html.escape(tr("合作", "Contact"))}：13823698639@163.com</div>',
         unsafe_allow_html=True,
     )
 
@@ -640,6 +650,70 @@ def get_query_param(name: str) -> str:
     return str(value or "")
 
 
+def set_query_param(name: str, value: str) -> None:
+    try:
+        st.query_params[name] = value
+        return
+    except Exception:
+        pass
+    try:
+        params = st.experimental_get_query_params()
+        params[name] = value
+        st.experimental_set_query_params(**params)
+    except Exception:
+        return
+
+
+def get_ui_language() -> str:
+    query_language = str(get_query_param("lang") or "").strip()
+    if query_language:
+        language = normalize_language(query_language)
+        st.session_state["ui_language"] = language
+        return language
+    language = normalize_language(st.session_state.get("ui_language", LANG_ZH))
+    st.session_state["ui_language"] = language
+    return language
+
+
+def is_english() -> bool:
+    return get_ui_language() == LANG_EN
+
+
+def tr(chinese: str, english: str) -> str:
+    return english if is_english() else chinese
+
+
+def display_movie_title(title: Any) -> str:
+    return translate_movie_title(title, get_ui_language())
+
+
+def display_template_field(template: Dict[str, object], field: str) -> str:
+    return translate_template_field(template, field, get_ui_language())
+
+
+def display_theme(theme: Any, template_id: Any = "") -> str:
+    return translate_theme(theme, template_id, get_ui_language())
+
+
+def render_language_switcher() -> None:
+    current = get_ui_language()
+    left, right = st.columns([5, 1])
+    with left:
+        st.empty()
+    with right:
+        selected = st.selectbox(
+            "Language / 语言",
+            [LANG_ZH, LANG_EN],
+            index=1 if current == LANG_EN else 0,
+            format_func=lambda value: "English" if value == LANG_EN else "中文",
+            key="ui_language_selector",
+        )
+    if selected != current:
+        st.session_state["ui_language"] = selected
+        set_query_param("lang", selected)
+        rerun()
+
+
 def clear_query_param(name: str) -> None:
     try:
         if name in st.query_params:
@@ -656,7 +730,15 @@ def clear_query_param(name: str) -> None:
 
 
 def render_copy_button(label: str, text: str, key: str, placeholder: str = "") -> bool:
-    result = COPY_BUTTON_COMPONENT(label=label, text=text, placeholder=placeholder, key=key, default=None)
+    result = COPY_BUTTON_COMPONENT(
+        label=label,
+        text=text,
+        placeholder=placeholder,
+        successText=tr("已复制", "Copied"),
+        permissionText=tr("已复制，请确认剪贴板权限", "Copied — check clipboard permission"),
+        key=key,
+        default=None,
+    )
     if isinstance(result, dict):
         return bool(result.get("copied"))
     return False
@@ -689,6 +771,7 @@ def build_event_payload(**payload: Any) -> Dict[str, Any]:
     merged: Dict[str, Any] = {
         "page": payload.pop("page", "app"),
         "route": payload.pop("route", f"step_{st.session_state.get('ui_step', 1)}"),
+        "language": get_ui_language(),
     }
     merged.update(get_attribution_params())
     experiment_context = current_experiment_assignment()
@@ -3641,7 +3724,7 @@ def render_ranked_list(ranked: List[str]) -> None:
             f"""
             <div class="rank-card{top_class}">
               <span class="rank-num">#{i:02d}</span>
-              <span class="rank-name">{html.escape(item)}</span>
+              <span class="rank-name">{html.escape(display_movie_title(item))}</span>
             </div>
             """,
             unsafe_allow_html=True,
@@ -4122,8 +4205,10 @@ def current_challenge_for_share() -> Challenge:
 def current_challenge_url() -> str:
     challenge = current_challenge_for_share()
     if challenge.id:
-        return build_challenge_url(challenge)
-    return build_challenge_url(challenge, use_payload_fallback=True)
+        url = build_challenge_url(challenge)
+    else:
+        url = build_challenge_url(challenge, use_payload_fallback=True)
+    return with_language_param(url, get_ui_language())
 
 
 def start_challenge(challenge: Challenge, *, show_poster: bool = True) -> None:
@@ -6574,6 +6659,43 @@ def render_admin_dashboard() -> None:
 
 
 def render_cover_header() -> None:
+    if is_english():
+        st.markdown(
+            """
+            <div class="launch-hero">
+              <div class="hero-copy">
+                <div class="hero-kicker">PAIRWISE MOVIE RANKER</div>
+                <h1 class="hero-title">Build your<br>personal movie ranking</h1>
+                <p class="hero-subtitle">Pick between two films at a time. Small choices become a Top list you can share.</p>
+                <div class="hero-outcomes">
+                  <div class="hero-outcome">Start from a ready-made list</div>
+                  <div class="hero-outcome">Make one choice at a time</div>
+                  <div class="hero-outcome">Reveal your champion</div>
+                  <div class="hero-outcome">Share the same list</div>
+                </div>
+              </div>
+              <div class="example-card">
+                <div class="example-eyebrow">YOUR RESULT</div>
+                <div class="example-title">My Movie Top 10</div>
+                <div class="example-champion">
+                  <div class="example-champion-label">Champion</div>
+                  <div class="example-champion-name">Spirited Away</div>
+                </div>
+                <div class="example-rank"><span>#02</span><div>Interstellar</div></div>
+                <div class="example-rank"><span>#03</span><div>Farewell My Concubine</div></div>
+                <div class="example-rank"><span>#04</span><div>Inception</div></div>
+                <div class="example-footer">
+                  <div class="example-result-chip">Ranked list</div>
+                  <div class="example-result-chip">Share link</div>
+                </div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        safe_divider()
+        return
+
     experiment_config = get_experiment_config(
         get_session_id(),
         "post_render_hero_value_v1",
@@ -7437,14 +7559,34 @@ def render_battle_picker(
     right_label: str,
     show_poster: bool,
     key: str,
+    left_display_title: str = "",
+    right_display_title: str = "",
 ) -> Optional[str]:
     left_poster_bytes = get_poster_for_option(left_title, fetch=True) if show_poster else None
     right_poster_bytes = get_poster_for_option(right_title, fetch=True) if show_poster else None
     left_poster = poster_preview_data_uri(left_poster_bytes) if left_poster_bytes else None
     right_poster = poster_preview_data_uri(right_poster_bytes) if right_poster_bytes else None
     result = BATTLE_PICKER_COMPONENT(
-        left={"label": left_label, "title": left_title, "poster": left_poster, "hotkey": "A / ←"},
-        right={"label": right_label, "title": right_title, "poster": right_poster, "hotkey": "D / →"},
+        left={
+            "label": left_label,
+            "title": left_display_title or left_title,
+            "poster": left_poster,
+            "hotkey": "A / ←",
+        },
+        right={
+            "label": right_label,
+            "title": right_display_title or right_title,
+            "poster": right_poster,
+            "hotkey": "D / →",
+        },
+        copy={
+            "leftLabel": tr("选项 A", "Option A"),
+            "rightLabel": tr("选项 B", "Option B"),
+            "noPoster": tr("暂无真实海报", "Poster unavailable"),
+            "titleOnly": tr("只按片名判断", "Choose by title"),
+            "choose": tr("选择", "Choose"),
+            "pick": tr("取舍", "Pick"),
+        },
         key=key,
         default=None,
     )
@@ -7491,7 +7633,195 @@ def completion_top_items(ranked: List[str], limit: int = 10) -> List[str]:
 # =========================
 # 排序页面渲染
 # =========================
+def build_english_share_caption(
+    *,
+    theme: str,
+    ranked: List[str],
+    comparisons: int,
+    challenge_url: str,
+) -> str:
+    lines = [
+        "I built this ranking with Film Sort—one pairwise choice at a time.",
+        f"List: {theme}",
+        "",
+    ]
+    lines.extend(
+        f"{index}. {display_movie_title(item)}"
+        for index, item in enumerate(ranked[:10], 1)
+    )
+    if len(ranked) > 10:
+        lines.append(f"…and {len(ranked) - 10} more films.")
+    lines.extend(
+        [
+            "",
+            f"Made after {comparisons} choices.",
+            f"Rank the same list: {challenge_url}",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def render_result_section_en(total: int, comparisons: int, top_k: Optional[int]) -> None:
+    ranked = st.session_state.get(k("ranked"), [])
+    skipped_items = st.session_state.get(k("skipped_items"), [])
+    defers = st.session_state.get(k("defers"), 0)
+    challenge_id = st.session_state.get(k("challenge_id"), "")
+    template_id = st.session_state.get(k("template_id"), "")
+    source_channel = st.session_state.get(k("source_channel"), "")
+    mode = st.session_state.get(k("mode"), MODE_CUSTOM)
+    theme = display_theme(st.session_state.get(k("theme"), "My movie ranking"), template_id)
+    challenge_url = current_challenge_url()
+
+    completion_signature = build_share_poster_signature(
+        st.session_state.get(k("theme"), "ranking"),
+        ranked,
+        skipped_items,
+        top_k,
+        mode,
+        st.session_state.get(k("user_name"), ""),
+        "completion",
+        "event",
+    )
+    if st.session_state.get(k("completion_event_signature")) != completion_signature:
+        payload = build_event_payload(
+            route="result",
+            list_id=challenge_id or template_id or mode,
+            list_size=total,
+            total=total,
+            ranked_count=len(ranked),
+            skipped_count=len(skipped_items),
+            comparison_count=comparisons,
+            comparisons=comparisons,
+            top_k=top_k,
+            defers=defers,
+            session_hint=get_session_id()[-8:],
+        )
+        if template_id and ranked:
+            payload["winner"] = ranked[0]
+        if ranked and should_store_completion_top_items(mode, template_id):
+            payload["top_items"] = completion_top_items(ranked)
+        track_event(
+            EVENT_RANKING_COMPLETED,
+            challenge_id=challenge_id,
+            mode=mode,
+            template_id=template_id,
+            source_channel=source_channel,
+            payload=payload,
+        )
+        st.session_state[k("completion_event_signature")] = completion_signature
+
+    if st.session_state.get(k("result_view_event_signature")) != completion_signature:
+        track_event(
+            EVENT_RESULT_VIEWED,
+            challenge_id=challenge_id,
+            mode=mode,
+            template_id=template_id,
+            source_channel=source_channel,
+            payload=build_event_payload(
+                route="result",
+                list_id=challenge_id or template_id or mode,
+                list_size=total,
+                comparison_count=comparisons,
+                top_k=top_k,
+            ),
+        )
+        st.session_state[k("result_view_event_signature")] = completion_signature
+
+    champion = display_movie_title(ranked[0]) if ranked else "—"
+    result_scope = "Full ranking" if top_k is None else f"Top {min(top_k, len(ranked))}"
+    st.markdown(
+        f"""
+        <div class="result-peak">
+          <div class="result-peak-kicker">COMPLETE · {html.escape(result_scope)}</div>
+          <div class="result-peak-title">{html.escape(theme)}</div>
+          <div class="result-peak-grid">
+            <div class="result-peak-panel">
+              <div class="result-peak-label">Your champion</div>
+              <div class="result-peak-value">{html.escape(champion)}</div>
+              <div class="result-peak-note">Your pairwise choices placed this film at the top.</div>
+            </div>
+            <div class="result-peak-panel">
+              <div class="result-peak-label">How it was made</div>
+              <div class="result-peak-value">{comparisons} choices</div>
+              <div class="result-peak-note">{total} films entered this ranking.</div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    summary = f"Ranked {total} films with {comparisons} pairwise choices."
+    if skipped_items:
+        summary += f" Skipped {len(skipped_items)}."
+    if defers:
+        summary += f" Deferred {defers} times."
+    st.caption(summary)
+
+    share_caption = build_english_share_caption(
+        theme=theme,
+        ranked=ranked,
+        comparisons=comparisons,
+        challenge_url=challenge_url,
+    )
+    share_col, link_col = st.columns(2)
+    with share_col:
+        if render_copy_button("Copy result text", share_caption, "copy_result_share_caption_en", "Result text"):
+            track_event(
+                EVENT_SHARE_LINK_COPIED,
+                challenge_id=challenge_id,
+                mode=mode,
+                template_id=template_id,
+                source_channel=source_channel,
+                payload=build_event_payload(
+                    route="result",
+                    list_id=challenge_id or template_id or mode,
+                    list_size=total,
+                    comparison_count=comparisons,
+                    surface="caption_en",
+                ),
+            )
+    with link_col:
+        if render_copy_button("Copy same-list link", challenge_url, "copy_result_link_en", "List link"):
+            track_event(
+                EVENT_SHARE_LINK_COPIED,
+                challenge_id=challenge_id,
+                mode=mode,
+                template_id=template_id,
+                source_channel=source_channel,
+                payload=build_event_payload(
+                    route="result",
+                    list_id=challenge_id or template_id or mode,
+                    list_size=total,
+                    comparison_count=comparisons,
+                    surface="result_link_en",
+                ),
+            )
+
+    with st.expander("Share text", expanded=False):
+        st.text_area("Ready to post", value=share_caption, height=240, key="result_share_text_en")
+
+    safe_divider()
+    st.subheader("Your complete ranking")
+    render_ranked_list(ranked)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if render_button_compat("Undo last choice", key="btn_undo_result_en", use_container_width=True):
+            undo_last_step()
+    with col2:
+        if render_button_compat("Rank this list again", key="btn_reset_same_en", use_container_width=True):
+            reset_same_config()
+    with col3:
+        if render_button_compat("Start over", key="btn_clear_result_en", use_container_width=True):
+            clear_ranking_state()
+            rerun()
+
+
 def render_result_section(total: int, comparisons: int, top_k: Optional[int]) -> None:
+    if is_english():
+        render_result_section_en(total=total, comparisons=comparisons, top_k=top_k)
+        return
+
     ranked = st.session_state.get(k("ranked"), [])
     skipped_items = st.session_state.get(k("skipped_items"), [])
     user_name = st.session_state.get(k("user_name"), "")
@@ -7939,7 +8269,127 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
             rerun()
 
 
+def render_right_panel_en() -> None:
+    if not st.session_state.get(k("started"), False):
+        st.info("Choose a list first, then start making pairwise choices.")
+        return
+
+    theme = st.session_state.get(k("theme"), "My movie ranking")
+    template_id = st.session_state.get(k("template_id"), "")
+    total = st.session_state.get(k("total"), 0)
+    processed = st.session_state.get(k("processed"), 0)
+    comparisons = st.session_state.get(k("comparisons"), 0)
+    top_k = st.session_state.get(k("top_k"))
+    show_poster = st.session_state.get(k("show_poster"), False)
+    skipped_items = st.session_state.get(k("skipped_items"), [])
+    side_shuffle = st.session_state.get(k("side_shuffle"), True)
+    defers = st.session_state.get(k("defers"), 0)
+
+    if st.session_state.get(k("finished"), False):
+        st.subheader(display_theme(theme, template_id))
+        render_result_section_en(total=total, comparisons=comparisons, top_k=top_k)
+        return
+
+    prepare_next_item()
+    if st.session_state.get(k("finished"), False):
+        rerun()
+        return
+
+    current = st.session_state[k("current_item")]
+    low = st.session_state[k("low")]
+    high = st.session_state[k("high")]
+    opponent_index = get_current_opponent_index(st.session_state[k("ranked")], low, high)
+    opponent = st.session_state[k("ranked")][opponent_index]
+
+    progress = processed / total if total else 0
+    st.progress(progress)
+    remaining_estimate = estimated_remaining_comparisons(total, processed, top_k)
+    goal_label = "Full ranking" if top_k is None else f"Top {top_k}"
+    st.markdown(
+        f"""
+        <div class="compact-status">
+          <div class="status-chip"><div class="status-label">List</div><div class="status-value">{html.escape(display_theme(theme, template_id))}</div></div>
+          <div class="status-chip"><div class="status-label">Goal</div><div class="status-value">{html.escape(goal_label)}</div></div>
+          <div class="status-chip"><div class="status-label">Progress</div><div class="status-value">{processed}/{total}</div></div>
+          <div class="status-chip"><div class="status-label">Choices</div><div class="status-value">{comparisons}</div></div>
+          <div class="status-chip"><div class="status-label">Estimated left</div><div class="status-value">~{remaining_estimate}</div></div>
+          <div class="status-chip"><div class="status-label">Skipped / deferred</div><div class="status-value">{len(skipped_items)} / {defers}</div></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.caption("Keyboard: A/← chooses the left film, D/→ chooses the right film.")
+    st.markdown("### Which film do you prefer?")
+
+    if side_shuffle:
+        current_on_left = stable_int(
+            f"{current}|{opponent}|{comparisons}|{st.session_state.get(k('seed_text'), '')}"
+        ) % 2 == 0
+    else:
+        current_on_left = True
+
+    left_title = current if current_on_left else opponent
+    right_title = opponent if current_on_left else current
+    left_label = "New" if current_on_left else "Ranked"
+    right_label = "Ranked" if current_on_left else "New"
+
+    ctrl1, ctrl2, ctrl3, ctrl4 = st.columns(4)
+    with ctrl1:
+        if render_button_compat("Skip A", key="btn_skip_left_en", use_container_width=True):
+            if current_on_left:
+                handle_skip_current_item()
+            else:
+                handle_skip_opponent_item()
+    with ctrl2:
+        if render_button_compat("Skip B", key="btn_skip_right_en", use_container_width=True):
+            if current_on_left:
+                handle_skip_opponent_item()
+            else:
+                handle_skip_current_item()
+    with ctrl3:
+        if render_button_compat("Decide later", key="btn_defer_pair_en", use_container_width=True):
+            handle_defer_current_pair()
+    with ctrl4:
+        if render_button_compat("Undo", key="btn_undo_live_en", use_container_width=True):
+            undo_last_step()
+
+    component_key = f"battle_{processed}_{comparisons}_{stable_int(current + opponent)}"
+    choice = render_battle_picker(
+        left_title=left_title,
+        right_title=right_title,
+        left_label=left_label,
+        right_label=right_label,
+        show_poster=show_poster,
+        key=component_key,
+        left_display_title=display_movie_title(left_title),
+        right_display_title=display_movie_title(right_title),
+    )
+    if choice:
+        prefer_current = (choice == "left" and current_on_left) or (
+            choice == "right" and not current_on_left
+        )
+        handle_choice(prefer_left=prefer_current)
+        return
+
+    if show_poster:
+        schedule_poster_prefetch(upcoming_poster_candidates(current, opponent))
+
+    ranked = st.session_state.get(k("ranked"), [])
+    if not st.session_state.get(k("blind_mode"), False):
+        with st.expander(f"Current Top {len(ranked)}", expanded=False):
+            for index, item in enumerate(ranked, 1):
+                st.write(f"{index}. {display_movie_title(item)}")
+    if skipped_items:
+        with st.expander("Skipped films", expanded=False):
+            for index, item in enumerate(skipped_items, 1):
+                st.write(f"{index}. {display_movie_title(item)}")
+
+
 def render_right_panel() -> None:
+    if is_english():
+        render_right_panel_en()
+        return
+
     if not st.session_state.get(k("started"), False):
         st.info("片单准备好后，就可以开始逐组选择。")
         return
@@ -8101,11 +8551,11 @@ def render_step_header(step: int, title: str, subtitle: str = "", compact: bool 
     st.progress(step / 3)
 
     cols = st.columns(3)
-    labels = [
-        ("① 选片单", 1),
-        ("② 定范围", 2),
-        ("③ 作取舍", 3),
-    ]
+    labels = (
+        [("① Choose a list", 1), ("② Set the scope", 2), ("③ Make choices", 3)]
+        if is_english()
+        else [("① 选片单", 1), ("② 定范围", 2), ("③ 作取舍", 3)]
+    )
     for col, (label, idx) in zip(cols, labels):
         with col:
             if idx == step:
@@ -8176,6 +8626,15 @@ def render_douban_collect_spotlight(homepage_cta_text: str = "开始整理") -> 
 
 
 def get_home_light_list_view() -> Tuple[List[Dict[str, object]], Dict[str, Dict[str, Any]]]:
+    if is_english():
+        templates = [
+            template
+            for template_id in ENGLISH_HOME_TEMPLATE_IDS
+            if (template := get_template(template_id)) is not None
+        ]
+        st.session_state["light_list_roster_source"] = "english_static"
+        return templates, {}
+
     known_ids = [str(template["id"]) for template in FILM_CHALLENGE_TEMPLATES]
     resolved = resolve_home_light_list_state(fetch_home_light_list_roster(), known_ids)
     templates = [
@@ -8207,20 +8666,30 @@ def render_builtin_quick_start_lists() -> None:
         },
     )
     track_experiment_exposure("quick_list_cards", ["quick_list_card_framing_v1"])
-    card_reason_label = str(card_config.get("card_reason_label") or "推荐理由")
-    card_recommendation_prefix = str(card_config.get("card_recommendation_prefix") or "")
-    card_meta_template = str(card_config.get("card_meta_template") or "{count} 部电影 · 前 {top_k} 名")
-    card_action_template = str(card_config.get("card_action_text") or "开始整理")
+    if is_english():
+        card_reason_label = "Why try it"
+        card_recommendation_prefix = ""
+        card_meta_template = "{count} films · Top {top_k}"
+        card_action_template = "Start ranking"
+    else:
+        card_reason_label = str(card_config.get("card_reason_label") or "推荐理由")
+        card_recommendation_prefix = str(card_config.get("card_recommendation_prefix") or "")
+        card_meta_template = str(card_config.get("card_meta_template") or "{count} 部电影 · 前 {top_k} 名")
+        card_action_template = str(card_config.get("card_action_text") or "开始整理")
     experiment_query = get_experiment_query_params(get_session_id())
     home_templates, roster_metadata = get_home_light_list_view()
     card_html = []
     for template in home_templates:
         template_id = str(template["id"])
         runtime_meta = roster_metadata.get(template_id) if isinstance(roster_metadata.get(template_id), dict) else {}
-        new_badge_html = '<span class="challenge-new-badge">新上架</span>' if runtime_meta.get("is_new") is True else ""
+        new_badge_html = (
+            f'<span class="challenge-new-badge">{html.escape(tr("新上架", "New"))}</span>'
+            if runtime_meta.get("is_new") is True
+            else ""
+        )
         item_count = len(template.get("items", []))
         top_k = template.get("top_k", 10)
-        recommendation_text = str(template.get("recommendation", ""))
+        recommendation_text = display_template_field(template, "recommendation")
         if card_recommendation_prefix and recommendation_text:
             recommendation_text = f"{card_recommendation_prefix}{recommendation_text}"
         recommendation = html.escape(recommendation_text)
@@ -8237,6 +8706,8 @@ def render_builtin_quick_start_lists() -> None:
             "entry_surface": "home_builtin_card",
             **experiment_query,
         }
+        if is_english():
+            link_params["lang"] = LANG_EN
         card_href = html.escape(f"?{urlencode(link_params)}", quote=True)
         poster_html = ""
         header_class = "challenge-card-header"
@@ -8244,24 +8715,25 @@ def render_builtin_quick_start_lists() -> None:
             poster_asset = Path(str(template.get("card_poster_asset") or ""))
             poster_path = Path(__file__).parent / poster_asset
             poster_src = image_file_data_uri(poster_path)
-            poster_title = str(template.get("card_poster_title") or "")
+            poster_title = display_movie_title(template.get("card_poster_title") or "")
             if poster_src:
                 header_class += " has-poster"
                 poster_html = (
                     f'<img class="challenge-card-poster" src="{html.escape(poster_src, quote=True)}" '
-                    f'alt="{html.escape(poster_title, quote=True)}海报" width="68" height="96" loading="eager">'
+                    f'alt="{html.escape(poster_title, quote=True)} {html.escape(tr("海报", "poster"))}" width="68" height="96" loading="eager">'
                 )
+        template_name = display_template_field(template, "name")
         card_html.append(
-            f'<a class="challenge-card" href="{card_href}" target="_self" aria-label="整理 {html.escape(str(template["name"]), quote=True)}">'
+            f'<a class="challenge-card" href="{card_href}" target="_self" aria-label="{html.escape(tr("整理", "Rank"), quote=True)} {html.escape(template_name, quote=True)}">'
             f'<div>'
             f'<div class="{header_class}">'
             f'<div class="challenge-card-heading">'
             f'<div class="challenge-badge-row">'
-            f'<span class="challenge-badge">{html.escape(str(template.get("badge", "电影片单")))}</span>'
+            f'<span class="challenge-badge">{html.escape(display_template_field(template, "badge") or tr("电影片单", "Movie list"))}</span>'
             f'{new_badge_html}'
             f'</div>'
-            f'<div class="challenge-title">{html.escape(str(template["name"]))}</div>'
-            f'<div class="challenge-copy">{html.escape(str(template.get("tagline", "")))}</div>'
+            f'<div class="challenge-title">{html.escape(template_name)}</div>'
+            f'<div class="challenge-copy">{html.escape(display_template_field(template, "tagline"))}</div>'
             f'</div>'
             f'{poster_html}'
             f'</div>'
@@ -8275,18 +8747,24 @@ def render_builtin_quick_start_lists() -> None:
         )
     st.markdown(f'<div class="challenge-grid">{"".join(card_html)}</div>', unsafe_allow_html=True)
 
-    with st.expander("把这份片单发给朋友", expanded=False):
+    with st.expander(tr("把这份片单发给朋友", "Share a ready-made list"), expanded=False):
+        display_name_to_template = {
+            display_template_field(template, "name"): template for template in home_templates
+        }
         selected_template_name = st.selectbox(
-            "选择片单",
-            [str(template["name"]) for template in home_templates],
+            tr("选择片单", "Choose a list"),
+            list(display_name_to_template),
             key="home_share_template_name",
         )
-        selected_template = next(
-            template for template in home_templates if str(template["name"]) == selected_template_name
-        )
+        selected_template = display_name_to_template[selected_template_name]
         template_id = str(selected_template["id"])
-        template_url = build_template_url(template_id)
-        if render_copy_button("复制片单链接", template_url, f"copy_template_{template_id}", "片单链接"):
+        template_url = with_language_param(build_template_url(template_id), get_ui_language())
+        if render_copy_button(
+            tr("复制片单链接", "Copy list link"),
+            template_url,
+            f"copy_template_{template_id}",
+            tr("片单链接", "List link"),
+        ):
             track_event(
                 EVENT_SHARE_LINK_COPIED,
                 challenge_id=template_id,
@@ -8310,10 +8788,15 @@ def build_home_action_url(params: Dict[str, Any]) -> str:
         if value is not None and str(value).strip()
     }
     query.update(get_experiment_query_params(get_session_id()))
+    if is_english():
+        query["lang"] = LANG_EN
     return f"?{urlencode(query)}"
 
 
 def render_featured_quick_start() -> None:
+    if is_english():
+        return
+
     config = get_experiment_config(
         get_session_id(),
         "home_featured_quick_start_v1",
@@ -8391,6 +8874,9 @@ def choose_zero_decision_template(template_ids: Any) -> Optional[Dict[str, objec
 
 
 def render_zero_decision_start() -> None:
+    if is_english():
+        return
+
     config = get_experiment_config(
         get_session_id(),
         "home_zero_decision_start_v1",
@@ -8459,6 +8945,9 @@ def render_zero_decision_start() -> None:
 
 
 def render_home_duel_teaser() -> None:
+    if is_english():
+        return
+
     config = get_experiment_config(
         get_session_id(),
         "home_duel_teaser_v1",
@@ -8528,7 +9017,41 @@ def render_home_duel_teaser() -> None:
     )
 
 
+def render_mode_selection_page_en() -> None:
+    render_step_header(
+        1,
+        "",
+        "No need to know the full order—just choose between two films at a time.",
+        compact=True,
+    )
+    st.subheader("Choose a ready-made movie list")
+    st.caption("Open a list and start immediately. No setup required.")
+    render_builtin_quick_start_lists()
+
+    safe_divider()
+    st.subheader("Or bring your own list")
+    st.caption("Paste film titles, choose a Top N goal, and share the same list with friends.")
+    if render_button_compat(
+        "Set up a custom list",
+        key="btn_custom_list_en",
+        use_container_width=True,
+        button_type="primary",
+    ):
+        set_selected_mode(MODE_CUSTOM)
+        track_event(
+            EVENT_LIST_SELECTED,
+            mode=MODE_CUSTOM,
+            source_channel=get_source_channel(),
+            payload=build_event_payload(route="home", mode=MODE_CUSTOM, list_id=MODE_CUSTOM),
+        )
+        go_to_step(2)
+
+
 def render_mode_selection_page() -> None:
+    if is_english():
+        render_mode_selection_page_en()
+        return
+
     current_mode = get_selected_mode()
     mode_options = [MODE_DOUBAN_COLLECT, MODE_CUSTOM, MODE_DOUBAN]
     layout_config = get_experiment_config(
@@ -8626,31 +9149,37 @@ def render_personalization_controls(prefix: str) -> dict:
         if key_name not in st.session_state:
             st.session_state[key_name] = default_value
 
-    with st.expander("署名与顺序", expanded=True):
+    with st.expander(tr("署名与顺序", "Name and ordering"), expanded=True):
         c1, c2 = st.columns(2)
         with c1:
             user_name = st.text_input(
-                "署名",
+                tr("署名", "Display name"),
                 key=f"{prefix}_user_name",
-                placeholder="例：某位影迷",
-                help="会出现在导出文件、分享文案和海报里。",
+                placeholder=tr("例：某位影迷", "Example: a film lover"),
+                help=tr(
+                    "会出现在导出文件、分享文案和海报里。",
+                    "Used in exports and share text.",
+                ),
             )
         with c2:
             seed_text = st.text_input(
-                "顺序口令",
+                tr("顺序口令", "Shuffle seed"),
                 key=f"{prefix}_seed_text",
-                placeholder="例：weekend-001",
-                help="同样候选 + 同样口令会得到同样出场顺序，方便朋友整理同一份片单。",
+                placeholder="Example: weekend-001",
+                help=tr(
+                    "同样候选 + 同样口令会得到同样出场顺序，方便朋友整理同一份片单。",
+                    "The same films and seed produce the same starting order.",
+                ),
             )
         c3, c4 = st.columns(2)
         with c3:
             blind_mode = st.checkbox(
-                "隐藏过程名单，结束后再揭晓",
+                tr("隐藏过程名单，结束后再揭晓", "Hide the live ranking until the end"),
                 key=f"{prefix}_blind_mode",
             )
         with c4:
             side_shuffle = st.checkbox(
-                "左右随机，降低固定位置偏差",
+                tr("左右随机，降低固定位置偏差", "Shuffle left and right positions"),
                 key=f"{prefix}_side_shuffle",
             )
     return {
@@ -8662,7 +9191,7 @@ def render_personalization_controls(prefix: str) -> dict:
 
 
 def reset_custom_parameter_defaults() -> None:
-    st.session_state["ui_custom_theme"] = "我的电影审美名单"
+    st.session_state["ui_custom_theme"] = tr("我的电影审美名单", "My Movie Ranking")
     st.session_state["ui_custom_options_text"] = ""
     st.session_state["ui_custom_top_k_enabled"] = False
     st.session_state["ui_custom_top_k"] = 10
@@ -9012,7 +9541,161 @@ def render_douban_bookmarklet_import(clean_user_id: str = "") -> None:
             render_import_id_loader()
 
 
+def render_custom_parameter_page_en(mode: str) -> None:
+    if st.session_state.pop("ui_reset_custom_requested", False):
+        reset_custom_parameter_defaults()
+
+    st.text_input(
+        "List title",
+        value=st.session_state.get("ui_custom_theme", "My Movie Ranking"),
+        key="ui_custom_theme",
+    )
+    st.text_area(
+        "Films (one per line, or paste a comma-separated list)",
+        value=st.session_state.get("ui_custom_options_text", ""),
+        height=320,
+        key="ui_custom_options_text",
+        placeholder="Example:\nSpirited Away\nInterstellar\nInception\nThe Dark Knight",
+    )
+    options = parse_options_text(st.session_state.get("ui_custom_options_text", ""))
+    st.caption(f"{len(options)} valid films. Blank lines and duplicates are removed.")
+
+    top_k_enabled = st.checkbox(
+        "Keep only the Top N",
+        value=bool(st.session_state.get("ui_custom_top_k_enabled", False)),
+        key="ui_custom_top_k_enabled",
+    )
+    custom_top_k: Optional[int] = None
+    if top_k_enabled:
+        max_top_k = max(1, len(options))
+        if int(st.session_state.get("ui_custom_top_k", min(10, max_top_k))) > max_top_k:
+            st.session_state["ui_custom_top_k"] = max_top_k
+        custom_top_k = int(
+            st.number_input(
+                "Final Top N",
+                min_value=1,
+                max_value=max_top_k,
+                value=int(st.session_state.get("ui_custom_top_k", min(10, max_top_k))),
+                step=1,
+                key="ui_custom_top_k",
+            )
+        )
+    estimate_top_k = custom_top_k if custom_top_k and len(options) >= 2 else None
+    st.caption(
+        f"Estimated pairwise choices: about {estimated_comparisons(len(options), estimate_top_k)}."
+    )
+    personalization = render_personalization_controls("ui_custom")
+
+    with st.expander("Create a shareable list link", expanded=False):
+        st.caption("The link lets someone else rank the same films in English mode.")
+        if render_button_compat(
+            "Create list link",
+            key="btn_create_custom_challenge_en",
+            use_container_width=True,
+            button_type="primary",
+        ):
+            if len(options) < 2:
+                st.warning("Add at least two films first.")
+            else:
+                challenge = save_challenge(
+                    theme=(st.session_state.get("ui_custom_theme", "") or "").strip()
+                    or "My Movie Ranking",
+                    mode=mode,
+                    items=options,
+                    top_k=estimate_top_k,
+                    seed_text=personalization["seed_text"]
+                    or f"custom-{stable_int('||'.join(options)) % 100000}",
+                    source="custom_challenge_en",
+                )
+                if challenge:
+                    custom_url = with_language_param(
+                        build_challenge_url(
+                            challenge,
+                            use_payload_fallback=not analytics_enabled(),
+                        ),
+                        LANG_EN,
+                    )
+                    st.session_state["ui_custom_challenge_url"] = custom_url
+                    st.session_state["ui_custom_challenge_caption"] = "\n".join(
+                        [
+                            f"I made a movie list: {challenge.theme}",
+                            "Choose between two films at a time and reveal your own order.",
+                            f"Rank it here: {custom_url}",
+                        ]
+                    )
+                    st.session_state["ui_custom_challenge_id"] = challenge.id
+                    st.success("List link created.")
+        custom_url = st.session_state.get("ui_custom_challenge_url", "")
+        if custom_url:
+            if render_copy_button(
+                "Copy list link",
+                custom_url,
+                "copy_custom_challenge_url_en",
+                "List link",
+            ):
+                track_event(
+                    EVENT_SHARE_LINK_COPIED,
+                    challenge_id=st.session_state.get("ui_custom_challenge_id", ""),
+                    mode=mode,
+                    source_channel=get_source_channel(),
+                    payload=build_event_payload(
+                        route="custom_setup",
+                        list_id=st.session_state.get("ui_custom_challenge_id", ""),
+                        list_size=len(options),
+                        surface="custom_setup_en",
+                    ),
+                )
+            st.text_area(
+                "Share text",
+                value=st.session_state.get("ui_custom_challenge_caption", ""),
+                height=120,
+                key="custom_share_text_en",
+            )
+
+    nav1, nav2, nav3 = st.columns(3)
+    with nav1:
+        if render_button_compat("Back", key="btn_custom_back_step1_en", use_container_width=True):
+            go_to_step(1)
+    with nav2:
+        if render_button_compat("Clear", key="btn_clear_custom_step2_en", use_container_width=True):
+            clear_ranking_state()
+            st.session_state["ui_reset_custom_requested"] = True
+            rerun()
+    with nav3:
+        if render_button_compat(
+            "Start ranking",
+            key="btn_start_custom_step2_en",
+            use_container_width=True,
+            button_type="primary",
+        ):
+            if len(options) < 2:
+                st.warning("Add at least two films.")
+            else:
+                init_ranking_state(
+                    mode=mode,
+                    theme=(st.session_state.get("ui_custom_theme", "") or "").strip()
+                    or "My Movie Ranking",
+                    options=options,
+                    top_k=estimate_top_k,
+                    show_poster=True,
+                    user_name=personalization["user_name"],
+                    seed_text=personalization["seed_text"],
+                    blind_mode=personalization["blind_mode"],
+                    side_shuffle=personalization["side_shuffle"],
+                    challenge_id=st.session_state.get("ui_custom_challenge_id", ""),
+                    template_id="",
+                    source_channel=get_source_channel(),
+                    initial_poster_map=None,
+                )
+                st.session_state["ui_step"] = 3
+                rerun()
+
+
 def render_custom_parameter_page(mode: str) -> None:
+    if is_english():
+        render_custom_parameter_page_en(mode)
+        return
+
     if st.session_state.pop("ui_reset_custom_requested", False):
         reset_custom_parameter_defaults()
 
@@ -9581,6 +10264,18 @@ def render_douban_collect_parameter_page(mode: str) -> None:
 
 def render_parameter_page() -> None:
     mode = get_selected_mode()
+    if is_english():
+        if mode != MODE_CUSTOM:
+            mode = MODE_CUSTOM
+            set_selected_mode(mode)
+        render_step_header(
+            2,
+            "Set up your movie list",
+            "Add a title, choose the scope, and decide how the order should appear.",
+        )
+        render_custom_parameter_page_en(mode)
+        return
+
     render_step_header(
         2,
         "整理这份电影名单",
@@ -9675,24 +10370,32 @@ def render_sorting_page() -> None:
     st.progress(1.0)
     labels = st.columns(3)
     with labels[0]:
-        st.caption("① 选片单")
+        st.caption(tr("① 选片单", "① Choose a list"))
     with labels[1]:
-        st.caption("② 定范围")
+        st.caption(tr("② 定范围", "② Set the scope"))
     with labels[2]:
-        st.markdown("**③ 作取舍**")
+        st.markdown(f"**{tr('③ 作取舍', '③ Make choices')}**")
 
     if not started:
-        st.info("还没有开始。请先回到第 2 步完成设置。")
+        st.info(tr("还没有开始。请先回到第 2 步完成设置。", "Nothing has started yet. Finish step 2 first."))
     else:
         render_right_panel()
 
     safe_divider()
     nav1, nav2 = st.columns(2)
     with nav1:
-        if render_button_compat("返回修改片单", key="btn_back_to_step2", use_container_width=True):
+        if render_button_compat(
+            tr("返回修改片单", "Edit this list"),
+            key="btn_back_to_step2",
+            use_container_width=True,
+        ):
             go_to_step(2)
     with nav2:
-        if render_button_compat("重新选择来源", key="btn_back_to_step1", use_container_width=True):
+        if render_button_compat(
+            tr("重新选择来源", "Choose another list"),
+            key="btn_back_to_step1",
+            use_container_width=True,
+        ):
             go_to_step(1)
 
 
@@ -9701,7 +10404,7 @@ def render_sorting_page() -> None:
 # =========================
 def main() -> None:
     st.set_page_config(
-        page_title=APP_TITLE,
+        page_title=f"Film Sort · {APP_TITLE}",
         page_icon="🎬",
         layout="wide",
     )
@@ -9713,8 +10416,10 @@ def main() -> None:
         render_admin_dashboard()
         return
 
+    render_language_switcher()
+
     if "ui_selected_mode" not in st.session_state:
-        st.session_state["ui_selected_mode"] = MODE_DOUBAN_COLLECT
+        st.session_state["ui_selected_mode"] = MODE_CUSTOM if is_english() else MODE_DOUBAN_COLLECT
     if "ui_step" not in st.session_state:
         st.session_state["ui_step"] = 1
 
@@ -9736,16 +10441,16 @@ def main() -> None:
 
     step = get_ui_step()
     if step == 3:
-        st.caption(APP_TITLE)
+        st.caption(tr(APP_TITLE, "Film Sort"))
     elif step == 1:
         render_home_collab_badge()
         render_cover_header()
     else:
-        st.title(APP_TITLE)
-        st.markdown(APP_SUBTITLE)
+        st.title(tr(APP_TITLE, "Film Sort"))
+        st.markdown(tr(APP_SUBTITLE, "Choose between two films at a time and build your personal ranking."))
 
     if st.session_state.pop("local_draft_restored", False):
-        st.success("已接回本机上次未完成的整理进度。")
+        st.success(tr("已接回本机上次未完成的整理进度。", "Your unfinished local ranking has been restored."))
 
     if step == 1:
         render_mode_selection_page()
@@ -9771,9 +10476,19 @@ def main() -> None:
 
     safe_divider()
     if analytics_enabled():
-        st.caption("说明：本应用只记录匿名访问、开始、完成和分享事件，不记录姓名、IP 或自定义完整名单内容。")
+        st.caption(
+            tr(
+                "说明：本应用只记录匿名访问、开始、完成和分享事件，不记录姓名、IP 或自定义完整名单内容。",
+                "Privacy: the app records anonymous visit, start, completion and share events. It does not record names, IP addresses or full custom lists.",
+            )
+        )
     else:
-        st.caption("说明：未配置 Supabase 时，应用仍可完整使用；公开统计和短链接会自动降级。")
+        st.caption(
+            tr(
+                "说明：未配置 Supabase 时，应用仍可完整使用；公开统计和短链接会自动降级。",
+                "The app remains usable without analytics; public metrics and short links simply fall back.",
+            )
+        )
 
 
 if __name__ == "__main__":

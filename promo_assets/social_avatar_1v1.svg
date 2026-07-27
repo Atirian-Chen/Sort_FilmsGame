@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">电影审美名单 1v1 社交头像</title>
+  <desc id="desc">米白背景上两张红蓝电影取舍卡片，中间是醒目的 1v1 标志。</desc>
+
+  <defs>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="24" stdDeviation="22" flood-color="#3A2521" flood-opacity="0.18"/>
+    </filter>
+    <linearGradient id="blue-card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5FA8FF"/>
+      <stop offset="1" stop-color="#2F6FD7"/>
+    </linearGradient>
+    <linearGradient id="red-card" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF7A71"/>
+      <stop offset="1" stop-color="#DD4048"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" rx="224" fill="#FBF7F0"/>
+  <circle cx="512" cy="512" r="418" fill="#FFFDF9" stroke="#E9D8C8" stroke-width="12"/>
+
+  <g filter="url(#shadow)">
+    <g transform="rotate(-8 336 496)">
+      <rect x="166" y="214" width="340" height="564" rx="70" fill="url(#blue-card)" stroke="#2456A5" stroke-width="14"/>
+      <circle cx="336" cy="362" r="74" fill="#DCEEFF" opacity="0.96"/>
+      <path d="M246 560h180M246 620h138M246 680h164" fill="none" stroke="#DCEEFF" stroke-linecap="round" stroke-width="28" opacity="0.92"/>
+    </g>
+
+    <g transform="rotate(8 688 496)">
+      <rect x="518" y="214" width="340" height="564" rx="70" fill="url(#red-card)" stroke="#A92F3C" stroke-width="14"/>
+      <circle cx="688" cy="362" r="74" fill="#FFE7E2" opacity="0.96"/>
+      <path d="M598 560h180M598 620h138M598 680h164" fill="none" stroke="#FFE7E2" stroke-linecap="round" stroke-width="28" opacity="0.92"/>
+    </g>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="326" y="414" width="372" height="196" rx="98" fill="#572A2B" stroke="#FBF7F0" stroke-width="20"/>
+    <text x="512" y="547" fill="#FFFDF9" font-family="Arial, Helvetica, sans-serif" font-size="124" font-weight="800" text-anchor="middle" letter-spacing="-7">1v1</text>
+  </g>
+</svg>

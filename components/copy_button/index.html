@@ -87,6 +87,8 @@
       const text = String(args.text ?? "");
       const label = escapeHtml(args.label || "复制");
       const placeholder = escapeHtml(args.placeholder || "");
+      const successText = String(args.successText || "已复制");
+      const permissionText = String(args.permissionText || "已复制，请确认剪贴板权限");
       root.innerHTML = `
         <div class="wrap">
           <input aria-label="${placeholder || label}" value="${escapeHtml(text)}" readonly>
@@ -100,12 +102,12 @@
       button.addEventListener("click", async () => {
         try {
           await navigator.clipboard.writeText(text);
-          status.textContent = "已复制";
+          status.textContent = successText;
           setValue({ copied: true, nonce: Date.now() });
         } catch (error) {
           input.select();
           document.execCommand("copy");
-          status.textContent = "已复制，请确认剪贴板权限";
+          status.textContent = permissionText;
           setValue({ copied: true, nonce: Date.now() });
         }
       });
