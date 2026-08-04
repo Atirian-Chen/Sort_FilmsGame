@@ -62,10 +62,11 @@ class EnglishCoreFlowTests(unittest.TestCase):
         self.assertTrue(translated.endswith("#result"))
         self.assertEqual(url, with_language_param(url, LANG_ZH))
 
-    def test_v39_release_keeps_v38_history(self) -> None:
-        self.assertEqual("v3.9", APP_VERSION)
-        self.assertEqual("v3.9-english-core-flow", APP_RELEASE_ID)
+    def test_current_release_keeps_v38_and_v39_history(self) -> None:
+        self.assertEqual("v3.10", APP_VERSION)
+        self.assertEqual("v3.10-abtest-decision-and-next-wave", APP_RELEASE_ID)
         self.assertEqual("v3.8-abtest-funnel-recovery", get_release_by_version("v3.8")["release_id"])
+        self.assertEqual("v3.9-english-core-flow", get_release_by_version("v3.9")["release_id"])
 
 
 if __name__ == "__main__":

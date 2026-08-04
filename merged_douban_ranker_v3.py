@@ -3511,7 +3511,7 @@ def render_sorting_scope_rescue(*, remaining_estimate: int, comparisons: int, to
         get_session_id(),
         "sorting_scope_rescue_v1",
         {
-            "show_scope_rescue": False,
+            "show_scope_rescue": True,
             "rescue_after_comparisons": 30,
             "rescue_min_remaining": 40,
             "rescue_target_top_k": 10,
@@ -3542,6 +3542,48 @@ def render_sorting_scope_rescue(*, remaining_estimate: int, comparisons: int, to
             use_container_width=True,
         ):
             reduce_ranking_scope(target_top_k)
+
+
+def render_sorting_progress_hint(*, remaining_estimate: int, comparisons: int, top_k: Optional[int]) -> None:
+    """Render one stable, post-start progress message for the active copy test."""
+    if is_english() or comparisons < 5:
+        return
+
+    config = get_experiment_config(
+        get_session_id(),
+        "sorting_progress_framing_v1",
+        {"progress_hint_style": "neutral"},
+    )
+    track_experiment_exposure("sorting_progress_hint", ["sorting_progress_framing_v1"], route="sorting")
+
+    if str(config.get("progress_hint_style") or "neutral") == "outcome":
+        goal = "完整排序" if top_k is None else f"Top {top_k}"
+        st.caption(f"再做约 {remaining_estimate} 次取舍，就能得到你的 {goal}。")
+    else:
+        st.caption(f"预计还需约 {remaining_estimate} 次取舍。")
+
+
+def render_custom_scope_tradeoff_hint(option_count: int) -> None:
+    """Test only the task-size explanation for longer custom lists."""
+    if is_english() or option_count < 20:
+        return
+
+    config = get_experiment_config(
+        get_session_id(),
+        "custom_list_scope_hint_v1",
+        {"show_scope_tradeoff_hint": False},
+    )
+    track_experiment_exposure("custom_list_scope_hint", ["custom_list_scope_hint_v1"], route="custom_setup")
+    if not bool(config.get("show_scope_tradeoff_hint", False)):
+        return
+
+    top_k = min(10, option_count)
+    full_estimate = estimated_comparisons(option_count, None)
+    top_estimate = estimated_comparisons(option_count, top_k)
+    st.info(
+        f"片单较长：先只保留 Top {top_k} 预计约 {top_estimate} 次取舍；"
+        f"完整排序约 {full_estimate} 次。你始终可以按自己的需要选择完整排序。"
+    )
 
 
 def filter_items(items: List[str], query: str) -> List[str]:
@@ -6109,6 +6151,12 @@ def admin_group_df(rows: List[Dict[str, Any]], label_key: str, label_name: str, 
             item["首页曝光 proxy"] = int(row.get("home_exposure_sessions", 0))
             item["内置片单打开"] = int(row.get("builtin_card_opened_sessions", 0))
             item["卡片打开率 proxy"] = admin_percent(row.get("builtin_card_open_rate"))
+            item["曝光后内置片单打开"] = int(row.get("exposed_builtin_card_opened_sessions", 0))
+            item["曝光后内置片单打开率"] = (
+                admin_percent(row.get("exposed_builtin_card_open_rate"))
+                if int(row.get("exposed_sessions", 0) or 0) > 0
+                else "真实曝光分母不可用"
+            )
         if include_winners:
             item["冠军 Top3"] = row.get("top_winners", "")
         display_rows.append(item)
@@ -6168,6 +6216,7 @@ def admin_experiment_config_df(experiment: Dict[str, Any]) -> pd.DataFrame:
     primary_metric = str(experiment.get("primary_metric") or "")
     primary_metric_label = {
         "exposed_action_rate": "曝光后行动率",
+        "exposed_builtin_card_open_rate": "曝光后内置片单打开率",
         "exposed_start_rate": "曝光后开始率",
         "exposed_completion_rate": "曝光后完成率",
         "exposed_share_or_poster_rate": "曝光后分享/海报率",
@@ -7921,7 +7970,7 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
         get_session_id(),
         "result_share_bundle_v1",
         {
-            "show_result_share_bundle": False,
+            "show_result_share_bundle": True,
             "share_bundle_title": "先带走一张最适合分享的 Top 10",
             "share_bundle_copy": "一键生成带电影海报的竖版结果图，也可以直接复制“猜冠军”文案。",
             "share_bundle_cta": "一键生成 Top 10 海报",
@@ -7929,6 +7978,16 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
     )
     track_experiment_exposure("result_share_bundle", ["result_share_bundle_v1"], route="result")
     if bool(share_bundle_config.get("show_result_share_bundle", False)):
+        share_cta_config = get_experiment_config(
+            get_session_id(),
+            "result_share_cta_copy_v1",
+            {
+                "share_bundle_cta": str(
+                    share_bundle_config.get("share_bundle_cta") or "一键生成 Top 10 海报"
+                )
+            },
+        )
+        track_experiment_exposure("result_share_cta", ["result_share_cta_copy_v1"], route="result")
         if st.session_state.get(k("share_poster_style")) not in SHARE_POSTER_STYLES:
             st.session_state[k("share_poster_style")] = SHARE_POSTER_STYLES[0]
         if st.session_state.get(k("share_poster_qr_option")) not in SHARE_POSTER_QR_OPTIONS:
@@ -7946,7 +8005,7 @@ def render_result_section(total: int, comparisons: int, top_k: Optional[int]) ->
             bundle_col1, bundle_col2 = st.columns(2)
             with bundle_col1:
                 if render_button_compat(
-                    str(share_bundle_config.get("share_bundle_cta") or "一键生成 Top 10 海报"),
+                    str(share_cta_config.get("share_bundle_cta") or "一键生成 Top 10 海报"),
                     key="btn_result_share_bundle_generate",
                     use_container_width=True,
                     button_type="primary",
@@ -8453,6 +8512,11 @@ def render_right_panel() -> None:
         comparisons=comparisons,
         top_k=top_k,
     )
+    render_sorting_progress_hint(
+        remaining_estimate=remaining_estimate,
+        comparisons=comparisons,
+        top_k=top_k,
+    )
 
     if top_k is None:
         st.markdown("### 你更喜欢哪一个？")
@@ -8676,6 +8740,13 @@ def render_builtin_quick_start_lists() -> None:
         card_recommendation_prefix = str(card_config.get("card_recommendation_prefix") or "")
         card_meta_template = str(card_config.get("card_meta_template") or "{count} 部电影 · 前 {top_k} 名")
         card_action_template = str(card_config.get("card_action_text") or "开始整理")
+        card_cta_config = get_experiment_config(
+            get_session_id(),
+            "home_card_cta_copy_v1",
+            {"card_action_text": card_action_template},
+        )
+        track_experiment_exposure("home_card_cta", ["home_card_cta_copy_v1"])
+        card_action_template = str(card_cta_config.get("card_action_text") or card_action_template)
     experiment_query = get_experiment_query_params(get_session_id())
     home_templates, roster_metadata = get_home_light_list_view()
     card_html = []
@@ -9233,6 +9304,7 @@ def reset_douban_collect_parameter_defaults() -> None:
     st.session_state["ui_douban_collect_seed_text"] = ""
     st.session_state["ui_douban_collect_blind_mode"] = False
     st.session_state["ui_douban_collect_side_shuffle"] = True
+    st.session_state["ui_douban_collect_scope_default_pending"] = True
     st.session_state["ui_douban_collect_selected_media_types"] = DOUBAN_COLLECT_MEDIA_TYPES[:]
     st.session_state["ui_douban_collect_include_unknown_media_type"] = True
     st.session_state["ui_douban_collect_selected_ratings"] = DOUBAN_RATING_VALUES[:]
@@ -9749,6 +9821,7 @@ def render_custom_parameter_page(mode: str) -> None:
         )
     estimate_top_k = custom_top_k if custom_top_k and len(options) >= 2 else None
     st.caption(f"预计需要取舍约 {estimated_comparisons(len(options), estimate_top_k)} 次。")
+    render_custom_scope_tradeoff_hint(len(options))
 
     personalization = render_personalization_controls("ui_custom")
 
@@ -10022,7 +10095,7 @@ def render_douban_collect_parameter_page(mode: str) -> None:
         get_session_id(),
         "heavy_default_start_v1",
         {
-            "show_heavy_default_start": False,
+            "show_heavy_default_start": True,
             "recommended_top_k": 10,
             "heavy_default_title": "第一次整理，建议先完成 Top 10",
             "heavy_default_copy": "保留当前筛选和片单内容，只把目标缩短为 Top 10；以后仍可回来细排。",
@@ -10030,6 +10103,20 @@ def render_douban_collect_parameter_page(mode: str) -> None:
         },
     )
     track_experiment_exposure("douban_collect_config", ["heavy_default_start_v1"], route="config")
+    scope_default_config = get_experiment_config(
+        get_session_id(),
+        "douban_collect_scope_default_v1",
+        {"default_top_k": 20},
+    )
+    should_apply_scope_default = (
+        "ui_douban_collect_top_k" not in st.session_state
+        or bool(st.session_state.pop("ui_douban_collect_scope_default_pending", False))
+    )
+    if should_apply_scope_default:
+        st.session_state["ui_douban_collect_top_k"] = max(
+            1,
+            min(500, int(scope_default_config.get("default_top_k") or 20)),
+        )
     track_once(
         "heavy_config_viewed_douban_collect",
         EVENT_HEAVY_CONFIG_VIEWED,
@@ -10139,6 +10226,11 @@ def render_douban_collect_parameter_page(mode: str) -> None:
     preview_movies = [str(entry["title"]) for entry in final_entries if entry.get("title")]
 
     if preview_movies:
+        track_experiment_exposure(
+            "douban_collect_scope_default",
+            ["douban_collect_scope_default_v1"],
+            route="config",
+        )
         effective_top_k = min(top_k, len(preview_movies)) if top_k is not None else None
         st.caption(f"当前将整理 {len(preview_movies)} 个条目。预计需要取舍约 {estimated_comparisons(len(preview_movies), effective_top_k)} 次。")
     else:

@@ -23,7 +23,20 @@ class AbTestV38Tests(unittest.TestCase):
             self.assertEqual(experiment["decision_variant_id"], decision_variant_id)
             self.assertTrue(experiment["ended_at"])
 
-    def test_v38_has_four_active_funnel_stage_experiments(self):
+    def test_v38_funnel_stage_experiments_are_closed_with_decisions(self):
+        expected_decisions = {
+            "home_featured_quick_start_v1": "control",
+            "heavy_default_start_v1": "recommended_top10",
+            "sorting_scope_rescue_v1": "offer_top10",
+            "result_share_bundle_v1": "quick_share_bundle",
+        }
+        for experiment_id, decision_variant_id in expected_decisions.items():
+            experiment = get_experiment(experiment_id)
+            self.assertEqual(experiment["status"], "paused")
+            self.assertEqual(experiment["decision_variant_id"], decision_variant_id)
+            self.assertTrue(experiment["ended_at"])
+
+    def test_v310_has_five_active_funnel_experiments(self):
         active_ids = {
             experiment["experiment_id"]
             for experiment in list_experiments(active_only=True)
@@ -31,10 +44,11 @@ class AbTestV38Tests(unittest.TestCase):
         self.assertEqual(
             active_ids,
             {
-                "home_featured_quick_start_v1",
-                "heavy_default_start_v1",
-                "sorting_scope_rescue_v1",
-                "result_share_bundle_v1",
+                "home_card_cta_copy_v1",
+                "custom_list_scope_hint_v1",
+                "douban_collect_scope_default_v1",
+                "sorting_progress_framing_v1",
+                "result_share_cta_copy_v1",
             },
         )
 

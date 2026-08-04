@@ -26,6 +26,10 @@ Read-only quality checks live in [analytics/sql/01_data_quality.sql](analytics/s
 Future analytics work should add only minimal missing fields/events for abandonment and test-traffic isolation; new experiments should use `experiment_exposed` as the strict exposure denominator.
 No unverified traffic volume, conversion result, or experiment conclusion is claimed here.
 
+## Current Experiment Review
+
+v3.10 closes all four v3.8 online experiments, keeps the selected product directions, and runs five new single-variable funnel experiments with strict exposure denominators. The source report, decision confidence, current funnel diagnosis, experiment cards, metrics, guardrails, and review thresholds are documented in [docs/abtest_review_2026-08-05.md](docs/abtest_review_2026-08-05.md). Release implementation details are in [docs/version_updates/version3.10.md](docs/version_updates/version3.10.md).
+
 ## Product Analytics Case Study
 
 This repository includes a product analytics case study based on real anonymous behavior data.
@@ -305,7 +309,7 @@ streamlit run merged_douban_ranker_v3.py
 
 ```bash
 python -m py_compile merged_douban_ranker_v3.py analytics.py experiments.py challenge_store.py import_store.py launch_copy.py light_list_catalog.py light_list_runtime.py release_history.py promo_assets/generate_builtin_list_thumbnails.py
-python -m unittest tests.test_abtest_v38 tests.test_result_posters tests.test_light_list_catalog -v
+python -m unittest discover -s tests -v
 ```
 
 没有配置 Supabase 时，应用仍然可以运行；公开统计、短片单链接、豆瓣已看跨设备导入会自动降级或隐藏。
@@ -759,6 +763,13 @@ https://movie.douban.com/people/123456/collect
 - 英文化自定义片单设置、排序状态、二选一卡片、复制组件、结果榜单和分享文案；匿名事件 payload 新增 `language`。
 - 豆瓣 Top250 / 豆瓣已看导入继续保留在中文模式，避免把依赖中文站点的流程误包装成完整英文功能。
 - 新增 [i18n.py](i18n.py)、[tests/test_i18n_v39.py](tests/test_i18n_v39.py) 和 [docs/version_updates/version3.9.md](docs/version_updates/version3.9.md)。
+
+### v3.10 A/B 实验收口与下一轮漏斗测试
+
+- 结束所有 v3.8 在线实验：首页精选卡回到原有片单网格；豆瓣已看 Top 10 快速开始、长流程 Top 10 救援、结果页紧凑分享包固化为默认体验。
+- 上线 5 个严格按 `experiment_exposed` 计算的新实验，分别覆盖内置卡 CTA、长自定义片单说明、豆瓣已看默认 Top N、排序中进度文案与结果页分享 CTA；每个实验只改变一个变量。
+- 增加首页内置片单的真实曝光后打开率，避免用泛化的首页行动率代替卡片 CTA 的主指标。
+- 复盘、样本门槛、护栏和继续/收口规则见 [docs/abtest_review_2026-08-05.md](docs/abtest_review_2026-08-05.md)；实现与兼容性说明见 [docs/version_updates/version3.10.md](docs/version_updates/version3.10.md)。
 
 ---
 

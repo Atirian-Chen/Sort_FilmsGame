@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional
 
 
-APP_VERSION = "v3.9"
-APP_RELEASE_ID = "v3.9-english-core-flow"
-APP_RELEASE_NAME = "中英文切换与英文核心流程"
-APP_RELEASED_AT = "2026-07-27T20:56:52+08:00"
+APP_VERSION = "v3.10"
+APP_RELEASE_ID = "v3.10-abtest-decision-and-next-wave"
+APP_RELEASE_NAME = "A/B 实验收口与下一轮漏斗测试"
+APP_RELEASED_AT = "2026-08-05T03:19:49+08:00"
 
 
 # Version starts are based on the first push/deploy commit of each feature phase
@@ -208,6 +208,13 @@ RELEASE_TIMELINE = [
         "release_name": "漏斗修复与新一轮 A/B 实验",
         "released_at": "2026-07-24T18:09:16+08:00",
         "commit": "401a63b",
+    },
+    {
+        "app_version": "v3.9",
+        "release_id": "v3.9-english-core-flow",
+        "release_name": "中英文切换与英文核心流程",
+        "released_at": "2026-07-27T20:56:52+08:00",
+        "commit": "5e0aa48",
     },
     {
         "app_version": APP_VERSION,

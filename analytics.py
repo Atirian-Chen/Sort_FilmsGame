@@ -1485,6 +1485,11 @@ def build_experiment_metrics(events: List[Dict[str, Any]], *, top_n: int = 100) 
             len(builtin_card_opened_sessions),
             len(home_exposure_sessions),
         )
+        row["exposed_builtin_card_opened_sessions"] = len(exposed_sessions & builtin_card_opened_sessions)
+        row["exposed_builtin_card_open_rate"] = _rate(
+            len(exposed_sessions & builtin_card_opened_sessions),
+            len(exposed_sessions),
+        )
         rows.append(row)
 
     rows.sort(key=lambda item: (str(item.get("experiment_id")), int(item.get("visits", 0)), int(item.get("started", 0))), reverse=False)
